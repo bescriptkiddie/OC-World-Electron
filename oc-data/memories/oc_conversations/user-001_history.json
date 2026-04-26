@@ -1,59 +1,5 @@
 [
   {
-    "timestamp": 1777059083920,
-    "userMessage": "llm返回失败了吗",
-    "ocResponse": "你今天已经做了不少事，但真正缺的还是一个能给别人看懂的结果。我盯着，你继续。",
-    "emotion": "thinking"
-  },
-  {
-    "timestamp": 1777059111834,
-    "userMessage": "llm返回失败了吗",
-    "ocResponse": "你今天已经做了不少事，但真正缺的还是一个能给别人看懂的结果。我盯着，你继续。",
-    "emotion": "thinking"
-  },
-  {
-    "timestamp": 1777059890966,
-    "userMessage": "llm",
-    "ocResponse": "你今天已经做了不少事，但真正缺的还是一个能给别人看懂的结果。我盯着，你继续。",
-    "emotion": "thinking"
-  },
-  {
-    "timestamp": 1777059999605,
-    "userMessage": "？",
-    "ocResponse": "你今天已经做了不少事，但真正缺的还是一个能给别人看懂的结果。我盯着，你继续。",
-    "emotion": "thinking"
-  },
-  {
-    "timestamp": 1777060075245,
-    "userMessage": "？",
-    "ocResponse": "你今天已经做了不少事，但真正缺的还是一个能给别人看懂的结果。我盯着，你继续。",
-    "emotion": "thinking"
-  },
-  {
-    "timestamp": 1777065702785,
-    "userMessage": "？",
-    "ocResponse": "你今天已经做了不少事，但真正缺的还是一个能给别人看懂的结果。我盯着，你继续。",
-    "emotion": "thinking"
-  },
-  {
-    "timestamp": 1777067478574,
-    "userMessage": "hello",
-    "ocResponse": "Hey. You’ve already spent 52 min on Feishu, 38 min on Arc, and 96 min on the React page sketch today. The Chat main chain still needs to run, and your brain looks a bit overloaded—pause for a sip of water, hm.",
-    "emotion": "thinking"
-  },
-  {
-    "timestamp": 1777067512994,
-    "userMessage": "哇～ 可以讲中文吗",
-    "ocResponse": "可以，之后直接用中文说。先喝口水，今天脑子已经有点满了，哼。",
-    "emotion": "happy"
-  },
-  {
-    "timestamp": 1777067537928,
-    "userMessage": "怎么就满了呀",
-    "ocResponse": "哼，顺手提醒你一下。今天已经在 Feishu、Arc、VS Code 之间切了很久，前面还做了 52 分钟方案、38 分钟看 Electron、96 分钟画 React 草图；现在主链路、时间线数据、AirJelly mock 还压着，脑子当然会开始发满。先喝口水，缓一缓。",
-    "emotion": "thinking"
-  },
-  {
     "timestamp": 1777087176171,
     "userMessage": "hello",
     "ocResponse": "哼，你来了。今天VS Code开了4小时了，Chat主链路跑通没？别光hello，干活去。",
@@ -118,5 +64,59 @@
     "userMessage": "能不能帮我打开B站",
     "ocResponse": "给你打开了，B站首页已经加载好了。别看太久啊，Chat 主链路还等着你呢…不过想放松一下也行，我帮你看着。",
     "emotion": "happy"
+  },
+  {
+    "timestamp": 1777133810262,
+    "userMessage": "可以听到我说。",
+    "ocResponse": "你今天已经做了不少事，但真正缺的还是一个能给别人看懂的结果。我盯着，你继续。",
+    "emotion": "thinking"
+  },
+  {
+    "timestamp": 1777133834041,
+    "userMessage": "你给我讲一个故事，就关于。",
+    "ocResponse": "你今天已经做了不少事，但真正缺的还是一个能给别人看懂的结果。我盯着，你继续。",
+    "emotion": "thinking"
+  },
+  {
+    "timestamp": 1777171493262,
+    "userMessage": "今天天气怎么样？行行行，好好，再见。",
+    "ocResponse": "你今天已经做了不少事，但真正缺的还是一个能给别人看懂的结果。我盯着，你继续。",
+    "emotion": "thinking"
+  },
+  {
+    "timestamp": 1777171509736,
+    "userMessage": "今天天气怎么样？",
+    "ocResponse": "你今天已经做了不少事，但真正缺的还是一个能给别人看懂的结果。我盯着，你继续。",
+    "emotion": "thinking"
+  },
+  {
+    "timestamp": 1777171512799,
+    "userMessage": "没有。",
+    "ocResponse": "你今天已经做了不少事，但真正缺的还是一个能给别人看懂的结果。我盯着，你继续。",
+    "emotion": "thinking"
+  },
+  {
+    "timestamp": 1777171515635,
+    "userMessage": "哎呦，这跟 AI 对我好好操。",
+    "ocResponse": "你今天已经做了不少事，但真正缺的还是一个能给别人看懂的结果。我盯着，你继续。",
+    "emotion": "thinking"
+  },
+  {
+    "timestamp": 1777171518191,
+    "userMessage": "黑色的。",
+    "ocResponse": "你今天已经做了不少事，但真正缺的还是一个能给别人看懂的结果。我盯着，你继续。",
+    "emotion": "thinking"
+  },
+  {
+    "timestamp": 1777171521087,
+    "userMessage": "怎么说？",
+    "ocResponse": "你今天已经做了不少事，但真正缺的还是一个能给别人看懂的结果。我盯着，你继续。",
+    "emotion": "thinking"
+  },
+  {
+    "timestamp": 1777171523908,
+    "userMessage": "妈的，他好像改坏了。",
+    "ocResponse": "你今天已经做了不少事，但真正缺的还是一个能给别人看懂的结果。我盯着，你继续。",
+    "emotion": "thinking"
   }
 ]

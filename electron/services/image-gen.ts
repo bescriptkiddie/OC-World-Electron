@@ -32,8 +32,8 @@ export async function generateImage(
         model: "gpt-image-2",
         prompt: payload.prompt,
         imageConfig: {
-          aspectRatio: "1:1",
-          imageSize: "1K",
+          aspectRatio: payload.aspectRatio || "1:1",
+          imageSize: payload.imageSize || "1K",
         },
       }),
     },

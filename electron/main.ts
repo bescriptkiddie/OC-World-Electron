@@ -20,6 +20,35 @@ loadLocalEnv({
 
 let quitting = false;
 
+function loadRenderer(window: BrowserWindow) {
+  const rendererUrl = process.env.OC_WORLD_RENDERER_URL;
+  const rendererFile = process.env.OC_WORLD_RENDERER_FILE;
+
+  if (rendererUrl) {
+    window.loadURL(rendererUrl);
+    if (process.env.OC_WORLD_OPEN_DEVTOOLS === "1") {
+      window.webContents.openDevTools({ mode: "detach" });
+    }
+    return;
+  }
+
+  if (rendererFile) {
+    window.loadFile(path.resolve(rendererFile));
+    if (process.env.OC_WORLD_OPEN_DEVTOOLS === "1") {
+      window.webContents.openDevTools({ mode: "detach" });
+    }
+    return;
+  }
+
+  if (process.env.VITE_DEV_SERVER_URL) {
+    window.loadURL(process.env.VITE_DEV_SERVER_URL);
+    window.webContents.openDevTools({ mode: "detach" });
+    return;
+  }
+
+  window.loadFile(path.join(__dirname, "../dist/index.html"));
+}
+
 function createWindow() {
   const window = new BrowserWindow({
     width: 1440,
@@ -34,13 +63,7 @@ function createWindow() {
     },
   });
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    window.loadURL(process.env.VITE_DEV_SERVER_URL);
-    window.webContents.openDevTools({ mode: "detach" });
-    return;
-  }
-
-  window.loadFile(path.join(__dirname, "../dist/index.html"));
+  loadRenderer(window);
 }
 
 app.whenReady().then(() => {

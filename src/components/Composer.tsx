@@ -1,5 +1,6 @@
-import { IconArrowUp, IconAttach, IconBars, IconBolt, IconCloud } from "./OcWorldIcons";
+import { IconArrowUp, IconAttach, IconBars, IconBolt, IconCloud, IconMic } from "./OcWorldIcons";
 import { iconBtnQuiet } from "./shared";
+import type { VoiceInputState } from "../lib/voice-input";
 
 export function Composer({
   draft,
@@ -11,6 +12,9 @@ export function Composer({
   ttsEnabled,
   onInterrupt,
   onTtsToggle,
+  voiceInputState,
+  voiceTranscript,
+  onVoiceToggle,
 }: {
   draft: string;
   setDraft: (value: string) => void;
@@ -21,7 +25,13 @@ export function Composer({
   ttsEnabled?: boolean;
   onInterrupt?: () => void;
   onTtsToggle?: () => void;
+  voiceInputState?: VoiceInputState;
+  voiceTranscript?: string;
+  onVoiceToggle?: () => void;
 }) {
+  const isListening = voiceInputState === "listening";
+  const voiceTitle = isListening ? "停止语音输入" : voiceInputState === "unsupported" ? "语音输入不可用" : "语音输入";
+
   return (
     <div style={{ width: "100%", background: "var(--bg-input)", border: "0.5px solid var(--line)", borderRadius: 14, boxShadow: "0 1px 2px rgba(15,30,55,.04)", padding: "14px 16px 10px" }}>
       <textarea
@@ -41,6 +51,26 @@ export function Composer({
         <button type="button" style={iconBtnQuiet} title="附件"><IconAttach size={14} /></button>
         <button type="button" style={iconBtnQuiet} title="上下文"><IconCloud size={14} /></button>
         <button type="button" style={iconBtnQuiet} title="模板"><IconBars size={14} /></button>
+        {onVoiceToggle && (
+          <button
+            type="button"
+            style={{
+              ...iconBtnQuiet,
+              background: isListening ? "oklch(0.94 0.06 25)" : "transparent",
+              color: isListening ? "oklch(0.52 0.16 25)" : "var(--ink-muted)",
+            }}
+            onClick={onVoiceToggle}
+            disabled={voiceInputState === "unsupported"}
+            title={voiceTitle}
+          >
+            <IconMic size={14} />
+          </button>
+        )}
+        {voiceTranscript && (
+          <div style={{ minWidth: 0, maxWidth: 220, color: "var(--ink-muted)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {voiceTranscript}
+          </div>
+        )}
         <div style={{ flex: 1 }} />
         {onTtsToggle && (
           <button

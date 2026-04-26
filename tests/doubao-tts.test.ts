@@ -8,6 +8,9 @@ const touchedKeys = [
   "DOUBAO_TTS_CLUSTER",
   "DOUBAO_TTS_VOICE_TYPE",
   "DOUBAO_TTS_ENDPOINT",
+  "DOUBAO_TTS_RESOURCE_ID",
+  "DOUBAO_TTS_SPEAKER",
+  "DOUBAO_TTS_V2_ENDPOINT",
 ] as const;
 const originalEnv = Object.fromEntries(touchedKeys.map((key) => [key, process.env[key]]));
 
@@ -75,6 +78,45 @@ describe("Doubao TTS service", () => {
       provider: "doubao",
       requestId: "tts-1",
       audioBase64: "AAAA",
+      mimeType: "audio/mpeg",
+      encoding: "mp3",
+      durationMs: null,
+    });
+  });
+
+  it("synthesizes speech through the Doubao TTS 2.0 API", async () => {
+    process.env.OC_TTS_PROVIDER = "doubao2";
+    process.env.DOUBAO_TTS_APP_ID = "app-id";
+    process.env.DOUBAO_TTS_ACCESS_TOKEN = "access-token";
+    process.env.DOUBAO_TTS_RESOURCE_ID = "seed-tts-2.0";
+    process.env.DOUBAO_TTS_SPEAKER = "zh_female_xiaohe_uranus_bigtts";
+    process.env.DOUBAO_TTS_V2_ENDPOINT = "https://example.com/tts-v2";
+
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+
+      expect(init.headers).toEqual(
+        expect.objectContaining({
+          "Content-Type": "application/json",
+          "X-Api-App-Id": "app-id",
+          "X-Api-Access-Key": "access-token",
+          "X-Api-Resource-Id": "seed-tts-2.0",
+        }),
+      );
+      expect(body.req_params.speaker).toBe("zh_female_xiaohe_uranus_bigtts");
+      expect(body.req_params.additions).toBe(JSON.stringify({ explicit_language: "zh-cn" }));
+
+      return new Response(JSON.stringify({ reqid: "tts-2", code: 0, data: "BBBB" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(synthesizeSpeech({ text: "你好", requestId: "tts-2" })).resolves.toEqual({
+      provider: "doubao",
+      requestId: "tts-2",
+      audioBase64: "BBBB",
       mimeType: "audio/mpeg",
       encoding: "mp3",
       durationMs: null,

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createAppTTS } from "../lib/tts";
+import { createVoiceInput, type VoiceInputState } from "../lib/voice-input";
 import type {
   CharacterConfig,
   ChatHistoryEntry,
@@ -37,6 +38,8 @@ export function useChat() {
   const [isSending, setIsSending] = useState(false);
   const [pendingMessages, setPendingMessages] = useState<PendingChatMessage[]>([]);
   const [ttsEnabled, setTtsEnabledState] = useState(true);
+  const [voiceInputState, setVoiceInputState] = useState<VoiceInputState>("idle");
+  const [voiceTranscript, setVoiceTranscript] = useState("");
   const [hermesStatus, setHermesStatus] = useState<HermesRuntimeStatus>(defaultHermesStatus);
   const pendingMessagesRef = useRef<PendingChatMessage[]>([]);
   const submitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -45,6 +48,8 @@ export function useChat() {
   const isSendingRef = useRef(false);
   const ttsEnabledRef = useRef(true);
   const ttsRef = useRef(createAppTTS());
+  const voiceInputRef = useRef(createVoiceInput());
+  const lastFinalVoiceTextRef = useRef("");
 
   const cancelSpeech = useCallback(() => {
     ttsRef.current.cancel();
@@ -119,6 +124,7 @@ export function useChat() {
       }
 
       ttsRef.current.cancel();
+      void voiceInputRef.current.stop();
     };
   }, []);
 
@@ -243,6 +249,58 @@ export function useChat() {
     return null;
   }, [cancelActiveAgentTurn, cancelSpeech, scheduleSubmit, syncPendingMessages]);
 
+  const stopVoiceInput = useCallback(async () => {
+    await voiceInputRef.current.stop();
+    lastFinalVoiceTextRef.current = "";
+    setVoiceInputState(voiceInputRef.current.isSupported() ? "idle" : "unsupported");
+  }, []);
+
+  const startVoiceInput = useCallback(async () => {
+    if (!voiceInputRef.current.isSupported()) {
+      setVoiceInputState("unsupported");
+      return;
+    }
+
+    cancelSpeech();
+    setVoiceTranscript("");
+    setVoiceInputState("listening");
+
+    try {
+      await voiceInputRef.current.start({
+        userId: defaultUserId,
+        onTranscript: (event) => {
+          setVoiceTranscript(event.text);
+
+          if (!event.isFinal) {
+            return;
+          }
+
+          const text = event.text.trim();
+          if (!text || text === lastFinalVoiceTextRef.current) {
+            return;
+          }
+
+          lastFinalVoiceTextRef.current = text;
+          void sendMessage(text);
+        },
+        onError: () => {
+          setVoiceInputState("error");
+        },
+      });
+    } catch {
+      setVoiceInputState("error");
+    }
+  }, [cancelSpeech, sendMessage]);
+
+  const toggleVoiceInput = useCallback(() => {
+    if (voiceInputState === "listening") {
+      void stopVoiceInput();
+      return;
+    }
+
+    void startVoiceInput();
+  }, [startVoiceInput, stopVoiceInput, voiceInputState]);
+
   const setDemoIntimacy = useCallback(async (intimacy: number) => {
     if (!window.ocWorld) {
       return;
@@ -267,12 +325,18 @@ export function useChat() {
       isSending,
       pendingMessages,
       ttsEnabled,
+      voiceInputState,
+      voiceTranscript,
       hermesStatus,
       cancelSpeech,
       interruptActiveTurn,
       sendMessage,
       setTtsEnabled,
+      startVoiceInput,
+      stopVoiceInput,
+      toggleVoiceInput,
       setDemoIntimacy,
+      refreshState: boot,
       defaultCharacterId,
       defaultUserId,
     }),
@@ -286,12 +350,18 @@ export function useChat() {
       isSending,
       pendingMessages,
       ttsEnabled,
+      voiceInputState,
+      voiceTranscript,
       hermesStatus,
       cancelSpeech,
       interruptActiveTurn,
       sendMessage,
       setTtsEnabled,
+      startVoiceInput,
+      stopVoiceInput,
+      toggleVoiceInput,
       setDemoIntimacy,
+      boot,
     ],
   );
 }

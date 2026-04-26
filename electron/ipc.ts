@@ -3,6 +3,7 @@ import { chat, generateGreeting } from "./services/chat-engine";
 import { getAirJellyContext } from "./services/airjelly";
 import { hermesManager } from "./services/hermes-manager";
 import { getTtsStatus, synthesizeSpeech } from "./services/tts";
+import { getAsrStatus, VolcengineAsrSession } from "./services/volcengine-asr";
 import { generateImage } from "./services/image-gen";
 import {
   listTimeline,
@@ -16,6 +17,9 @@ import {
 import { getStage } from "./services/relationship";
 import type {
   CharacterConfig,
+  AsrAudioPayload,
+  AsrStartPayload,
+  AsrStopPayload,
   ChatCancelPayload,
   ChatSendPayload,
   ImageGenPayload,
@@ -30,6 +34,12 @@ const ipcChannels = {
   ttsSynthesize: "tts:synthesize",
   ttsCancelActive: "tts:cancel-active",
   ttsGetStatus: "tts:get-status",
+  asrStart: "asr:start",
+  asrAudio: "asr:audio",
+  asrStop: "asr:stop",
+  asrGetStatus: "asr:get-status",
+  asrTranscript: "asr:transcript",
+  asrError: "asr:error",
   characterGetCurrent: "character:get-current",
   characterSaveCurrent: "character:save-current",
   timelineList: "timeline:list",
@@ -47,6 +57,7 @@ let registered = false;
 let detachHermesListener: (() => void) | null = null;
 const activeChatControllers = new Map<string, AbortController>();
 const activeTtsControllers = new Map<string, AbortController>();
+const activeAsrSessions = new Map<string, VolcengineAsrSession>();
 
 function getChatSessionKey(payload: ChatCancelPayload) {
   return `${payload.userId}:${payload.characterId}`;
@@ -90,6 +101,18 @@ function abortActiveTts(payload: TtsCancelPayload = {}) {
 
   activeTtsControllers.clear();
   return hadActiveTts;
+}
+
+function stopAsrSession(payload: AsrStopPayload) {
+  const session = activeAsrSessions.get(payload.sessionId);
+
+  if (!session) {
+    return false;
+  }
+
+  session.finish();
+  activeAsrSessions.delete(payload.sessionId);
+  return true;
 }
 
 export function registerIpcHandlers() {
@@ -143,6 +166,33 @@ export function registerIpcHandlers() {
   });
   ipcMain.handle(ipcChannels.ttsCancelActive, async (_event, payload?: TtsCancelPayload) => abortActiveTts(payload));
   ipcMain.handle(ipcChannels.ttsGetStatus, async () => getTtsStatus());
+  ipcMain.handle(ipcChannels.asrStart, async (event, payload: AsrStartPayload) => {
+    activeAsrSessions.get(payload.sessionId)?.close();
+
+    const session = new VolcengineAsrSession(payload, {
+      onTranscript: (transcript) => {
+        event.sender.send(ipcChannels.asrTranscript, transcript);
+      },
+      onError: (error) => {
+        event.sender.send(ipcChannels.asrError, {
+          sessionId: payload.sessionId,
+          message: error.message,
+        });
+      },
+      onClose: () => {
+        activeAsrSessions.delete(payload.sessionId);
+      },
+    });
+
+    session.start();
+    activeAsrSessions.set(payload.sessionId, session);
+    return getAsrStatus();
+  });
+  ipcMain.on(ipcChannels.asrAudio, (_event, payload: AsrAudioPayload) => {
+    activeAsrSessions.get(payload.sessionId)?.sendAudio(payload.audio);
+  });
+  ipcMain.handle(ipcChannels.asrStop, async (_event, payload: AsrStopPayload) => stopAsrSession(payload));
+  ipcMain.handle(ipcChannels.asrGetStatus, async () => getAsrStatus());
   ipcMain.handle(ipcChannels.characterGetCurrent, async (_event, characterId: string) => loadCharacter(characterId));
   ipcMain.handle(
     ipcChannels.characterSaveCurrent,
@@ -184,6 +234,10 @@ export function unregisterIpcHandlers() {
   }
   activeChatControllers.clear();
   abortActiveTts();
+  for (const session of activeAsrSessions.values()) {
+    session.close();
+  }
+  activeAsrSessions.clear();
 
   ipcMain.removeHandler(ipcChannels.chatSendMessage);
   ipcMain.removeHandler(ipcChannels.chatCancelActive);
@@ -191,6 +245,10 @@ export function unregisterIpcHandlers() {
   ipcMain.removeHandler(ipcChannels.ttsSynthesize);
   ipcMain.removeHandler(ipcChannels.ttsCancelActive);
   ipcMain.removeHandler(ipcChannels.ttsGetStatus);
+  ipcMain.removeHandler(ipcChannels.asrStart);
+  ipcMain.removeAllListeners(ipcChannels.asrAudio);
+  ipcMain.removeHandler(ipcChannels.asrStop);
+  ipcMain.removeHandler(ipcChannels.asrGetStatus);
   ipcMain.removeHandler(ipcChannels.characterGetCurrent);
   ipcMain.removeHandler(ipcChannels.characterSaveCurrent);
   ipcMain.removeHandler(ipcChannels.timelineList);

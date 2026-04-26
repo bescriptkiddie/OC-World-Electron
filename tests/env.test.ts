@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadLocalEnv, parseEnvFile } from "../electron/services/env";
+import { navItems } from "../src/components/shared";
 
 const touchedKeys = ["HERMES_API_KEY", "OC_DEMO_FORCE_MOCK_LLM", "CUSTOM_BASE_URL"] as const;
 const originalEnv = Object.fromEntries(touchedKeys.map((key) => [key, process.env[key]]));
@@ -49,5 +50,32 @@ describe("local env loading", () => {
     expect(process.env.OC_DEMO_FORCE_MOCK_LLM).toBe("0");
 
     fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("workspace shell model", () => {
+  it("defines five primary navigation items in the new order", () => {
+    expect(navItems.map((item) => item.id)).toEqual(["create", "oc", "chat", "rewind", "memory"]);
+    expect(navItems.map((item) => item.label)).toEqual(["生成我的OC", "我的OC", "聊天", "回溯", "记忆"]);
+  });
+
+  it("defaults first-time entry to create when no OC is configured", async () => {
+    const shared = await import("../src/components/shared");
+
+    expect(shared.resolveInitialView(null)).toBe("create");
+    expect(shared.resolveInitialView({ name: "" })).toBe("create");
+    expect(shared.resolveInitialView({ name: "   " })).toBe("create");
+  });
+
+  it("defaults returning users to chat when an OC already exists", async () => {
+    const shared = await import("../src/components/shared");
+
+    expect(shared.resolveInitialView({ name: "Mori" })).toBe("chat");
+  });
+
+  it("treats a generated OC name as sufficient to leave onboarding", async () => {
+    const shared = await import("../src/components/shared");
+
+    expect(shared.resolveInitialView({ name: "阿澄" })).toBe("chat");
   });
 });

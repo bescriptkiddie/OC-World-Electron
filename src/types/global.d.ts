@@ -1,5 +1,11 @@
 import type {
   AirJellyContext,
+  AsrAudioPayload,
+  AsrErrorEvent,
+  AsrProviderStatus,
+  AsrStartPayload,
+  AsrStopPayload,
+  AsrTranscriptEvent,
   CharacterConfig,
   ChatCancelPayload,
   ChatHistoryEntry,
@@ -30,6 +36,14 @@ declare global {
         synthesize: (payload: TtsSynthesizePayload) => Promise<TtsSynthesizeResult>;
         cancelActive: (payload?: TtsCancelPayload) => Promise<boolean>;
         getStatus: () => Promise<TtsProviderStatus>;
+      };
+      asr: {
+        start: (payload: AsrStartPayload) => Promise<AsrProviderStatus>;
+        sendAudio: (payload: AsrAudioPayload) => void;
+        stop: (payload: AsrStopPayload) => Promise<boolean>;
+        getStatus: () => Promise<AsrProviderStatus>;
+        onTranscript: (callback: (event: AsrTranscriptEvent) => void) => () => void;
+        onError: (callback: (event: AsrErrorEvent) => void) => () => void;
       };
       character: {
         getCurrent: (characterId: string) => Promise<CharacterConfig>;

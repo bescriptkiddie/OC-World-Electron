@@ -2,8 +2,11 @@ import { randomUUID } from "node:crypto";
 import type { TtsProviderStatus, TtsSynthesizePayload, TtsSynthesizeResult } from "../../src/types";
 
 const DEFAULT_DOUBAO_TTS_ENDPOINT = "https://openspeech.bytedance.com/api/v1/tts";
+const DEFAULT_DOUBAO_TTS_V2_ENDPOINT = "https://openspeech.bytedance.com/api/v3/tts/unidirectional";
 const DEFAULT_DOUBAO_TTS_CLUSTER = "volcano_tts";
 const DEFAULT_DOUBAO_TTS_VOICE_TYPE = "BV700_streaming";
+const DEFAULT_DOUBAO_TTS_V2_RESOURCE_ID = "seed-tts-2.0";
+const DEFAULT_DOUBAO_TTS_V2_SPEAKER = "zh_female_xiaohe_uranus_bigtts";
 const DEFAULT_DOUBAO_TTS_ENCODING = "mp3";
 const DEFAULT_DOUBAO_TTS_RATE = 24_000;
 const DEFAULT_DOUBAO_TTS_SPEED_RATIO = 1;
@@ -22,6 +25,14 @@ interface DoubaoTtsResponse {
   addition?: {
     duration?: string;
   };
+}
+
+interface DoubaoTtsV2Response {
+  reqid?: string;
+  code?: number;
+  message?: string;
+  data?: string;
+  duration?: number;
 }
 
 let lastError: string | null = null;
@@ -52,11 +63,32 @@ function getTtsProvider() {
 }
 
 function getDoubaoAccessToken() {
-  return getEnvValue("DOUBAO_TTS_ACCESS_TOKEN") || getEnvValue("VOLCENGINE_TTS_ACCESS_TOKEN");
+  return (
+    getEnvValue("DOUBAO_TTS_ACCESS_TOKEN") ||
+    getEnvValue("VOLCENGINE_TTS_ACCESS_TOKEN") ||
+    getEnvValue("VOLCENGINE_TTS_ACCESS_KEY")
+  );
 }
 
 function getDoubaoAppId() {
   return getEnvValue("DOUBAO_TTS_APP_ID") || getEnvValue("VOLCENGINE_TTS_APP_ID");
+}
+
+function getDoubaoV2ResourceId() {
+  return (
+    getEnvValue("DOUBAO_TTS_RESOURCE_ID") ||
+    getEnvValue("VOLCENGINE_TTS_RESOURCE_ID") ||
+    DEFAULT_DOUBAO_TTS_V2_RESOURCE_ID
+  );
+}
+
+function getDoubaoV2Speaker() {
+  return (
+    getEnvValue("DOUBAO_TTS_SPEAKER") ||
+    getEnvValue("DOUBAO_TTS_V2_SPEAKER") ||
+    getEnvValue("VOLCENGINE_TTS_SPEAKER") ||
+    DEFAULT_DOUBAO_TTS_V2_SPEAKER
+  );
 }
 
 function getDoubaoCluster() {
@@ -77,6 +109,10 @@ function getDoubaoEncoding() {
 
 function getDoubaoEndpoint() {
   return getEnvValue("DOUBAO_TTS_ENDPOINT") || getEnvValue("VOLCENGINE_TTS_ENDPOINT") || DEFAULT_DOUBAO_TTS_ENDPOINT;
+}
+
+function getDoubaoV2Endpoint() {
+  return getEnvValue("DOUBAO_TTS_V2_ENDPOINT") || getEnvValue("VOLCENGINE_TTS_V2_ENDPOINT") || DEFAULT_DOUBAO_TTS_V2_ENDPOINT;
 }
 
 function getMimeType(encoding: string) {
@@ -100,12 +136,36 @@ function getDurationMs(response: DoubaoTtsResponse) {
   return Number.isFinite(duration) ? duration : null;
 }
 
+function parseTtsV2Response(responseText: string) {
+  const chunks = responseText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const responses = (chunks.length ? chunks : [responseText]).map((chunk) => JSON.parse(chunk) as DoubaoTtsV2Response);
+  const failedResponse = responses.find((response) => response.code !== undefined && ![0, 20000000].includes(response.code));
+  const audioBase64 = responses
+    .map((response) => response.data)
+    .filter((data): data is string => Boolean(data))
+    .join("");
+
+  return {
+    responses,
+    failedResponse,
+    audioBase64,
+  };
+}
+
 function isDoubaoConfigured() {
   return Boolean(getDoubaoAppId() && getDoubaoAccessToken());
 }
 
+function shouldUseDoubaoV2() {
+  const provider = getTtsProvider();
+  return provider === "doubao2" || provider === "volcengine2" || Boolean(getEnvValue("DOUBAO_TTS_RESOURCE_ID") || getEnvValue("VOLCENGINE_TTS_RESOURCE_ID"));
+}
+
 function shouldUseDoubao() {
-  return getTtsProvider() === "doubao" || isDoubaoConfigured();
+  return ["doubao", "doubao2", "volcengine", "volcengine2"].includes(getTtsProvider()) || isDoubaoConfigured();
 }
 
 export function getTtsStatus(): TtsProviderStatus {
@@ -121,8 +181,83 @@ export function getTtsStatus(): TtsProviderStatus {
   return {
     provider: "doubao",
     configured: isDoubaoConfigured(),
-    voiceType: getDoubaoVoiceType(),
+    voiceType: shouldUseDoubaoV2() ? getDoubaoV2Speaker() : getDoubaoVoiceType(),
     lastError,
+  };
+}
+
+async function synthesizeSpeechV2(
+  payload: TtsSynthesizePayload,
+  options: TtsOptions,
+  requestId: string,
+): Promise<TtsSynthesizeResult> {
+  const text = payload.text.trim();
+  const appId = getDoubaoAppId();
+  const accessToken = getDoubaoAccessToken();
+
+  if (!appId || !accessToken) {
+    throw new Error("Doubao TTS 2.0 is not configured");
+  }
+
+  const encoding = getDoubaoEncoding();
+  const response = await fetch(getDoubaoV2Endpoint(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Api-App-Id": appId,
+      "X-Api-Access-Key": accessToken,
+      "X-Api-Resource-Id": getDoubaoV2ResourceId(),
+      "X-Api-Request-Id": requestId,
+    },
+    signal: options.signal,
+    body: JSON.stringify({
+      user: {
+        uid: payload.userId || "oc-world",
+      },
+      req_params: {
+        text,
+        speaker: getDoubaoV2Speaker(),
+        audio_params: {
+          format: encoding,
+          sample_rate: getNumberEnv("DOUBAO_TTS_RATE", DEFAULT_DOUBAO_TTS_RATE),
+        },
+        additions: JSON.stringify({
+          explicit_language: getEnvValue("DOUBAO_TTS_LANGUAGE") || "zh-cn",
+        }),
+      },
+    }),
+  });
+
+  const responseText = await response.text();
+
+  if (!response.ok) {
+    lastError = `Doubao TTS 2.0 HTTP ${response.status}${responseText ? `: ${responseText}` : ""}`;
+    throw new Error(lastError);
+  }
+
+  const { responses, failedResponse, audioBase64 } = parseTtsV2Response(responseText);
+
+  if (failedResponse) {
+    lastError = failedResponse.message || `Doubao TTS 2.0 failed with code ${failedResponse.code}`;
+    throw new Error(lastError);
+  }
+
+  if (!audioBase64) {
+    lastError = "Doubao TTS 2.0 response did not include audio data";
+    throw new Error(lastError);
+  }
+
+  lastError = null;
+  const responseWithRequestId = responses.find((response) => response.reqid);
+  const responseWithDuration = responses.find((response) => Number.isFinite(response.duration));
+
+  return {
+    provider: "doubao",
+    requestId: responseWithRequestId?.reqid || requestId,
+    audioBase64,
+    mimeType: getMimeType(encoding),
+    encoding,
+    durationMs: responseWithDuration?.duration ?? null,
   };
 }
 
@@ -141,6 +276,10 @@ export async function synthesizeSpeech(
 
   if (!shouldUseDoubao() || !appId || !accessToken) {
     throw new Error("Doubao TTS is not configured");
+  }
+
+  if (shouldUseDoubaoV2()) {
+    return synthesizeSpeechV2(payload, options, requestId);
   }
 
   const encoding = getDoubaoEncoding();

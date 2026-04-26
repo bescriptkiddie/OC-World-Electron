@@ -147,6 +147,39 @@ export interface TtsProviderStatus {
   lastError: string | null;
 }
 
+export interface AsrStartPayload {
+  sessionId: string;
+  userId?: string;
+  language?: string;
+}
+
+export interface AsrAudioPayload {
+  sessionId: string;
+  audio: ArrayBuffer;
+}
+
+export interface AsrStopPayload {
+  sessionId: string;
+}
+
+export interface AsrTranscriptEvent {
+  sessionId: string;
+  text: string;
+  isFinal: boolean;
+}
+
+export interface AsrErrorEvent {
+  sessionId: string;
+  message: string;
+}
+
+export interface AsrProviderStatus {
+  provider: "volcengine";
+  configured: boolean;
+  resourceId: string | null;
+  lastError: string | null;
+}
+
 export type HermesRuntimeState = "disabled" | "starting" | "healthy" | "unhealthy" | "crashed" | "stopped";
 
 export interface HermesRuntimeStatus {
@@ -171,6 +204,8 @@ export interface CreateCharacterInput {
 
 export interface ImageGenPayload {
   prompt: string;
+  aspectRatio?: string;
+  imageSize?: string;
 }
 
 export interface ImageGenResult {

@@ -15,6 +15,34 @@ contextBridge.exposeInMainWorld("ocWorld", {
     cancelActive: (payload?: import("../src/types").TtsCancelPayload) => ipcRenderer.invoke("tts:cancel-active", payload),
     getStatus: () => ipcRenderer.invoke("tts:get-status"),
   },
+  asr: {
+    start: (payload: import("../src/types").AsrStartPayload) => ipcRenderer.invoke("asr:start", payload),
+    sendAudio: (payload: import("../src/types").AsrAudioPayload) => ipcRenderer.send("asr:audio", payload),
+    stop: (payload: import("../src/types").AsrStopPayload) => ipcRenderer.invoke("asr:stop", payload),
+    getStatus: () => ipcRenderer.invoke("asr:get-status"),
+    onTranscript: (callback: (event: import("../src/types").AsrTranscriptEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, transcript: import("../src/types").AsrTranscriptEvent) => {
+        callback(transcript);
+      };
+
+      ipcRenderer.on("asr:transcript", listener);
+
+      return () => {
+        ipcRenderer.removeListener("asr:transcript", listener);
+      };
+    },
+    onError: (callback: (event: import("../src/types").AsrErrorEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, error: import("../src/types").AsrErrorEvent) => {
+        callback(error);
+      };
+
+      ipcRenderer.on("asr:error", listener);
+
+      return () => {
+        ipcRenderer.removeListener("asr:error", listener);
+      };
+    },
+  },
   character: {
     getCurrent: (characterId: string) => ipcRenderer.invoke("character:get-current", characterId),
     saveCurrent: (payload: { characterId: string; character: import("../src/types").CharacterConfig }) =>

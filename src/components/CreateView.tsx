@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { IconArrowUp, IconCheck, IconRefresh, IconSparkle } from "./OcWorldIcons";
 import { OcAvatarLarge } from "./OcAvatar";
-import { ViewHeader } from "./ViewHeader";
 
 const personalityTags = [
   { id: "傲娇", label: "傲娇" },
@@ -39,9 +38,11 @@ type Step = "name" | "customize" | "preview";
 export function CreateView({
   onSave,
   onCancel,
+  canCancel = true,
 }: {
-  onSave: (data: { name: string; personality: string; catchphrase: string; relationshipSetup: string; avatarPath?: string }) => void;
+  onSave: (data: { name: string; personality: string; catchphrase: string; relationshipSetup: string; avatarPath?: string }) => void | Promise<void>;
   onCancel: () => void;
+  canCancel?: boolean;
 }) {
   const [step, setStep] = useState<Step>("name");
   const [name, setName] = useState("");
@@ -51,6 +52,8 @@ export function CreateView({
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [genError, setGenError] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const [avatarDataUrl, setAvatarDataUrl] = useState<string>("");
   const [savedAvatarPath, setSavedAvatarPath] = useState<string>("");
 
@@ -82,21 +85,11 @@ export function CreateView({
   };
 
   const buildImagePrompt = (): string => {
-    const parts: string[] = [
-      `A cute anime-style avatar portrait of an original character named "${name}"`,
-    ];
-    if (selectedAppearance.size > 0) {
-      parts.push(`race/appearance: ${[...selectedAppearance].join(", ")}`);
-    }
-    if (selectedPersonality.size > 0) {
-      parts.push(`personality: ${[...selectedPersonality].join(", ")}`);
-    }
-    if (selectedTone) {
-      parts.push(`vibe: ${selectedTone}`);
-    }
-    if (prompt.trim()) {
-      parts.push(prompt.trim());
-    }
+    const parts: string[] = [`A cute anime-style avatar portrait of an original character named "${name}"`];
+    if (selectedAppearance.size > 0) parts.push(`race/appearance: ${[...selectedAppearance].join(", ")}`);
+    if (selectedPersonality.size > 0) parts.push(`personality: ${[...selectedPersonality].join(", ")}`);
+    if (selectedTone) parts.push(`vibe: ${selectedTone}`);
+    if (prompt.trim()) parts.push(prompt.trim());
     parts.push("simple clean background, bust-up portrait, soft colors, high quality");
     return parts.join(". ");
   };
@@ -121,208 +114,203 @@ export function CreateView({
     }
   };
 
-  if (step === "name") {
-    return (
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "auto" }}>
-        <ViewHeader title="创建你的 OC" right={
-          <button type="button" onClick={onCancel} style={{ background: "transparent", border: "none", color: "var(--ink-muted)", fontSize: 13, cursor: "pointer" }}>跳过</button>
-        } />
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 56px", gap: 32 }}>
-          <OcAvatarLarge size={120} name={name || undefined} />
-          <div style={{ textAlign: "center" }}>
-            <div className="serif" style={{ fontSize: 28, fontWeight: 500, letterSpacing: "-0.02em", color: "var(--ink)" }}>
-              给 TA 起个名字
-            </div>
-            <div style={{ marginTop: 8, fontSize: 13, color: "var(--ink-muted)" }}>
-              这会是你在 OCWORLD 里的伙伴
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveError("");
+
+    try {
+      await onSave({
+        name,
+        personality: generatePersonality(),
+        catchphrase: generateCatchphrase(),
+        relationshipSetup: `${name} 是你在 OCWORLD 的 OC 伙伴`,
+        avatarPath: savedAvatarPath || undefined,
+      });
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "保存失败");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="oc-page oc-create-page">
+      <section className="oc-create-stage">
+        <div className="oc-create-stage__left">
+          <p className="oc-kicker mono">CHARACTER FORGE</p>
+          <h2 className="oc-page-title serif">生成我的OC</h2>
+          <p className="oc-page-copy">先给 TA 一个名字，再把性格、外观和语气一点点写出来。聊天里陪你的，就是这个角色。</p>
+          <StepRail step={step} />
+          <div className="oc-create-stage__aside-card">
+            <span className="oc-kicker mono">CURRENT PREVIEW</span>
+            <OcAvatarLarge size={132} name={name || "OC"} src={avatarDataUrl || undefined} avatarPath={savedAvatarPath || undefined} />
+            <div className="oc-create-stage__aside-meta">
+              <strong className="serif">{name || "未命名"}</strong>
+              <span>{generatePersonality()}</span>
             </div>
           </div>
-          <div style={{ width: "100%", maxWidth: 400 }}>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="输入名字..."
-              autoFocus
-              style={{
-                width: "100%", padding: "14px 18px", fontSize: 18,
-                border: "0.5px solid var(--line)", borderRadius: 12,
-                background: "var(--bg-card)", color: "var(--ink)",
-                outline: "none", textAlign: "center",
-              }}
-            />
-          </div>
-          <button
-            type="button"
-            disabled={!name.trim()}
-            onClick={() => setStep("customize")}
-            style={{
-              padding: "12px 40px", borderRadius: 10, border: "none",
-              background: name.trim() ? "oklch(0.78 0.10 220)" : "oklch(0.92 0.01 240)",
-              color: name.trim() ? "#fff" : "var(--ink-faint)",
-              fontSize: 14, fontWeight: 600, cursor: name.trim() ? "pointer" : "not-allowed",
-              display: "flex", alignItems: "center", gap: 8,
-            }}
-          >
-            下一步
-            <IconArrowUp size={14} />
-          </button>
         </div>
-      </div>
-    );
-  }
 
-  if (step === "customize") {
-    return (
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "auto" }}>
-        <ViewHeader title={`塑造 ${name} 的性格`} right={
-          <button type="button" onClick={onCancel} style={{ background: "transparent", border: "none", color: "var(--ink-muted)", fontSize: 13, cursor: "pointer" }}>跳过</button>
-        } />
-        <div style={{ flex: 1, maxWidth: 640, width: "100%", margin: "0 auto", padding: "32px 56px 60px", overflowY: "auto" }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 36 }}>
-            <OcAvatarLarge size={80} name={name} />
-            <div className="serif" style={{ marginTop: 14, fontSize: 24, fontWeight: 500 }}>{name}</div>
-          </div>
-
-          <TagSection
-            title="性格特质"
-            subtitle="选择 1-3 个标签定义 TA 的性格"
-            tags={personalityTags}
-            selected={selectedPersonality}
-            onToggle={(tag) => setSelectedPersonality((prev) => toggleTag(prev, tag))}
-            max={3}
-          />
-
-          <TagSection
-            title="种族 / 外观"
-            subtitle="TA 是什么生物？"
-            tags={appearanceTags}
-            selected={selectedAppearance}
-            onToggle={(tag) => setSelectedAppearance((prev) => toggleTag(prev, tag))}
-            max={2}
-          />
-
-          <div style={{ marginBottom: 32 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)", marginBottom: 4 }}>说话风格</div>
-            <div style={{ fontSize: 12, color: "var(--ink-muted)", marginBottom: 12 }}>TA 怎么跟你说话？</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {toneTags.map((tag) => (
-                <TagButton
-                  key={tag.id}
-                  label={tag.label}
-                  active={selectedTone === tag.id}
-                  onClick={() => setSelectedTone((prev) => prev === tag.id ? "" : tag.id)}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div style={{ marginBottom: 36 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)", marginBottom: 4 }}>补充描述</div>
-            <div style={{ fontSize: 12, color: "var(--ink-muted)", marginBottom: 12 }}>用你自己的话描述 TA</div>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder={`比如："${name} 是一个会在我熬夜时提醒我睡觉的角色..."`}
-              rows={3}
-              style={{
-                width: "100%", padding: "12px 14px", fontSize: 13,
-                border: "0.5px solid var(--line)", borderRadius: 10,
-                background: "var(--bg-card)", color: "var(--ink)",
-                outline: "none", resize: "none", lineHeight: 1.55,
-              }}
-            />
-          </div>
-
-          {genError && (
-            <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 8, background: "oklch(0.95 0.04 25)", color: "oklch(0.40 0.10 25)", fontSize: 12 }}>{genError}</div>
+        <div className="oc-create-stage__main">
+          {step === "name" && (
+            <CreateCard
+              title="先给 TA 起名"
+              body="这个名字会贯穿后面的聊天、回溯和记忆。"
+              footer={
+                <div className="oc-create-actions">
+                  {canCancel && (
+                    <button type="button" className="oc-pill-button" onClick={onCancel}>
+                      稍后再说
+                    </button>
+                  )}
+                  <button type="button" className="oc-pill-button is-primary" disabled={!name.trim()} onClick={() => setStep("customize")}>
+                    下一步
+                    <IconArrowUp size={14} />
+                  </button>
+                </div>
+              }
+            >
+              <input
+                type="text"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="比如：Mori / 阿澄 / 小满"
+                autoFocus
+                className="oc-input oc-input-xl"
+              />
+            </CreateCard>
           )}
 
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={isGenerating}
-            style={{
-              width: "100%", padding: "14px", borderRadius: 10, border: "none",
-              background: "oklch(0.78 0.10 220)", color: "#fff",
-              fontSize: 14, fontWeight: 600, cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-            }}
-          >
-            {isGenerating ? (
-              <>
-                <IconRefresh size={16} style={{ animation: "spin 1s linear infinite" }} />
-                正在生成 {name} 的形象...
-              </>
-            ) : (
-              <>
-                <IconSparkle size={16} />
-                生成 {name} 的形象
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-    );
-  }
+          {step === "customize" && (
+            <CreateCard
+              title={`塑造 ${name || "TA"}`}
+              body="选标签只是起点，真正决定角色感的是你补进去的细节。"
+              footer={
+                <div className="oc-create-actions">
+                  <button type="button" className="oc-pill-button" onClick={() => setStep("name")}>
+                    返回上一步
+                  </button>
+                  <button type="button" className="oc-pill-button is-primary" onClick={handleGenerate} disabled={isGenerating || !name.trim()}>
+                    {isGenerating ? <IconRefresh size={14} style={{ animation: "spin 1s linear infinite" }} /> : <IconSparkle size={14} />}
+                    {isGenerating ? "正在生成形象" : "生成形象"}
+                  </button>
+                </div>
+              }
+            >
+              <TagSection
+                title="性格特质"
+                subtitle="选 1 到 3 个，先把性格主轴压出来。"
+                tags={personalityTags}
+                selected={selectedPersonality}
+                onToggle={(tag) => setSelectedPersonality((prev) => toggleTag(prev, tag))}
+                max={3}
+              />
 
-  // step === "preview"
+              <TagSection
+                title="种族 / 外观"
+                subtitle="TA 看上去是什么感觉。"
+                tags={appearanceTags}
+                selected={selectedAppearance}
+                onToggle={(tag) => setSelectedAppearance((prev) => toggleTag(prev, tag))}
+                max={2}
+              />
+
+              <TagSection
+                title="说话风格"
+                subtitle="决定聊天时最直接的角色感。"
+                tags={toneTags}
+                selected={selectedTone ? new Set([selectedTone]) : new Set()}
+                onToggle={(tag) => setSelectedTone((prev) => (prev === tag ? "" : tag))}
+                max={1}
+              />
+
+              <div className="oc-field-block">
+                <label className="oc-field-label">补充描述</label>
+                <p className="oc-field-hint">一句话写出你真正想要的陪伴感。</p>
+                <textarea
+                  value={prompt}
+                  onChange={(event) => setPrompt(event.target.value)}
+                  placeholder={`比如：${name || "TA"} 会在我熬夜时提醒我睡觉，也会在我低落的时候嘴硬地陪我。`}
+                  rows={5}
+                  className="oc-textarea"
+                />
+              </div>
+
+              {genError && <div className="oc-inline-error">{genError}</div>}
+            </CreateCard>
+          )}
+
+          {step === "preview" && (
+            <CreateCard
+              title="确认你的 OC"
+              body="这就是后面会和你互动的角色。可以继续调整，也可以直接定下来。"
+              footer={
+                <div className="oc-create-actions">
+                  <button type="button" className="oc-pill-button" onClick={() => setStep("customize")}>
+                    重新调整
+                  </button>
+                  <button type="button" className="oc-pill-button is-primary" onClick={handleSave} disabled={isSaving}>
+                    <IconCheck size={14} />
+                    {isSaving ? "保存中" : "就是 TA 了"}
+                  </button>
+                </div>
+              }
+            >
+              <div className="oc-preview-stack">
+                {avatarDataUrl ? (
+                  <div className="oc-preview-image-frame">
+                    <img src={avatarDataUrl} alt={name} className="oc-preview-image" />
+                  </div>
+                ) : (
+                  <OcAvatarLarge size={180} name={name} avatarPath={savedAvatarPath || undefined} />
+                )}
+                <div className="oc-preview-copy">
+                  <div className="oc-preview-name serif">{name}</div>
+                  <div className="oc-preview-personality">{generatePersonality()}</div>
+                  <div className="oc-preview-quote">「{generateCatchphrase()}」</div>
+                </div>
+              </div>
+              {saveError && <div className="oc-inline-error">{saveError}</div>}
+            </CreateCard>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function CreateCard({ title, body, children, footer }: { title: string; body: string; children: React.ReactNode; footer: React.ReactNode }) {
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "auto" }}>
-      <ViewHeader title="确认你的 OC" />
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 56px", gap: 24 }}>
-        {avatarDataUrl ? (
-          <div style={{ width: 160, height: 160, borderRadius: "50%", overflow: "hidden", boxShadow: "0 8px 40px rgba(15,30,55,.12)" }}>
-            <img src={avatarDataUrl} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          </div>
-        ) : (
-          <OcAvatarLarge size={160} name={name} />
-        )}
-        <div className="serif" style={{ fontSize: 36, fontWeight: 500, letterSpacing: "-0.02em" }}>{name}</div>
-        <div style={{ maxWidth: 480, textAlign: "center" }}>
-          <div style={{ fontSize: 13, color: "var(--ink-muted)", lineHeight: 1.6 }}>
-            {generatePersonality()}
-          </div>
-          <div style={{ marginTop: 12, padding: "10px 16px", borderRadius: 10, background: "oklch(0.96 0.04 175)", color: "oklch(0.32 0.07 175)", fontSize: 13, fontStyle: "italic" }}>
-            「{generateCatchphrase()}」
-          </div>
-        </div>
+    <article className="oc-create-card">
+      <header className="oc-create-card__header">
+        <h3 className="serif oc-create-card__title">{title}</h3>
+        <p className="oc-create-card__body">{body}</p>
+      </header>
+      <div className="oc-create-card__content">{children}</div>
+      <footer className="oc-create-card__footer">{footer}</footer>
+    </article>
+  );
+}
 
-        <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
-          <button
-            type="button"
-            onClick={() => setStep("customize")}
-            style={{
-              padding: "12px 28px", borderRadius: 10,
-              border: "0.5px solid var(--line)", background: "var(--bg-card)",
-              color: "var(--ink)", fontSize: 14, fontWeight: 500, cursor: "pointer",
-            }}
-          >
-            重新调整
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              onSave({
-                name,
-                personality: generatePersonality(),
-                catchphrase: generateCatchphrase(),
-                relationshipSetup: `${name} 是你在 OCWORLD 的 OC 伙伴`,
-                avatarPath: savedAvatarPath || undefined,
-              });
-            }}
-            style={{
-              padding: "12px 28px", borderRadius: 10, border: "none",
-              background: "oklch(0.78 0.10 220)", color: "#fff",
-              fontSize: 14, fontWeight: 600, cursor: "pointer",
-              display: "flex", alignItems: "center", gap: 8,
-            }}
-          >
-            <IconCheck size={16} />
-            就是 TA 了
-          </button>
-        </div>
-      </div>
+function StepRail({ step }: { step: Step }) {
+  const items: Array<{ key: Step; label: string }> = [
+    { key: "name", label: "命名" },
+    { key: "customize", label: "设定" },
+    { key: "preview", label: "确认" },
+  ];
+
+  return (
+    <div className="oc-step-rail">
+      {items.map((item, index) => {
+        const active = item.key === step;
+        const done = items.findIndex((entry) => entry.key === step) > index;
+        return (
+          <div key={item.key} className={active ? "oc-step-item is-active" : done ? "oc-step-item is-done" : "oc-step-item"}>
+            <span className="oc-step-item__index mono">0{index + 1}</span>
+            <span className="oc-step-item__label">{item.label}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -343,57 +331,27 @@ function TagSection({
   max: number;
 }) {
   return (
-    <div style={{ marginBottom: 32 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)", marginBottom: 4 }}>{title}</div>
-      <div style={{ fontSize: 12, color: "var(--ink-muted)", marginBottom: 12 }}>{subtitle}</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+    <div className="oc-field-block">
+      <label className="oc-field-label">{title}</label>
+      <p className="oc-field-hint">{subtitle}</p>
+      <div className="oc-tag-grid">
         {tags.map((tag) => {
           const active = selected.has(tag.id);
           const disabled = !active && selected.size >= max;
           return (
-            <TagButton
+            <button
               key={tag.id}
-              label={tag.label}
-              active={active}
-              disabled={disabled}
+              type="button"
+              className={active ? "oc-tag-button is-active" : "oc-tag-button"}
               onClick={() => !disabled && onToggle(tag.id)}
-            />
+              disabled={disabled}
+            >
+              {active ? "✓ " : ""}
+              {tag.label}
+            </button>
           );
         })}
       </div>
     </div>
-  );
-}
-
-function TagButton({
-  label,
-  active,
-  disabled,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        padding: "6px 14px", borderRadius: 8,
-        border: active ? "none" : "0.5px solid var(--line)",
-        background: active ? "oklch(0.78 0.10 220)" : disabled ? "var(--bg-soft)" : "var(--bg-card)",
-        color: active ? "#fff" : disabled ? "var(--ink-faint)" : "var(--ink-muted)",
-        fontSize: 12.5, fontWeight: active ? 600 : 500,
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.5 : 1,
-        transition: "all .15s",
-      }}
-    >
-      {active && <span style={{ marginRight: 4 }}>✓</span>}
-      {label}
-    </button>
   );
 }

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { ChatHistoryEntry, PendingChatMessage } from "../types";
 
-export type ViewId = "home" | "chat" | "files" | "rewind" | "memory" | "create" | "settings";
+export type ViewId = "create" | "oc" | "chat" | "rewind" | "memory" | "settings" | "home" | "files";
 export type SessionId = "live" | "new" | `entry:${number}`;
 export type MessageItem = { key: string; role: "user" | "oc"; text: string };
 
@@ -96,8 +96,12 @@ export function bootRows(
     ["00.18s", `  affinity ${relationship?.intimacy ?? 0} · ${stageLabel(relationship?.stage)}`],
     ["00.24s", `loading recent context`],
     ["00.31s", `${character?.name ?? "OC"} is waking up…`],
-    ["00.42s", "ready"],
+    ["00.42s", hermesState === "healthy" ? "ready" : `ready · ${hermesState}`],
   ];
+}
+
+export function resolveInitialView(character: { name?: string } | null): ViewId {
+  return character?.name?.trim() ? "chat" : "create";
 }
 
 export const iconBtn: React.CSSProperties = {
@@ -124,8 +128,9 @@ export const iconBtnQuiet: React.CSSProperties = {
 };
 
 export const navItems = [
-  { id: "home" as const, label: "首页", icon: () => null },
-  { id: "chat" as const, label: "与TA对话", icon: () => null },
+  { id: "create" as const, label: "生成我的OC", icon: () => null },
+  { id: "oc" as const, label: "我的OC", icon: () => null },
+  { id: "chat" as const, label: "聊天", icon: () => null },
   { id: "rewind" as const, label: "回溯", icon: () => null },
   { id: "memory" as const, label: "记忆", icon: () => null },
 ];
