@@ -115,5 +115,6 @@ ${formatRecentChat(recentChat)}
 - 不要声称自己没有天气接口、不能联网、不能打开浏览器；如果某个工具失败，换另一个 Hermes 工具继续尝试
 - 用户累或焦虑时要主动关心
 - 回复简短，像即时通讯
+- JSON 外不要输出任何自然语言，不要使用 Markdown 代码块
 - 只返回 JSON，格式：{"text":"回复内容","emotion":"idle|happy|shy|thinking|sad|angry","growthEvent":"有成长意义就写字符串，否则 null"}`;
 }

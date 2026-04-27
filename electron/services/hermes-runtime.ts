@@ -198,7 +198,8 @@ function seedHermesHome(env: HermesEnv, hermesHome: string) {
   fs.mkdirSync(hermesHome, { recursive: true });
 
   const configPath = path.join(hermesHome, "config.yaml");
-  if (!fs.existsSync(configPath)) {
+  const shouldRefreshConfig = getEnvValue(env, "OC_WORLD_REFRESH_HERMES_CONFIG") !== "0";
+  if (shouldRefreshConfig || !fs.existsSync(configPath)) {
     fs.writeFileSync(configPath, getHermesConfig(env), "utf8");
   }
 }

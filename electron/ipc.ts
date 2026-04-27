@@ -184,7 +184,7 @@ export function registerIpcHandlers() {
       },
     });
 
-    session.start();
+    await session.start();
     activeAsrSessions.set(payload.sessionId, session);
     return getAsrStatus();
   });

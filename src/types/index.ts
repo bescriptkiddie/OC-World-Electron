@@ -204,12 +204,21 @@ export interface CreateCharacterInput {
 
 export interface ImageGenPayload {
   prompt: string;
+  provider?: string;
+  model?: string;
   aspectRatio?: string;
   imageSize?: string;
+  imageConfig?: {
+    aspectRatio?: string;
+    imageSize?: string;
+  };
+  cacheKey?: string;
+  force?: boolean;
 }
 
 export interface ImageGenResult {
   imageBase64: string;
   mimeType: string;
   savedPath?: string;
+  cached?: boolean;
 }

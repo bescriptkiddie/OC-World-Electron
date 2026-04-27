@@ -10,6 +10,10 @@ const originalEnv = {
   HERMES_MODEL: process.env.HERMES_MODEL,
   OC_CHAT_PROVIDER: process.env.OC_CHAT_PROVIDER,
   OC_DEMO_FORCE_MOCK_LLM: process.env.OC_DEMO_FORCE_MOCK_LLM,
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  SILICONFLOW_API_KEY: process.env.SILICONFLOW_API_KEY,
+  SILICONFLOW_BASE_URL: process.env.SILICONFLOW_BASE_URL,
+  SILICONFLOW_MODEL: process.env.SILICONFLOW_MODEL,
 };
 
 afterEach(() => {
@@ -22,6 +26,10 @@ afterEach(() => {
   process.env.HERMES_MODEL = originalEnv.HERMES_MODEL;
   process.env.OC_CHAT_PROVIDER = originalEnv.OC_CHAT_PROVIDER;
   process.env.OC_DEMO_FORCE_MOCK_LLM = originalEnv.OC_DEMO_FORCE_MOCK_LLM;
+  process.env.OPENAI_API_KEY = originalEnv.OPENAI_API_KEY;
+  process.env.SILICONFLOW_API_KEY = originalEnv.SILICONFLOW_API_KEY;
+  process.env.SILICONFLOW_BASE_URL = originalEnv.SILICONFLOW_BASE_URL;
+  process.env.SILICONFLOW_MODEL = originalEnv.SILICONFLOW_MODEL;
 });
 
 describe("summary generation", () => {
@@ -209,6 +217,57 @@ describe("summary generation", () => {
     );
   });
 
+  it("uses SiliconFlow OpenAI-compatible config when provider is siliconflow", async () => {
+    process.env.OC_CHAT_PROVIDER = "siliconflow";
+    process.env.SILICONFLOW_API_KEY = "sf-secret";
+    process.env.SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1";
+    process.env.SILICONFLOW_MODEL = "deepseek-ai/DeepSeek-V4-Flash";
+    process.env.OC_DEMO_FORCE_MOCK_LLM = "0";
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: JSON.stringify({
+                  text: "收到",
+                  emotion: "happy",
+                  growthEvent: null,
+                }),
+              },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await callLLM("system prompt", [{ role: "user", content: "你好" }]);
+
+    expect(response).toEqual({
+      text: "收到",
+      emotion: "happy",
+      growthEvent: null,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.siliconflow.cn/v1/chat/completions",
+      expect.objectContaining({
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer sf-secret",
+        },
+      }),
+    );
+  });
+
   it("falls back to mock response when Hermes request fails", async () => {
     process.env.OC_DEMO_FORCE_MOCK_LLM = "0";
 
@@ -316,6 +375,79 @@ describe("summary generation", () => {
 
     expect(response).toEqual({
       text: "plain text",
+      emotion: "thinking",
+      growthEvent: null,
+    });
+  });
+
+  it("filters duplicated fenced JSON from Hermes responses", async () => {
+    process.env.OC_DEMO_FORCE_MOCK_LLM = "0";
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  role: "assistant",
+                  content: [
+                    "刚才查过了，你那边现在晴天，23°C，体感 25°C，湿度 50%，微风。",
+                    "",
+                    '```json\n{"text":"刚才查过了，晴天 23°C，体感 25°C。","emotion":"happy","growthEvent":null}\n```',
+                  ].join("\n"),
+                },
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      ),
+    );
+
+    const response = await callLLM("system prompt", [{ role: "user", content: "天气怎么样" }]);
+
+    expect(response).toEqual({
+      text: "刚才查过了，你那边现在晴天，23°C，体感 25°C，湿度 50%，微风。",
+      emotion: "happy",
+      growthEvent: null,
+    });
+  });
+
+  it("filters duplicated trailing JSON from Hermes responses", async () => {
+    process.env.OC_DEMO_FORCE_MOCK_LLM = "0";
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  role: "assistant",
+                  content:
+                    '先喝口水，回来继续。\n{"text":"先喝口水，回来继续。","emotion":"thinking","growthEvent":null}',
+                },
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      ),
+    );
+
+    const response = await callLLM("system prompt", [{ role: "user", content: "我有点累" }]);
+
+    expect(response).toEqual({
+      text: "先喝口水，回来继续。",
       emotion: "thinking",
       growthEvent: null,
     });

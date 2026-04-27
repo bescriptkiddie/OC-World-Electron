@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, session } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerIpcHandlers, unregisterIpcHandlers } from "./ipc";
@@ -19,6 +19,37 @@ loadLocalEnv({
 });
 
 let quitting = false;
+
+function isTrustedRendererOrigin(rawUrl: string | undefined) {
+  if (!rawUrl) {
+    return false;
+  }
+
+  try {
+    const url = new URL(rawUrl);
+    return (
+      url.protocol === "file:" ||
+      url.hostname === "127.0.0.1" ||
+      url.hostname === "localhost" ||
+      url.hostname === "::1"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function configureLocalStaticPermissions() {
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => (
+    permission === "media" && isTrustedRendererOrigin(requestingOrigin)
+  ));
+
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const mediaTypes = details && "mediaTypes" in details ? details.mediaTypes ?? [] : [];
+    const wantsAudio = mediaTypes.length === 0 || mediaTypes.includes("audio");
+    const requestUrl = details && "requestingUrl" in details ? details.requestingUrl : webContents.getURL();
+    callback(permission === "media" && wantsAudio && isTrustedRendererOrigin(requestUrl));
+  });
+}
 
 function loadRenderer(window: BrowserWindow) {
   const rendererUrl = process.env.OC_WORLD_RENDERER_URL;
@@ -67,6 +98,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  configureLocalStaticPermissions();
   prepareHermesRuntime({
     userDataPath: app.getPath("userData"),
     appPath: app.getAppPath(),

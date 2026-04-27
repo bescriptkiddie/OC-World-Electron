@@ -7,7 +7,7 @@ const HERMES_CHAT_COMPLETIONS_PATH = "/v1/chat/completions";
 const DEFAULT_HERMES_BASE_URL = "http://127.0.0.1:8642";
 const DEFAULT_HERMES_MODEL = "hermes-agent";
 
-type LLMProvider = "hermes" | "legacy";
+type LLMProvider = "hermes" | "legacy" | "siliconflow";
 
 interface LLMCallOptions {
   sessionId?: string;
@@ -72,7 +72,11 @@ function getEnvValue(name: string) {
 }
 
 function getProvider(): LLMProvider {
-  return getEnvValue("OC_CHAT_PROVIDER") === "legacy" ? "legacy" : "hermes";
+  const provider = getEnvValue("OC_CHAT_PROVIDER");
+  if (provider === "legacy" || provider === "siliconflow") {
+    return provider;
+  }
+  return "hermes";
 }
 
 function getLegacyBaseUrl() {
@@ -89,6 +93,14 @@ function getHermesBaseUrl() {
 
 function getHermesModel() {
   return getEnvValue("HERMES_MODEL") || DEFAULT_HERMES_MODEL;
+}
+
+function getSiliconFlowBaseUrl() {
+  return (getEnvValue("SILICONFLOW_BASE_URL") || "https://api.siliconflow.cn/v1").replace(/\/$/, "");
+}
+
+function getSiliconFlowModel() {
+  return getEnvValue("SILICONFLOW_MODEL") || getEnvValue("HERMES_MODEL") || "deepseek-ai/DeepSeek-V4-Flash";
 }
 
 function getLegacyResponseTextBlock(data: unknown) {
@@ -155,14 +167,17 @@ function getHermesResponseText(data: unknown) {
   return null;
 }
 
-function parseStructuredResponse(rawText: string): ChatResponse | null {
-  const normalizedText = rawText.trim();
-  const fencedMatch = normalizedText.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  const jsonText = fencedMatch ? fencedMatch[1].trim() : normalizedText;
+function cleanVisibleResponseText(text: string) {
+  return text
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function parseJsonResponse(jsonText: string): ChatResponse | null {
   let parsed: unknown;
 
   try {
-    parsed = JSON.parse(jsonText);
+    parsed = JSON.parse(jsonText.trim());
   } catch {
     return null;
   }
@@ -184,6 +199,54 @@ function parseStructuredResponse(rawText: string): ChatResponse | null {
   return null;
 }
 
+function parseStructuredResponse(rawText: string): ChatResponse | null {
+  const normalizedText = rawText.trim();
+  const fencedMatch = normalizedText.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  const jsonText = fencedMatch ? fencedMatch[1].trim() : normalizedText;
+  const directResponse = parseJsonResponse(jsonText);
+
+  if (directResponse) {
+    return directResponse;
+  }
+
+  const embeddedResponses: ChatResponse[] = [];
+  const withoutFencedJson = normalizedText.replace(/```(?:json)?\s*([\s\S]*?)\s*```/gi, (block, inner) => {
+    const response = parseJsonResponse(String(inner));
+    if (!response) {
+      return block;
+    }
+
+    embeddedResponses.push(response);
+    return "";
+  });
+  const visibleText = cleanVisibleResponseText(withoutFencedJson);
+  const embeddedResponse = embeddedResponses[embeddedResponses.length - 1];
+
+  if (embeddedResponse) {
+    return {
+      ...embeddedResponse,
+      text: visibleText || embeddedResponse.text,
+    };
+  }
+
+  for (let start = normalizedText.lastIndexOf("{"); start >= 0; start = normalizedText.lastIndexOf("{", start - 1)) {
+    const maybeJson = normalizedText.slice(start).trim();
+    const response = parseJsonResponse(maybeJson);
+
+    if (!response) {
+      continue;
+    }
+
+    const leadingText = cleanVisibleResponseText(normalizedText.slice(0, start));
+    return {
+      ...response,
+      text: leadingText || response.text,
+    };
+  }
+
+  return null;
+}
+
 function parseResponseContent(content: string): ChatResponse {
   const structuredResponse = parseStructuredResponse(content);
 
@@ -192,7 +255,7 @@ function parseResponseContent(content: string): ChatResponse {
   }
 
   return {
-    text: content.trim(),
+    text: cleanVisibleResponseText(content),
     emotion: "thinking",
     growthEvent: null,
   };
@@ -300,6 +363,49 @@ async function callHermesLLM(
   return parseResponseContent(content);
 }
 
+async function callSiliconFlowLLM(
+  systemPrompt: string,
+  messages: { role: string; content: string }[],
+  userMessage: string,
+  signal?: AbortSignal,
+) {
+  const apiKey = getEnvValue("SILICONFLOW_API_KEY") || getEnvValue("OPENAI_API_KEY");
+
+  if (!apiKey) {
+    return buildMockResponse(userMessage);
+  }
+
+  const response = await fetch(`${getSiliconFlowBaseUrl()}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    signal,
+    body: JSON.stringify({
+      model: getSiliconFlowModel(),
+      messages: [{ role: "system", content: systemPrompt }, ...messages],
+    }),
+  });
+
+  if (!response.ok) {
+    return buildMockResponse(userMessage);
+  }
+
+  const data = await response.json();
+  const content = getHermesResponseText(data);
+
+  if (!content?.trim()) {
+    return buildMockResponse(userMessage);
+  }
+
+  if (isProviderErrorText(content)) {
+    return buildMockResponse(userMessage);
+  }
+
+  return parseResponseContent(content);
+}
+
 export async function callLLM(
   systemPrompt: string,
   messages: { role: string; content: string }[],
@@ -312,8 +418,12 @@ export async function callLLM(
   }
 
   try {
-    if (getProvider() === "legacy") {
+    const provider = getProvider();
+    if (provider === "legacy") {
       return await callLegacyLLM(systemPrompt, messages, userMessage, options?.signal);
+    }
+    if (provider === "siliconflow") {
+      return await callSiliconFlowLLM(systemPrompt, messages, userMessage, options?.signal);
     }
 
     return await callHermesLLM(systemPrompt, messages, userMessage, options);

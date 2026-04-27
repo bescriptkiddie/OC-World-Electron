@@ -191,75 +191,90 @@ export class VolcengineAsrSession {
       throw new Error("Volcengine ASR 2.0 is not configured");
     }
 
-    this.socket = new WebSocket(getAsrEndpoint(), {
-      headers: {
-        "X-Api-App-Key": appKey,
-        "X-Api-Access-Key": accessKey,
-        "X-Api-Resource-Id": resourceId,
-        "X-Api-Connect-Id": this.payload.sessionId,
-      },
-    });
+    return new Promise<void>((resolve, reject) => {
+      let startSettled = false;
+      const settleStart = (error?: Error) => {
+        if (startSettled) return;
+        startSettled = true;
+        if (error) reject(error);
+        else resolve();
+      };
 
-    this.socket.on("open", () => {
-      this.isReady = true;
-      this.socket?.send(createClientRequestFrame({
-        user: {
-          uid: this.payload.userId || "oc-world",
+      this.socket = new WebSocket(getAsrEndpoint(), {
+        headers: {
+          "X-Api-App-Key": appKey,
+          "X-Api-Access-Key": accessKey,
+          "X-Api-Resource-Id": resourceId,
+          "X-Api-Connect-Id": this.payload.sessionId,
         },
-        audio: {
-          format: "pcm",
-          codec: "raw",
-          rate: 16000,
-          bits: 16,
-          channel: 1,
-          language: getAsrLanguage(this.payload),
-        },
-        request: {
-          model_name: "bigmodel",
-          enable_itn: true,
-          enable_punc: true,
-          enable_ddc: true,
-          show_utterances: true,
-          result_type: "single",
-          end_window_size: 600,
-        },
-      }));
-    });
+      });
 
-    this.socket.on("message", (data) => {
-      try {
-        const response = parseServerFrame(data);
-        if (!response) {
+      this.socket.on("open", () => {
+        this.isReady = true;
+        this.socket?.send(createClientRequestFrame({
+          user: {
+            uid: this.payload.userId || "oc-world",
+          },
+          audio: {
+            format: "pcm",
+            codec: "raw",
+            rate: 16000,
+            bits: 16,
+            channel: 1,
+            language: getAsrLanguage(this.payload),
+          },
+          request: {
+            model_name: "bigmodel",
+            enable_itn: true,
+            enable_punc: true,
+            enable_ddc: true,
+            show_utterances: true,
+            result_type: "single",
+            end_window_size: 600,
+          },
+        }));
+        settleStart();
+      });
+
+      this.socket.on("message", (data) => {
+        try {
+          const response = parseServerFrame(data);
+          if (!response) {
+            return;
+          }
+
+          if (response.code && response.code !== 0) {
+            throw new Error(response.message || `Volcengine ASR 2.0 failed with code ${response.code}`);
+          }
+
+          const event = toTranscriptEvent(this.payload.sessionId, response);
+          if (event) {
+            this.options.onTranscript(event);
+          }
+        } catch (error) {
+          const resolvedError = error instanceof Error ? error : new Error(String(error));
+          lastError = resolvedError.message;
+          this.options.onError(resolvedError);
+        }
+      });
+
+      this.socket.on("error", (error) => {
+        if (this.isClosing) {
           return;
         }
 
-        if (response.code && response.code !== 0) {
-          throw new Error(response.message || `Volcengine ASR 2.0 failed with code ${response.code}`);
+        lastError = error.message;
+        settleStart(error);
+        this.options.onError(error);
+      });
+
+      this.socket.on("close", () => {
+        this.isReady = false;
+        if (!startSettled) {
+          settleStart(new Error("Volcengine ASR connection closed before ready"));
         }
-
-        const event = toTranscriptEvent(this.payload.sessionId, response);
-        if (event) {
-          this.options.onTranscript(event);
-        }
-      } catch (error) {
-        const resolvedError = error instanceof Error ? error : new Error(String(error));
-        lastError = resolvedError.message;
-        this.options.onError(resolvedError);
-      }
-    });
-
-    this.socket.on("error", (error) => {
-      if (this.isClosing) {
-        return;
-      }
-
-      lastError = error.message;
-      this.options.onError(error);
-    });
-
-    this.socket.on("close", () => {
-      this.isReady = false;
-      this.options.onClose();
+        this.options.onClose();
+      });
     });
   }
 
