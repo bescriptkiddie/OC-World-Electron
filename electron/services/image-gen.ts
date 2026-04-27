@@ -1,18 +1,15 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import type { ImageGenPayload, ImageGenResult } from "../../src/types";
+import { resolveAvatarsDir } from "../capabilities/storage-paths";
 
 function getEnvValue(key: string): string {
   return process.env[key] ?? "";
 }
 
-function resolveAvatarsDir() {
-  return path.join(process.cwd(), "oc-data", "avatars");
-}
-
 export async function generateImage(
   payload: ImageGenPayload,
   characterId = "char-001",
+  dataRoot?: string,
 ): Promise<ImageGenResult> {
   const apiKey = getEnvValue("MARSWAVE_API_KEY");
   if (!apiKey) {
@@ -53,8 +50,8 @@ export async function generateImage(
 
   const ext = part.mimeType.includes("png") ? "png" : "jpg";
   const fileName = `${characterId}.${ext}`;
-  const dir = resolveAvatarsDir();
-  const filePath = path.join(dir, fileName);
+  const dir = resolveAvatarsDir(dataRoot);
+  const filePath = `${dir}/${fileName}`;
 
   await mkdir(dir, { recursive: true });
   const buffer = Buffer.from(part.data, "base64");

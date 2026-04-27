@@ -1,13 +1,13 @@
 import { readFile } from "node:fs/promises";
-import path from "node:path";
 import type { AirJellyContext } from "../../src/types";
+import { resolveMockAirJellyContextPath } from "../capabilities/storage-paths";
 import { DEFAULT_AIRJELLY_CONTEXT } from "./demo-fallback";
 import { parseAirJellyContext } from "./schemas";
 
-let cache: { data: AirJellyContext; timestamp: number } | null = null;
+let cache: { data: AirJellyContext; timestamp: number; dataRoot: string | undefined } | null = null;
 
-async function readMockContext(): Promise<AirJellyContext> {
-  const filePath = path.join(process.cwd(), "oc-data", "mock", "airjelly-context.json");
+async function readMockContext(dataRoot?: string): Promise<AirJellyContext> {
+  const filePath = resolveMockAirJellyContextPath(dataRoot);
 
   try {
     const raw = await readFile(filePath, "utf8");
@@ -17,9 +17,9 @@ async function readMockContext(): Promise<AirJellyContext> {
   }
 }
 
-async function readAirJellySdk(): Promise<AirJellyContext> {
+async function readAirJellySdk(dataRoot?: string): Promise<AirJellyContext> {
   if (process.env.OC_DEMO_FORCE_MOCK_AIRJELLY === "1") {
-    return readMockContext();
+    return readMockContext(dataRoot);
   }
 
   try {
@@ -52,16 +52,16 @@ async function readAirJellySdk(): Promise<AirJellyContext> {
       source: "airjelly",
     });
   } catch {
-    return readMockContext();
+    return readMockContext(dataRoot);
   }
 }
 
-export async function getAirJellyContext(): Promise<AirJellyContext> {
-  if (cache && Date.now() - cache.timestamp < 5 * 60_000) {
+export async function getAirJellyContext(dataRoot?: string): Promise<AirJellyContext> {
+  if (cache && cache.dataRoot === dataRoot && Date.now() - cache.timestamp < 5 * 60_000) {
     return cache.data;
   }
 
-  const data = await readAirJellySdk();
-  cache = { data, timestamp: Date.now() };
+  const data = await readAirJellySdk(dataRoot);
+  cache = { data, timestamp: Date.now(), dataRoot };
   return data;
 }
