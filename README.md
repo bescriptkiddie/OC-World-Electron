@@ -45,46 +45,72 @@ npm run test
 npm run dist:app
 ```
 
+## CLI 命令
+
+当前已提供第一批核心能力命令面，默认通过 `tsx` 本地运行：
+
+```bash
+npm run cli -- chat --user user-001 --character char-001 --message "你好"
+npm run cli -- chat greet --user user-001 --character char-001
+npm run cli -- memory history --user user-001 --limit 5
+npm run cli -- memory summaries --user user-001 --weeks 3
+npm run cli -- hermes status
+npm run cli -- airjelly context
+npm run cli -- tts status
+npm run cli -- tts synthesize --text "你好"
+npm run cli -- image generate --prompt "anime avatar"
+```
+
+如需构建 CLI 输出：
+
+```bash
+npm run build:cli
+```
+
 ## 项目结构
 
-```
+```text
 electron/
-├── main.ts              # 应用生命周期
-├── preload.ts           # IPC 桥接
-├── ipc.ts               # 通道注册
+├── main.ts               # 应用生命周期
+├── preload.ts            # IPC 桥接
+├── ipc.ts                # 通道注册
+├── capabilities/         # transport-neutral 能力入口
 └── services/
-    ├── chat-engine.ts   # 聊天编排
-    ├── llm.ts           # LLM 双提供者
+    ├── chat-engine.ts    # 聊天编排
+    ├── llm.ts            # LLM 双提供者
     ├── prompt-builder.ts # 系统提示构建
-    ├── relationship.ts  # 亲密关系计算
-    ├── memory.ts        # JSON 持久化
+    ├── relationship.ts   # 亲密关系计算
+    ├── memory.ts         # JSON 持久化
     ├── hermes-manager.ts # Agent 生命周期
-    ├── airjelly.ts      # 生活上下文
-    ├── tts.ts           # 语音合成
-    └── image-gen.ts     # 图像生成
+    ├── airjelly.ts       # 生活上下文
+    ├── tts.ts            # 语音合成
+    └── image-gen.ts      # 图像生成
 
+cli/                      # CLI 路由与入口
 src/
-├── components/          # UI 组件
-├── hooks/               # React hooks
-├── pages/               # 页面
-├── types/               # 类型定义
-└── lib/                 # 工具函数
+├── components/           # UI 组件
+├── hooks/                # React hooks
+├── pages/                # 页面
+├── types/                # 类型定义
+└── lib/                  # 工具函数
 
-oc-data/                 # 本地数据存储
-hermes-agent/            # Hermes Agent（子模块）
-tests/                   # 测试
-scripts/                 # 脚本工具
+oc-data/                  # 本地数据存储
+hermes-agent/             # Hermes Agent（子模块）
+tests/                    # 测试
+scripts/                  # 脚本工具
 ```
 
 ## 脚本命令
 
 ```bash
-npm run dev              # 开发
-npm run build            # 构建
-npm run test             # 测试
-npm run seed:demo        # 填充演示数据
-npm run parse:wx         # 解析微信聊天记录
-npm run generate:summaries  # 生成记忆摘要
+npm run dev                  # 开发
+npm run build                # 构建
+npm run build:cli            # 构建 CLI
+npm run test                 # 测试
+npm run cli -- hermes status # 运行 CLI
+npm run seed:demo            # 填充演示数据
+npm run parse:wx             # 解析微信聊天记录
+npm run generate:summaries   # 生成记忆摘要
 ```
 
 ## License

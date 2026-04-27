@@ -1,8 +1,8 @@
 import { BrowserWindow, ipcMain } from "electron";
-import { chat, generateGreeting } from "./services/chat-engine";
+import { createOcWorldCapabilities } from "./capabilities/facade";
 import { getAirJellyContext } from "./services/airjelly";
+import { chat, generateGreeting } from "./services/chat-engine";
 import { hermesManager } from "./services/hermes-manager";
-import { getTtsStatus, synthesizeSpeech } from "./services/tts";
 import { generateImage } from "./services/image-gen";
 import {
   listTimeline,
@@ -14,6 +14,7 @@ import {
   saveRelationship,
 } from "./services/memory";
 import { getStage } from "./services/relationship";
+import { getTtsStatus, synthesizeSpeech } from "./services/tts";
 import type {
   CharacterConfig,
   ChatCancelPayload,
@@ -43,54 +44,22 @@ const ipcChannels = {
   imageGenGenerate: "image-gen:generate",
 } as const;
 
+const capabilities = createOcWorldCapabilities({
+  services: {
+    chat,
+    generateGreeting,
+    loadOCHistory,
+    loadRecentSummaries,
+    getAirJellyContext,
+    hermesManager,
+    getTtsStatus,
+    synthesizeSpeech,
+    generateImage,
+  },
+});
+
 let registered = false;
 let detachHermesListener: (() => void) | null = null;
-const activeChatControllers = new Map<string, AbortController>();
-const activeTtsControllers = new Map<string, AbortController>();
-
-function getChatSessionKey(payload: ChatCancelPayload) {
-  return `${payload.userId}:${payload.characterId}`;
-}
-
-function abortActiveChat(payload: ChatCancelPayload) {
-  const sessionKey = getChatSessionKey(payload);
-  const activeController = activeChatControllers.get(sessionKey);
-
-  if (!activeController) {
-    return false;
-  }
-
-  activeController.abort();
-  activeChatControllers.delete(sessionKey);
-  return true;
-}
-
-function getTtsRequestId(payload: TtsSynthesizePayload) {
-  return payload.requestId || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function abortActiveTts(payload: TtsCancelPayload = {}) {
-  if (payload.requestId) {
-    const activeController = activeTtsControllers.get(payload.requestId);
-
-    if (!activeController) {
-      return false;
-    }
-
-    activeController.abort();
-    activeTtsControllers.delete(payload.requestId);
-    return true;
-  }
-
-  const hadActiveTts = activeTtsControllers.size > 0;
-
-  for (const controller of activeTtsControllers.values()) {
-    controller.abort();
-  }
-
-  activeTtsControllers.clear();
-  return hadActiveTts;
-}
 
 export function registerIpcHandlers() {
   if (registered) {
@@ -104,45 +73,12 @@ export function registerIpcHandlers() {
     }
   });
 
-  ipcMain.handle(ipcChannels.chatSendMessage, async (_event, payload: ChatSendPayload) => {
-    const sessionKey = getChatSessionKey(payload);
-
-    if (payload.interrupt !== false) {
-      abortActiveChat(payload);
-    }
-
-    const controller = new AbortController();
-    activeChatControllers.set(sessionKey, controller);
-
-    try {
-      return await chat(payload, { signal: controller.signal });
-    } finally {
-      if (activeChatControllers.get(sessionKey) === controller) {
-        activeChatControllers.delete(sessionKey);
-      }
-    }
-  });
-  ipcMain.handle(ipcChannels.chatCancelActive, async (_event, payload: ChatCancelPayload) => abortActiveChat(payload));
-  ipcMain.handle(ipcChannels.chatGetGreeting, async (_event, payload) => generateGreeting(payload));
-  ipcMain.handle(ipcChannels.ttsSynthesize, async (_event, payload: TtsSynthesizePayload) => {
-    if (payload.interrupt !== false) {
-      abortActiveTts();
-    }
-
-    const requestId = getTtsRequestId(payload);
-    const controller = new AbortController();
-    activeTtsControllers.set(requestId, controller);
-
-    try {
-      return await synthesizeSpeech({ ...payload, requestId }, { signal: controller.signal });
-    } finally {
-      if (activeTtsControllers.get(requestId) === controller) {
-        activeTtsControllers.delete(requestId);
-      }
-    }
-  });
-  ipcMain.handle(ipcChannels.ttsCancelActive, async (_event, payload?: TtsCancelPayload) => abortActiveTts(payload));
-  ipcMain.handle(ipcChannels.ttsGetStatus, async () => getTtsStatus());
+  ipcMain.handle(ipcChannels.chatSendMessage, async (_event, payload: ChatSendPayload) => capabilities.chat.sendMessage(payload));
+  ipcMain.handle(ipcChannels.chatCancelActive, async (_event, payload: ChatCancelPayload) => capabilities.chat.cancelActive(payload));
+  ipcMain.handle(ipcChannels.chatGetGreeting, async (_event, payload) => capabilities.chat.getGreeting(payload));
+  ipcMain.handle(ipcChannels.ttsSynthesize, async (_event, payload: TtsSynthesizePayload) => capabilities.tts.synthesize(payload));
+  ipcMain.handle(ipcChannels.ttsCancelActive, async (_event, payload?: TtsCancelPayload) => capabilities.tts.cancelActive(payload));
+  ipcMain.handle(ipcChannels.ttsGetStatus, async () => capabilities.tts.getStatus());
   ipcMain.handle(ipcChannels.characterGetCurrent, async (_event, characterId: string) => loadCharacter(characterId));
   ipcMain.handle(
     ipcChannels.characterSaveCurrent,
@@ -151,7 +87,11 @@ export function registerIpcHandlers() {
   );
   ipcMain.handle(ipcChannels.timelineList, async (_event, userId: string) => listTimeline(userId));
   ipcMain.handle(ipcChannels.relationshipGet, async (_event, userId: string) => loadRelationship(userId));
-  ipcMain.handle(ipcChannels.relationshipSave, async (_event, payload: { userId: string; relationship: import("../src/types").Relationship }) => saveRelationship(payload.userId, payload.relationship));
+  ipcMain.handle(
+    ipcChannels.relationshipSave,
+    async (_event, payload: { userId: string; relationship: import("../src/types").Relationship }) =>
+      saveRelationship(payload.userId, payload.relationship),
+  );
   ipcMain.handle(
     ipcChannels.relationshipSetIntimacyForDemo,
     async (_event, payload: { userId: string; intimacy: number }) => {
@@ -164,11 +104,11 @@ export function registerIpcHandlers() {
       return saveRelationship(payload.userId, next);
     },
   );
-  ipcMain.handle(ipcChannels.memorySummaries, async (_event, userId: string) => loadRecentSummaries(userId, 10));
-  ipcMain.handle(ipcChannels.memoryHistory, async (_event, userId: string) => loadOCHistory(userId, 20));
-  ipcMain.handle(ipcChannels.airjellyGetContext, async () => getAirJellyContext());
-  ipcMain.handle(ipcChannels.hermesGetStatus, async () => hermesManager.getStatus());
-  ipcMain.handle(ipcChannels.imageGenGenerate, async (_event, payload: ImageGenPayload) => generateImage(payload));
+  ipcMain.handle(ipcChannels.memorySummaries, async (_event, userId: string) => capabilities.memory.summaries(userId, 10));
+  ipcMain.handle(ipcChannels.memoryHistory, async (_event, userId: string) => capabilities.memory.history(userId, 20));
+  ipcMain.handle(ipcChannels.airjellyGetContext, async () => capabilities.airjelly.getContext());
+  ipcMain.handle(ipcChannels.hermesGetStatus, async () => capabilities.hermes.getStatus());
+  ipcMain.handle(ipcChannels.imageGenGenerate, async (_event, payload: ImageGenPayload) => capabilities.image.generate(payload));
 }
 
 export function unregisterIpcHandlers() {
@@ -179,11 +119,7 @@ export function unregisterIpcHandlers() {
   registered = false;
   detachHermesListener?.();
   detachHermesListener = null;
-  for (const controller of activeChatControllers.values()) {
-    controller.abort();
-  }
-  activeChatControllers.clear();
-  abortActiveTts();
+  void capabilities.tts.cancelActive();
 
   ipcMain.removeHandler(ipcChannels.chatSendMessage);
   ipcMain.removeHandler(ipcChannels.chatCancelActive);

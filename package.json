@@ -4,9 +4,13 @@
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",
+  "bin": {
+    "ocworld": "dist-cli/cli/main.js"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:cli": "tsc -p tsconfig.cli.json",
     "prepare:hermes-runtime": "node scripts/prepare-hermes-runtime.mjs",
     "pack:app": "npm run prepare:hermes-runtime && npm run build && electron-builder --dir",
     "dist:app": "npm run prepare:hermes-runtime && npm run build && electron-builder",
@@ -15,7 +19,8 @@
     "typecheck": "tsc --noEmit",
     "seed:demo": "tsx scripts/seed-demo-data.ts",
     "parse:wx": "tsx scripts/parse-wx-chat.ts",
-    "generate:summaries": "tsx scripts/generate-summaries.ts"
+    "generate:summaries": "tsx scripts/generate-summaries.ts",
+    "cli": "tsx cli/main.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
