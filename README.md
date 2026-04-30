@@ -153,6 +153,18 @@ npm run dev
 
 Electron 启动时会自动启动 Hermes gateway。如果 Hermes 没启动成功，界面仍然可以打开，聊天会按当前代码走 mock/fallback；此时先检查 `npm run prepare:hermes-runtime` 是否完成、Python 版本是否满足、`.env` 里的模型/API 配置是否有效。
 
+默认大模型配置使用小米 MiMo Anthropic 兼容接口：
+
+```bash
+HERMES_MODEL=mimo-v2.5-pro
+HERMES_API_MODE=anthropic_messages
+CUSTOM_BASE_URL=https://token-plan-cn.xiaomimimo.com/anthropic
+ANTHROPIC_BASE_URL=https://token-plan-cn.xiaomimimo.com/anthropic
+ANTHROPIC_DEFAULT_HAIKU_MODEL=mimo-v2.5-pro
+```
+
+本机运行时把同一个小米 Token Plan key 写入 `OPENAI_API_KEY` 和 `ANTHROPIC_AUTH_TOKEN` 即可；不要把真实 key 提交到仓库。
+
 ## 常用命令
 
 ```bash

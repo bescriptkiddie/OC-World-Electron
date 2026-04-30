@@ -26,12 +26,12 @@ describe("local env loading", () => {
         # comment
         export HERMES_API_KEY=local-key
         OC_DEMO_FORCE_MOCK_LLM=0 # disable mock
-        CUSTOM_BASE_URL="https://open.bigmodel.cn/api/anthropic#v1"
+        CUSTOM_BASE_URL="https://token-plan-cn.xiaomimimo.com/anthropic#v1"
       `),
     ).toEqual({
       HERMES_API_KEY: "local-key",
       OC_DEMO_FORCE_MOCK_LLM: "0",
-      CUSTOM_BASE_URL: "https://open.bigmodel.cn/api/anthropic#v1",
+      CUSTOM_BASE_URL: "https://token-plan-cn.xiaomimimo.com/anthropic#v1",
     });
   });
 

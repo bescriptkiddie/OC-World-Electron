@@ -160,8 +160,8 @@ describe("summary generation", () => {
 
   it("uses legacy anthropic-compatible config when provider is legacy", async () => {
     process.env.ANTHROPIC_AUTH_TOKEN = "test-token";
-    process.env.ANTHROPIC_BASE_URL = "https://open.bigmodel.cn/api/anthropic";
-    process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL = "glm-5.1";
+    process.env.ANTHROPIC_BASE_URL = "https://token-plan-cn.xiaomimimo.com/anthropic";
+    process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL = "mimo-v2.5-pro";
     process.env.OC_CHAT_PROVIDER = "legacy";
     process.env.OC_DEMO_FORCE_MOCK_LLM = "0";
 
@@ -197,11 +197,12 @@ describe("summary generation", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://open.bigmodel.cn/api/anthropic/v1/messages",
+      "https://token-plan-cn.xiaomimimo.com/anthropic/v1/messages",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
           "Content-Type": "application/json",
+          Authorization: "Bearer test-token",
           "x-api-key": "test-token",
         }),
       }),
@@ -210,7 +211,7 @@ describe("summary generation", () => {
     const [, requestInit] = fetchMock.mock.calls[0];
     expect(JSON.parse(String(requestInit?.body))).toEqual(
       expect.objectContaining({
-        model: "glm-5.1",
+        model: "mimo-v2.5-pro",
         system: "system prompt",
         messages: [{ role: "user", content: "你好" }],
       }),
@@ -284,10 +285,10 @@ describe("summary generation", () => {
 
   it("falls back to legacy provider when Hermes returns a provider error as text", async () => {
     process.env.ANTHROPIC_AUTH_TOKEN = "test-token";
-    process.env.ANTHROPIC_BASE_URL = "https://open.bigmodel.cn/api/anthropic";
-    process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL = "glm-5.1";
+    process.env.ANTHROPIC_BASE_URL = "https://token-plan-cn.xiaomimimo.com/anthropic";
+    process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL = "mimo-v2.5-pro";
     process.env.HERMES_BASE_URL = "http://127.0.0.1:8642";
-    process.env.HERMES_MODEL = "glm-5.1";
+    process.env.HERMES_MODEL = "mimo-v2.5-pro";
     delete process.env.OC_CHAT_PROVIDER;
     process.env.OC_DEMO_FORCE_MOCK_LLM = "0";
 
@@ -343,7 +344,7 @@ describe("summary generation", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:8642/v1/chat/completions");
-    expect(fetchMock.mock.calls[1][0]).toBe("https://open.bigmodel.cn/api/anthropic/v1/messages");
+    expect(fetchMock.mock.calls[1][0]).toBe("https://token-plan-cn.xiaomimimo.com/anthropic/v1/messages");
   });
 
   it("uses Hermes plain text when the response is not structured JSON", async () => {

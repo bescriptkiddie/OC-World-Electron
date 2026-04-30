@@ -1,8 +1,8 @@
 import type { ChatMessage, ChatResponse, Emotion, MemorySummary } from "../../src/types";
 
 const LEGACY_ANTHROPIC_MESSAGES_PATH = "/v1/messages";
-const DEFAULT_ANTHROPIC_BASE_URL = "https://open.bigmodel.cn/api/anthropic";
-const DEFAULT_ANTHROPIC_MODEL = "glm-5.1";
+const DEFAULT_ANTHROPIC_BASE_URL = "https://token-plan-cn.xiaomimimo.com/anthropic";
+const DEFAULT_ANTHROPIC_MODEL = "mimo-v2.5-pro";
 const HERMES_CHAT_COMPLETIONS_PATH = "/v1/chat/completions";
 const DEFAULT_HERMES_BASE_URL = "http://127.0.0.1:8642";
 const DEFAULT_HERMES_MODEL = "hermes-agent";
@@ -290,6 +290,7 @@ async function callLegacyLLM(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      Authorization: `Bearer ${authToken}`,
       "x-api-key": authToken,
     },
     signal,

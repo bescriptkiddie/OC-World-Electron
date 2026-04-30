@@ -49,8 +49,8 @@ describe("Hermes runtime installer", () => {
     const userDataPath = path.join(root, "userData");
     const env: Record<string, string | undefined> = {
       HERMES_BUNDLED_SOURCE: sourceRoot,
-      HERMES_MODEL: "glm-5.1",
-      CUSTOM_BASE_URL: "https://open.bigmodel.cn/api/anthropic",
+      HERMES_MODEL: "mimo-v2.5-pro",
+      CUSTOM_BASE_URL: "https://token-plan-cn.xiaomimimo.com/anthropic",
     };
 
     const install = prepareHermesRuntime({ env, userDataPath, cwd: root });
