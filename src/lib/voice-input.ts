@@ -163,15 +163,16 @@ export function createVoiceInput(win: Window | undefined = typeof window === "un
     async stop() {
       const currentSessionId = sessionId;
       sessionId = null;
-      detachTranscript?.();
-      detachTranscript = null;
-      detachError?.();
-      detachError = null;
       await cleanupAudio();
 
       if (currentSessionId) {
         await win?.ocWorld?.asr.stop({ sessionId: currentSessionId });
       }
+
+      detachTranscript?.();
+      detachTranscript = null;
+      detachError?.();
+      detachError = null;
     },
   };
 

@@ -1,38 +1,16 @@
 import { randomUUID } from "node:crypto";
 import type { TtsProviderStatus, TtsSynthesizePayload, TtsSynthesizeResult } from "../../src/types";
 
-const DEFAULT_DOUBAO_TTS_ENDPOINT = "https://openspeech.bytedance.com/api/v1/tts";
-const DEFAULT_DOUBAO_TTS_V2_ENDPOINT = "https://openspeech.bytedance.com/api/v3/tts/unidirectional";
-const DEFAULT_DOUBAO_TTS_CLUSTER = "volcano_tts";
-const DEFAULT_DOUBAO_TTS_VOICE_TYPE = "BV700_streaming";
-const DEFAULT_DOUBAO_TTS_V2_RESOURCE_ID = "seed-tts-2.0";
-const DEFAULT_DOUBAO_TTS_V2_SPEAKER = "zh_female_xiaohe_uranus_bigtts";
-const DEFAULT_DOUBAO_TTS_ENCODING = "mp3";
-const DEFAULT_DOUBAO_TTS_RATE = 24_000;
-const DEFAULT_DOUBAO_TTS_SPEED_RATIO = 1;
-const DEFAULT_DOUBAO_TTS_VOLUME_RATIO = 1;
-const DEFAULT_DOUBAO_TTS_PITCH_RATIO = 1;
+const DEFAULT_STEPFUN_TTS_ENDPOINT = "https://api.stepfun.com/v1/audio/speech";
+const DEFAULT_STEPFUN_TTS_MODEL = "stepaudio-2.5-tts";
+const DEFAULT_STEPFUN_TTS_VOICE = "cixingnansheng";
+const DEFAULT_STEPFUN_TTS_FORMAT = "mp3";
+const DEFAULT_STEPFUN_TTS_SAMPLE_RATE = 24_000;
+const DEFAULT_STEPFUN_TTS_SPEED = 1;
+const DEFAULT_STEPFUN_TTS_VOLUME = 1;
 
 interface TtsOptions {
   signal?: AbortSignal;
-}
-
-interface DoubaoTtsResponse {
-  reqid?: string;
-  code?: number;
-  message?: string;
-  data?: string;
-  addition?: {
-    duration?: string;
-  };
-}
-
-interface DoubaoTtsV2Response {
-  reqid?: string;
-  code?: number;
-  message?: string;
-  data?: string;
-  duration?: number;
 }
 
 let lastError: string | null = null;
@@ -58,61 +36,32 @@ function getNumberEnv(name: string, fallback: number) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function getStepFunApiKey() {
+  return getEnvValue("STEPFUN_API_KEY") || getEnvValue("STEP_API_KEY");
+}
+
 function getTtsProvider() {
-  return getEnvValue("OC_TTS_PROVIDER") || getEnvValue("TTS_PROVIDER") || "browser";
+  return getEnvValue("OC_TTS_PROVIDER") || getEnvValue("TTS_PROVIDER") || (getStepFunApiKey() ? "stepfun" : "browser");
 }
 
-function getDoubaoAccessToken() {
-  return (
-    getEnvValue("DOUBAO_TTS_ACCESS_TOKEN") ||
-    getEnvValue("VOLCENGINE_TTS_ACCESS_TOKEN") ||
-    getEnvValue("VOLCENGINE_TTS_ACCESS_KEY")
-  );
+function shouldUseStepFun() {
+  return ["stepfun", "stepfun-tts", "stepaudio", "stepaudio-tts"].includes(getTtsProvider());
 }
 
-function getDoubaoAppId() {
-  return getEnvValue("DOUBAO_TTS_APP_ID") || getEnvValue("VOLCENGINE_TTS_APP_ID");
+function getStepFunEndpoint() {
+  return getEnvValue("STEPFUN_TTS_ENDPOINT") || DEFAULT_STEPFUN_TTS_ENDPOINT;
 }
 
-function getDoubaoV2ResourceId() {
-  return (
-    getEnvValue("DOUBAO_TTS_RESOURCE_ID") ||
-    getEnvValue("VOLCENGINE_TTS_RESOURCE_ID") ||
-    DEFAULT_DOUBAO_TTS_V2_RESOURCE_ID
-  );
+function getStepFunModel() {
+  return getEnvValue("STEPFUN_TTS_MODEL") || DEFAULT_STEPFUN_TTS_MODEL;
 }
 
-function getDoubaoV2Speaker() {
-  return (
-    getEnvValue("DOUBAO_TTS_SPEAKER") ||
-    getEnvValue("DOUBAO_TTS_V2_SPEAKER") ||
-    getEnvValue("VOLCENGINE_TTS_SPEAKER") ||
-    DEFAULT_DOUBAO_TTS_V2_SPEAKER
-  );
+function getStepFunVoice() {
+  return getEnvValue("STEPFUN_TTS_VOICE") || DEFAULT_STEPFUN_TTS_VOICE;
 }
 
-function getDoubaoCluster() {
-  return getEnvValue("DOUBAO_TTS_CLUSTER") || getEnvValue("VOLCENGINE_TTS_CLUSTER") || DEFAULT_DOUBAO_TTS_CLUSTER;
-}
-
-function getDoubaoVoiceType() {
-  return (
-    getEnvValue("DOUBAO_TTS_VOICE_TYPE") ||
-    getEnvValue("VOLCENGINE_TTS_VOICE_TYPE") ||
-    DEFAULT_DOUBAO_TTS_VOICE_TYPE
-  );
-}
-
-function getDoubaoEncoding() {
-  return getEnvValue("DOUBAO_TTS_ENCODING") || getEnvValue("VOLCENGINE_TTS_ENCODING") || DEFAULT_DOUBAO_TTS_ENCODING;
-}
-
-function getDoubaoEndpoint() {
-  return getEnvValue("DOUBAO_TTS_ENDPOINT") || getEnvValue("VOLCENGINE_TTS_ENDPOINT") || DEFAULT_DOUBAO_TTS_ENDPOINT;
-}
-
-function getDoubaoV2Endpoint() {
-  return getEnvValue("DOUBAO_TTS_V2_ENDPOINT") || getEnvValue("VOLCENGINE_TTS_V2_ENDPOINT") || DEFAULT_DOUBAO_TTS_V2_ENDPOINT;
+function getStepFunFormat() {
+  return getEnvValue("STEPFUN_TTS_FORMAT") || getEnvValue("STEPFUN_TTS_RESPONSE_FORMAT") || DEFAULT_STEPFUN_TTS_FORMAT;
 }
 
 function getMimeType(encoding: string) {
@@ -124,52 +73,38 @@ function getMimeType(encoding: string) {
     return "audio/wav";
   }
 
-  if (encoding === "ogg_opus" || encoding === "ogg") {
-    return "audio/ogg";
+  if (encoding === "flac") {
+    return "audio/flac";
+  }
+
+  if (encoding === "opus") {
+    return "audio/ogg; codecs=opus";
+  }
+
+  if (encoding === "pcm") {
+    return "audio/pcm";
   }
 
   return "application/octet-stream";
 }
 
-function getDurationMs(response: DoubaoTtsResponse) {
-  const duration = Number(response.addition?.duration);
-  return Number.isFinite(duration) ? duration : null;
-}
-
-function parseTtsV2Response(responseText: string) {
-  const chunks = responseText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const responses = (chunks.length ? chunks : [responseText]).map((chunk) => JSON.parse(chunk) as DoubaoTtsV2Response);
-  const failedResponse = responses.find((response) => response.code !== undefined && ![0, 20000000].includes(response.code));
-  const audioBase64 = responses
-    .map((response) => response.data)
-    .filter((data): data is string => Boolean(data))
-    .join("");
+function buildStepFunTtsBody(text: string) {
+  const instruction = getEnvValue("STEPFUN_TTS_INSTRUCTION");
 
   return {
-    responses,
-    failedResponse,
-    audioBase64,
+    model: getStepFunModel(),
+    input: text,
+    voice: getStepFunVoice(),
+    response_format: getStepFunFormat(),
+    sample_rate: getNumberEnv("STEPFUN_TTS_SAMPLE_RATE", DEFAULT_STEPFUN_TTS_SAMPLE_RATE),
+    speed: getNumberEnv("STEPFUN_TTS_SPEED", DEFAULT_STEPFUN_TTS_SPEED),
+    volume: getNumberEnv("STEPFUN_TTS_VOLUME", DEFAULT_STEPFUN_TTS_VOLUME),
+    ...(instruction ? { instruction } : {}),
   };
 }
 
-function isDoubaoConfigured() {
-  return Boolean(getDoubaoAppId() && getDoubaoAccessToken());
-}
-
-function shouldUseDoubaoV2() {
-  const provider = getTtsProvider();
-  return provider === "doubao2" || provider === "volcengine2" || Boolean(getEnvValue("DOUBAO_TTS_RESOURCE_ID") || getEnvValue("VOLCENGINE_TTS_RESOURCE_ID"));
-}
-
-function shouldUseDoubao() {
-  return ["doubao", "doubao2", "volcengine", "volcengine2"].includes(getTtsProvider()) || isDoubaoConfigured();
-}
-
 export function getTtsStatus(): TtsProviderStatus {
-  if (!shouldUseDoubao()) {
+  if (!shouldUseStepFun()) {
     return {
       provider: "browser",
       configured: true,
@@ -179,85 +114,10 @@ export function getTtsStatus(): TtsProviderStatus {
   }
 
   return {
-    provider: "doubao",
-    configured: isDoubaoConfigured(),
-    voiceType: shouldUseDoubaoV2() ? getDoubaoV2Speaker() : getDoubaoVoiceType(),
+    provider: "stepfun",
+    configured: Boolean(getStepFunApiKey()),
+    voiceType: getStepFunVoice(),
     lastError,
-  };
-}
-
-async function synthesizeSpeechV2(
-  payload: TtsSynthesizePayload,
-  options: TtsOptions,
-  requestId: string,
-): Promise<TtsSynthesizeResult> {
-  const text = payload.text.trim();
-  const appId = getDoubaoAppId();
-  const accessToken = getDoubaoAccessToken();
-
-  if (!appId || !accessToken) {
-    throw new Error("Doubao TTS 2.0 is not configured");
-  }
-
-  const encoding = getDoubaoEncoding();
-  const response = await fetch(getDoubaoV2Endpoint(), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Api-App-Id": appId,
-      "X-Api-Access-Key": accessToken,
-      "X-Api-Resource-Id": getDoubaoV2ResourceId(),
-      "X-Api-Request-Id": requestId,
-    },
-    signal: options.signal,
-    body: JSON.stringify({
-      user: {
-        uid: payload.userId || "oc-world",
-      },
-      req_params: {
-        text,
-        speaker: getDoubaoV2Speaker(),
-        audio_params: {
-          format: encoding,
-          sample_rate: getNumberEnv("DOUBAO_TTS_RATE", DEFAULT_DOUBAO_TTS_RATE),
-        },
-        additions: JSON.stringify({
-          explicit_language: getEnvValue("DOUBAO_TTS_LANGUAGE") || "zh-cn",
-        }),
-      },
-    }),
-  });
-
-  const responseText = await response.text();
-
-  if (!response.ok) {
-    lastError = `Doubao TTS 2.0 HTTP ${response.status}${responseText ? `: ${responseText}` : ""}`;
-    throw new Error(lastError);
-  }
-
-  const { responses, failedResponse, audioBase64 } = parseTtsV2Response(responseText);
-
-  if (failedResponse) {
-    lastError = failedResponse.message || `Doubao TTS 2.0 failed with code ${failedResponse.code}`;
-    throw new Error(lastError);
-  }
-
-  if (!audioBase64) {
-    lastError = "Doubao TTS 2.0 response did not include audio data";
-    throw new Error(lastError);
-  }
-
-  lastError = null;
-  const responseWithRequestId = responses.find((response) => response.reqid);
-  const responseWithDuration = responses.find((response) => Number.isFinite(response.duration));
-
-  return {
-    provider: "doubao",
-    requestId: responseWithRequestId?.reqid || requestId,
-    audioBase64,
-    mimeType: getMimeType(encoding),
-    encoding,
-    durationMs: responseWithDuration?.duration ?? null,
   };
 }
 
@@ -266,87 +126,49 @@ export async function synthesizeSpeech(
   options: TtsOptions = {},
 ): Promise<TtsSynthesizeResult> {
   const text = payload.text.trim();
-  const appId = getDoubaoAppId();
-  const accessToken = getDoubaoAccessToken();
+  const apiKey = getStepFunApiKey();
   const requestId = payload.requestId || randomUUID();
 
   if (!text) {
     throw new Error("TTS text is empty");
   }
 
-  if (!shouldUseDoubao() || !appId || !accessToken) {
-    throw new Error("Doubao TTS is not configured");
+  if (!shouldUseStepFun() || !apiKey) {
+    throw new Error("StepFun TTS is not configured");
   }
 
-  if (shouldUseDoubaoV2()) {
-    return synthesizeSpeechV2(payload, options, requestId);
-  }
-
-  const encoding = getDoubaoEncoding();
-  const response = await fetch(getDoubaoEndpoint(), {
+  const encoding = getStepFunFormat();
+  const response = await fetch(getStepFunEndpoint(), {
     method: "POST",
     headers: {
-      Authorization: `Bearer;${accessToken}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     signal: options.signal,
-    body: JSON.stringify({
-      app: {
-        appid: appId,
-        token: accessToken,
-        cluster: getDoubaoCluster(),
-      },
-      user: {
-        uid: payload.userId || "oc-world",
-      },
-      audio: {
-        voice_type: getDoubaoVoiceType(),
-        encoding,
-        rate: getNumberEnv("DOUBAO_TTS_RATE", DEFAULT_DOUBAO_TTS_RATE),
-        speed_ratio: getNumberEnv("DOUBAO_TTS_SPEED_RATIO", DEFAULT_DOUBAO_TTS_SPEED_RATIO),
-        volume_ratio: getNumberEnv("DOUBAO_TTS_VOLUME_RATIO", DEFAULT_DOUBAO_TTS_VOLUME_RATIO),
-        pitch_ratio: getNumberEnv("DOUBAO_TTS_PITCH_RATIO", DEFAULT_DOUBAO_TTS_PITCH_RATIO),
-        language: getEnvValue("DOUBAO_TTS_LANGUAGE") || "cn",
-      },
-      request: {
-        reqid: requestId,
-        text,
-        text_type: "plain",
-        operation: "query",
-        silence_duration: getEnvValue("DOUBAO_TTS_SILENCE_DURATION_MS") || "125",
-        with_frontend: "1",
-        frontend_type: "unitTson",
-        pure_english_opt: "1",
-      },
-    }),
+    body: JSON.stringify(buildStepFunTtsBody(text)),
   });
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
-    lastError = `Doubao TTS HTTP ${response.status}${errorText ? `: ${errorText}` : ""}`;
+    lastError = `StepFun TTS HTTP ${response.status}${errorText ? `: ${errorText}` : ""}`;
     throw new Error(lastError);
   }
 
-  const data = (await response.json()) as DoubaoTtsResponse;
+  const audio = Buffer.from(await response.arrayBuffer());
 
-  if (data.code !== undefined && data.code !== 3000) {
-    lastError = data.message || `Doubao TTS failed with code ${data.code}`;
-    throw new Error(lastError);
-  }
-
-  if (!data.data) {
-    lastError = "Doubao TTS response did not include audio data";
+  if (!audio.byteLength) {
+    lastError = "StepFun TTS response did not include audio data";
     throw new Error(lastError);
   }
 
   lastError = null;
 
   return {
-    provider: "doubao",
-    requestId: data.reqid || requestId,
-    audioBase64: data.data,
+    provider: "stepfun",
+    requestId,
+    audioBase64: audio.toString("base64"),
     mimeType: getMimeType(encoding),
     encoding,
-    durationMs: getDurationMs(data),
+    durationMs: null,
   };
 }

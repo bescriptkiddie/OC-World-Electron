@@ -19,7 +19,7 @@ OC World 是一个 Electron 桌面应用，打造你的 AI 分身（OC）。不�
 | 桌面运行时 | Electron 35 |
 | 前端 | React 18 · TypeScript 5.8 · Vite 6 |
 | LLM | Hermes Agent（本地）+ BigModel/Anthropic API |
-| 语音 | 火山引擎 TTS + 浏览器语音合成 |
+| 语音 | StepFun StepAudio 2.5 TTS/ASR + 浏览器语音合成兜底 |
 | 图像 | Marswave API |
 | 上下文感知 | AirJelly SDK |
 | 数据 | 本地 JSON 持久化 |
@@ -51,6 +51,17 @@ OC_DEMO_FORCE_MOCK_AIRJELLY=1
 ```
 
 这样即使没有配置大模型、AirJelly、TTS、ASR、图片生成 key，应用也能先跑起来。
+
+## 语音能力
+
+项目后端语音默认接入阶跃星辰 StepAudio：
+
+- TTS：`POST https://api.stepfun.com/v1/audio/speech`，默认模型 `stepaudio-2.5-tts`。
+- ASR：`POST https://api.stepfun.com/v1/audio/asr/sse`，默认模型 `stepaudio-2.5-asr`。
+
+`.env` 里配置同一个 `STEPFUN_API_KEY` 即可启用 TTS 和 ASR。TTS 默认音色是 `cixingnansheng`，可以通过 `STEPFUN_TTS_VOICE` 调整；ASR 会把前端麦克风采集的 16 kHz / 16-bit / mono PCM 音频提交给 StepFun SSE 接口。
+
+如果没有配置 `STEPFUN_API_KEY`，TTS 会回退到浏览器 `speechSynthesis`；ASR 会显示为未配置，语音输入不可用。
 
 ## 没有 AirJelly 怎么办
 

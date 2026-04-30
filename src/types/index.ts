@@ -214,7 +214,7 @@ export interface TtsCancelPayload {
 }
 
 export interface TtsSynthesizeResult {
-  provider: "doubao";
+  provider: "stepfun";
   requestId: string;
   audioBase64: string;
   mimeType: string;
@@ -223,7 +223,7 @@ export interface TtsSynthesizeResult {
 }
 
 export interface TtsProviderStatus {
-  provider: "browser" | "doubao";
+  provider: "browser" | "stepfun";
   configured: boolean;
   voiceType: string | null;
   lastError: string | null;
@@ -256,7 +256,7 @@ export interface AsrErrorEvent {
 }
 
 export interface AsrProviderStatus {
-  provider: "volcengine";
+  provider: "stepfun";
   configured: boolean;
   resourceId: string | null;
   lastError: string | null;

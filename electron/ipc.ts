@@ -5,7 +5,7 @@ import { confirmInsightToProfile } from "./services/growth-profile";
 import { rejectInsight } from "./services/growth-insights";
 import { hermesManager } from "./services/hermes-manager";
 import { getTtsStatus, synthesizeSpeech } from "./services/tts";
-import { getAsrStatus, VolcengineAsrSession } from "./services/volcengine-asr";
+import { getAsrStatus, StepFunAsrSession } from "./services/stepfun-asr";
 import { generateImage } from "./services/image-gen";
 import {
   listTimeline,
@@ -71,7 +71,7 @@ let registered = false;
 let detachHermesListener: (() => void) | null = null;
 const activeChatControllers = new Map<string, AbortController>();
 const activeTtsControllers = new Map<string, AbortController>();
-const activeAsrSessions = new Map<string, VolcengineAsrSession>();
+const activeAsrSessions = new Map<string, StepFunAsrSession>();
 
 function getChatSessionKey(payload: ChatCancelPayload) {
   return `${payload.userId}:${payload.characterId}`;
@@ -117,14 +117,14 @@ function abortActiveTts(payload: TtsCancelPayload = {}) {
   return hadActiveTts;
 }
 
-function stopAsrSession(payload: AsrStopPayload) {
+async function stopAsrSession(payload: AsrStopPayload) {
   const session = activeAsrSessions.get(payload.sessionId);
 
   if (!session) {
     return false;
   }
 
-  session.finish();
+  await session.finish();
   activeAsrSessions.delete(payload.sessionId);
   return true;
 }
@@ -210,7 +210,7 @@ export function registerIpcHandlers() {
   ipcMain.handle(ipcChannels.asrStart, async (event, payload: AsrStartPayload) => {
     activeAsrSessions.get(payload.sessionId)?.close();
 
-    const session = new VolcengineAsrSession(payload, {
+    const session = new StepFunAsrSession(payload, {
       onTranscript: (transcript) => {
         event.sender.send(ipcChannels.asrTranscript, transcript);
       },

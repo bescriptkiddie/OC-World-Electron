@@ -102,11 +102,11 @@ describe("browser TTS", () => {
     expect(synth.cancel).toHaveBeenCalled();
   });
 
-  it("uses Electron Doubao TTS when available", async () => {
+  it("uses Electron StepFun TTS when available", async () => {
     vi.stubGlobal("Audio", FakeAudio);
 
     const synthesize = vi.fn(async () => ({
-      provider: "doubao" as const,
+      provider: "stepfun" as const,
       requestId: "tts-1",
       audioBase64: "AAAA",
       mimeType: "audio/mpeg",

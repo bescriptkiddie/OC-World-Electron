@@ -19,8 +19,8 @@ function createCapabilities() {
       getStatus: vi.fn().mockResolvedValue({ state: "healthy", pid: 1, restartCount: 0, lastError: null, lastStartedAt: null, lastHealthCheckAt: null }),
     },
     tts: {
-      getStatus: vi.fn().mockResolvedValue({ provider: "doubao", configured: true, voiceType: "voice", lastError: null }),
-      synthesize: vi.fn().mockResolvedValue({ provider: "doubao", requestId: "req-1", audioBase64: "AAAA", mimeType: "audio/mpeg", encoding: "mp3", durationMs: null }),
+      getStatus: vi.fn().mockResolvedValue({ provider: "stepfun", configured: true, voiceType: "voice", lastError: null }),
+      synthesize: vi.fn().mockResolvedValue({ provider: "stepfun", requestId: "req-1", audioBase64: "AAAA", mimeType: "audio/mpeg", encoding: "mp3", durationMs: null }),
       cancelActive: vi.fn(),
     },
     image: {
@@ -39,7 +39,7 @@ describe("cli router", () => {
     await expect(runCliCommand(["memory", "summaries", "--user", "user-001", "--weeks", "3"], capabilities)).resolves.toMatchObject({ exitCode: 0, json: [{ period: "最近" }] });
     await expect(runCliCommand(["hermes", "status"], capabilities)).resolves.toMatchObject({ exitCode: 0, json: { state: "healthy" } });
     await expect(runCliCommand(["airjelly", "context"], capabilities)).resolves.toMatchObject({ exitCode: 0, json: { source: "mock" } });
-    await expect(runCliCommand(["tts", "status"], capabilities)).resolves.toMatchObject({ exitCode: 0, json: { provider: "doubao" } });
+    await expect(runCliCommand(["tts", "status"], capabilities)).resolves.toMatchObject({ exitCode: 0, json: { provider: "stepfun" } });
     await expect(runCliCommand(["tts", "synthesize", "--text", "你好"], capabilities)).resolves.toMatchObject({ exitCode: 0, json: { requestId: "req-1" } });
     await expect(runCliCommand(["image", "generate", "--prompt", "avatar"], capabilities)).resolves.toMatchObject({ exitCode: 0, json: { savedPath: "/tmp/avatar.png" } });
 
