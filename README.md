@@ -153,6 +153,12 @@ npm run dev
 
 Electron 启动时会自动启动 Hermes gateway。如果 Hermes 没启动成功，界面仍然可以打开，聊天会按当前代码走 mock/fallback；此时先检查 `npm run prepare:hermes-runtime` 是否完成、Python 版本是否满足、`.env` 里的模型/API 配置是否有效。
 
+默认界面使用 `demos/oc-invisible-growth-v1.html`，这是当前 OC World 的隐形成长系统前端。它会直接通过 Electron preload 调用 `window.ocWorld.chat`，不是 iframe 或 webview。需要临时回到 Vite React 旧前端时，在 `.env` 里设置：
+
+```bash
+OC_WORLD_USE_VITE_RENDERER=1
+```
+
 默认大模型配置使用小米 MiMo Anthropic 兼容接口：
 
 ```bash

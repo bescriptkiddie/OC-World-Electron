@@ -1,4 +1,5 @@
 import { app, BrowserWindow, session } from "electron";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerIpcHandlers, unregisterIpcHandlers } from "./ipc";
@@ -54,6 +55,10 @@ function configureLocalStaticPermissions() {
 function loadRenderer(window: BrowserWindow) {
   const rendererUrl = process.env.OC_WORLD_RENDERER_URL;
   const rendererFile = process.env.OC_WORLD_RENDERER_FILE;
+  const defaultRendererFiles = [
+    path.resolve(process.cwd(), "demos/oc-invisible-growth-v1.html"),
+    path.resolve(__dirname, "../demos/oc-invisible-growth-v1.html"),
+  ];
 
   if (rendererUrl) {
     window.loadURL(rendererUrl);
@@ -69,6 +74,18 @@ function loadRenderer(window: BrowserWindow) {
       window.webContents.openDevTools({ mode: "detach" });
     }
     return;
+  }
+
+  if (process.env.OC_WORLD_USE_VITE_RENDERER !== "1") {
+    const defaultRendererFile = defaultRendererFiles.find((candidate) => fs.existsSync(candidate));
+
+    if (defaultRendererFile) {
+      window.loadFile(defaultRendererFile);
+      if (process.env.OC_WORLD_OPEN_DEVTOOLS === "1") {
+        window.webContents.openDevTools({ mode: "detach" });
+      }
+      return;
+    }
   }
 
   if (process.env.VITE_DEV_SERVER_URL) {

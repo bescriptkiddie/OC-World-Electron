@@ -644,8 +644,12 @@
         String(text).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[m]);
 
       const prompts = ["我今天在想", "我有点卡住", "你觉得你懂我吗", "我们可以沉淀什么"];
+      const runtime = window.ocWorld;
+      const defaultUserId = "user-001";
+      const defaultCharacterId = "char-001";
 
       const state = {
+        isSending: false,
         unlocked: false,
         signals: [],
         messages: [
@@ -697,6 +701,14 @@
         $("stateText").textContent = state.signals.length >= 3 ? "更懂你了" : "在听";
       }
 
+      function setSending(isSending) {
+        state.isSending = isSending;
+        $("send").disabled = isSending;
+        $("input").disabled = isSending;
+        $("stateText").textContent = isSending ? "在想" : state.signals.length >= 3 ? "更懂你了" : "在听";
+        $("send").textContent = isSending ? "思考中" : "发送";
+      }
+
       function inferReply(text) {
         if (text.includes("不应该") || text.includes("展示")) {
           remember("evidence");
@@ -722,6 +734,17 @@
 
       function discoveryText() {
         return "我好像开始看见一个线索：你不是想做一个管理人生的仪表盘，而是在做一个会慢慢理解人的成长伙伴。要不要看看我目前发现了什么？";
+      }
+
+      function addDiscoveryIfReady() {
+        if (state.signals.length >= 2) {
+          state.messages.push({ type: "discovery", text: discoveryText() });
+          $("quietTitle").textContent = "Luma 发现了一点东西";
+          $("quietText").textContent = "它还没有急着变成系统，只是在等待你决定要不要探索。";
+        } else {
+          $("quietTitle").textContent = "Luma 默默记住了";
+          $("quietText").textContent = "这些线索会先留在后台，不会马上变成指标或任务。";
+        }
       }
 
       function renderMessages() {
@@ -807,36 +830,65 @@
         toast("你探索到了后台线索");
       }
 
-      function sendMessage(text = $("input").value.trim()) {
-        if (!text) return;
-        state.messages.push({ type: "user", text, meta: "你" });
-        state.messages.push({ type: "oc", text: inferReply(text), meta: "Luma · 慢慢理解你" });
-        if (state.signals.length >= 2) {
-          state.messages.push({ type: "discovery", text: discoveryText() });
-          $("quietTitle").textContent = "Luma 发现了一点东西";
-          $("quietText").textContent = "它还没有急着变成系统，只是在等待你决定要不要探索。";
-        } else {
-          $("quietTitle").textContent = "Luma 默默记住了";
-          $("quietText").textContent = "这些线索会先留在后台，不会马上变成指标或任务。";
+      async function callOcWorldChat(text) {
+        if (!runtime?.chat?.sendMessage) {
+          return null;
         }
+
+        const response = await runtime.chat.sendMessage({
+          userId: defaultUserId,
+          characterId: defaultCharacterId,
+          userMessage: text,
+          interrupt: true,
+        });
+
+        return response?.text?.trim() ? response.text.trim() : null;
+      }
+
+      async function sendMessage(text = $("input").value.trim()) {
+        if (state.isSending) return;
+        if (!text) return;
+        const fallbackReply = inferReply(text);
+        state.messages.push({ type: "user", text, meta: "你" });
         $("input").value = "我再补充一点。";
         renderMessages();
         toast("已默默记住");
+
+        setSending(true);
+
+        let reply = fallbackReply;
+        let usedRemote = false;
+        try {
+          const remoteReply = await callOcWorldChat(text);
+          if (remoteReply) {
+            reply = remoteReply;
+            usedRemote = true;
+          }
+        } catch {
+          reply = fallbackReply;
+          toast("模型暂时不可用，先用本地回应");
+        } finally {
+          setSending(false);
+        }
+
+        state.messages.push({ type: "oc", text: reply, meta: usedRemote ? "Luma · MiMo 驱动" : "Luma · 本地演示" });
+        addDiscoveryIfReady();
+        renderMessages();
       }
 
       async function runDemo() {
         $("input").value = "我感觉第一版不应该把成长系统都展示出来。";
-        sendMessage();
-        await new Promise((resolve) => window.setTimeout(resolve, 600));
+        await sendMessage();
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
         $("input").value = "你觉得你现在有一点懂我了吗？";
-        sendMessage();
-        await new Promise((resolve) => window.setTimeout(resolve, 600));
+        await sendMessage();
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
         openMemory();
       }
 
-      $("send").addEventListener("click", () => sendMessage());
+      $("send").addEventListener("click", () => void sendMessage());
       $("input").addEventListener("keydown", (event) => {
-        if (event.key === "Enter") sendMessage();
+        if (event.key === "Enter") void sendMessage();
       });
       $("focusInput").addEventListener("click", () => $("input").focus());
       $("softOpen").addEventListener("click", openMemory);
