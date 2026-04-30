@@ -3,8 +3,12 @@ import type {
   AirJellyContext,
   CharacterConfig,
   ChatHistoryEntry,
+  GrowthEvidence,
+  GrowthInsight,
+  GrowthProfile,
   MemorySummary,
   Relationship,
+  RevealCandidate,
 } from "../../src/types";
 
 const appEventSchema = z.object({
@@ -81,11 +85,71 @@ const historySchema = z.object({
   emotion: z.enum(["idle", "happy", "shy", "thinking", "sad", "angry"]),
 });
 
+const growthEvidenceSchema = z.object({
+  id: z.string(),
+  source: z.enum(["chat", "relationship", "manual"]),
+  text: z.string(),
+  timestamp: z.number(),
+  ref: z
+    .object({
+      messageId: z.string().optional(),
+    })
+    .optional(),
+});
+
+const growthInsightSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  type: z.enum(["goal", "strength", "evidence", "plan", "preference", "open_question"]),
+  title: z.string(),
+  text: z.string(),
+  evidenceIds: z.array(z.string()),
+  confidence: z.number(),
+  status: z.enum(["latent", "suggested", "confirmed", "rejected", "archived"]),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+  lastSuggestedAt: z.number().optional(),
+  userFeedback: z.string().optional(),
+});
+
+const confirmedGrowthItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  text: z.string(),
+  evidenceIds: z.array(z.string()),
+  confidence: z.number(),
+  confirmedAt: z.number(),
+});
+
+const growthProfileSchema = z.object({
+  userId: z.string(),
+  updatedAt: z.number(),
+  goals: z.array(confirmedGrowthItemSchema),
+  strengths: z.array(confirmedGrowthItemSchema),
+  preferences: z.array(confirmedGrowthItemSchema),
+  openQuestions: z.array(confirmedGrowthItemSchema),
+});
+
+const revealCandidateSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  insightId: z.string(),
+  reason: z.string(),
+  priority: z.number(),
+  status: z.enum(["pending", "shown", "dismissed", "confirmed"]),
+  createdAt: z.number(),
+  shownAt: z.number().optional(),
+});
+
 export const airJellyContextListSchema = airJellyContextSchema;
 export const memorySummaryListSchema = z.array(summarySchema);
 export const relationshipStateSchema = relationshipSchema;
 export const characterConfigSchema = characterSchema;
 export const chatHistoryListSchema = z.array(historySchema);
+export const growthEvidenceListSchema = z.array(growthEvidenceSchema);
+export const growthInsightListSchema = z.array(growthInsightSchema);
+export const growthProfileStateSchema = growthProfileSchema;
+export const revealQueueSchema = z.array(revealCandidateSchema);
 
 export function parseAirJellyContext(value: unknown): AirJellyContext {
   return airJellyContextListSchema.parse(value) as AirJellyContext;
@@ -105,4 +169,20 @@ export function parseCharacter(value: unknown): CharacterConfig {
 
 export function parseHistory(value: unknown): ChatHistoryEntry[] {
   return chatHistoryListSchema.parse(value) as ChatHistoryEntry[];
+}
+
+export function parseGrowthEvidenceList(value: unknown): GrowthEvidence[] {
+  return growthEvidenceListSchema.parse(value) as GrowthEvidence[];
+}
+
+export function parseGrowthInsightList(value: unknown): GrowthInsight[] {
+  return growthInsightListSchema.parse(value) as GrowthInsight[];
+}
+
+export function parseGrowthProfile(value: unknown): GrowthProfile {
+  return growthProfileStateSchema.parse(value) as GrowthProfile;
+}
+
+export function parseRevealQueue(value: unknown): RevealCandidate[] {
+  return revealQueueSchema.parse(value) as RevealCandidate[];
 }

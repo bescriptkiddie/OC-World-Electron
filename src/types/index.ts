@@ -120,6 +120,88 @@ export interface ChatResult extends ChatResponse {
   source: AirJellyContext["source"];
 }
 
+export type GrowthInsightType =
+  | "goal"
+  | "strength"
+  | "evidence"
+  | "plan"
+  | "preference"
+  | "open_question";
+
+export type GrowthInsightStatus =
+  | "latent"
+  | "suggested"
+  | "confirmed"
+  | "rejected"
+  | "archived";
+
+export type GrowthEvidenceSource = "chat" | "relationship" | "manual";
+
+export interface GrowthEvidence {
+  id: string;
+  source: GrowthEvidenceSource;
+  text: string;
+  timestamp: number;
+  ref?: {
+    messageId?: string;
+  };
+}
+
+export interface GrowthInsight {
+  id: string;
+  userId: string;
+  type: GrowthInsightType;
+  title: string;
+  text: string;
+  evidenceIds: string[];
+  confidence: number;
+  status: GrowthInsightStatus;
+  createdAt: number;
+  updatedAt: number;
+  lastSuggestedAt?: number;
+  userFeedback?: string;
+}
+
+export interface ConfirmedGrowthItem {
+  id: string;
+  title: string;
+  text: string;
+  evidenceIds: string[];
+  confidence: number;
+  confirmedAt: number;
+}
+
+export interface GrowthProfile {
+  userId: string;
+  updatedAt: number;
+  goals: ConfirmedGrowthItem[];
+  strengths: ConfirmedGrowthItem[];
+  preferences: ConfirmedGrowthItem[];
+  openQuestions: ConfirmedGrowthItem[];
+}
+
+export interface RevealCandidate {
+  id: string;
+  userId: string;
+  insightId: string;
+  reason: string;
+  priority: number;
+  status: "pending" | "shown" | "dismissed" | "confirmed";
+  createdAt: number;
+  shownAt?: number;
+}
+
+export interface ContextSnapshot {
+  builtAt: number;
+  airjellyCtx: AirJellyContext;
+  wxMemories: MemorySummary[];
+  recentChat: ChatHistoryEntry[];
+  relationship: Relationship;
+  character: CharacterConfig;
+  growthProfile: GrowthProfile;
+  latentInsights: GrowthInsight[];
+}
+
 export interface TtsSynthesizePayload {
   text: string;
   requestId?: string;

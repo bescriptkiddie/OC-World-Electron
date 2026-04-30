@@ -6,14 +6,19 @@ import type {
   ChatHistoryEntry,
   ChatResult,
   Emotion,
+  GrowthInsight,
+  GrowthProfile,
   HermesRuntimeStatus,
   PendingChatMessage,
   Relationship,
+  RevealCandidate,
   TimelineItem,
 } from "../types";
 
 const defaultCharacterId = "char-001";
 const defaultUserId = "user-001";
+
+type RevealHint = (RevealCandidate & { text?: string; title?: string }) | null;
 
 const defaultHermesStatus: HermesRuntimeStatus = {
   state: "disabled",
@@ -26,6 +31,17 @@ const defaultHermesStatus: HermesRuntimeStatus = {
 
 function isAbortError(error: unknown) {
   return error instanceof Error && error.name === "AbortError";
+}
+
+function createEmptyProfile(): GrowthProfile {
+  return {
+    userId: defaultUserId,
+    updatedAt: 0,
+    goals: [],
+    strengths: [],
+    preferences: [],
+    openQuestions: [],
+  };
 }
 
 export function useChat() {
@@ -41,6 +57,10 @@ export function useChat() {
   const [voiceInputState, setVoiceInputState] = useState<VoiceInputState>("idle");
   const [voiceTranscript, setVoiceTranscript] = useState("");
   const [hermesStatus, setHermesStatus] = useState<HermesRuntimeStatus>(defaultHermesStatus);
+  const [activeReveal, setActiveReveal] = useState<RevealHint>(null);
+  const [growthInsights, setGrowthInsights] = useState<GrowthInsight[]>([]);
+  const [growthProfile, setGrowthProfile] = useState<GrowthProfile>(createEmptyProfile());
+  const [revealBusy, setRevealBusy] = useState(false);
   const pendingMessagesRef = useRef<PendingChatMessage[]>([]);
   const submitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestCounterRef = useRef(0);
@@ -64,6 +84,22 @@ export function useChat() {
       characterId: defaultCharacterId,
       userId: defaultUserId,
     });
+  }, []);
+
+  const refreshGrowthState = useCallback(async () => {
+    if (!window.ocWorld) {
+      return;
+    }
+
+    const [reveal, insights, profile] = await Promise.all([
+      window.ocWorld.growth.getLatestReveal(defaultUserId),
+      window.ocWorld.growth.listInsights(defaultUserId),
+      window.ocWorld.growth.getProfile(defaultUserId),
+    ]);
+
+    setActiveReveal(reveal);
+    setGrowthInsights(insights);
+    setGrowthProfile(profile);
   }, []);
 
   const interruptActiveTurn = useCallback(() => {
@@ -94,7 +130,7 @@ export function useChat() {
       return;
     }
 
-    const [loadedCharacter, loadedRelationship, loadedHistory, loadedTimeline, loadedGreeting, loadedHermesStatus] =
+    const [loadedCharacter, loadedRelationship, loadedHistory, loadedTimeline, loadedGreeting, loadedHermesStatus, loadedReveal, loadedInsights, loadedProfile] =
       await Promise.all([
         window.ocWorld.character.getCurrent(defaultCharacterId),
         window.ocWorld.relationship.get(defaultUserId),
@@ -102,6 +138,9 @@ export function useChat() {
         window.ocWorld.timeline.list(defaultUserId),
         window.ocWorld.chat.getGreeting({ characterId: defaultCharacterId, userId: defaultUserId }),
         window.ocWorld.hermes.getStatus().catch(() => defaultHermesStatus),
+        window.ocWorld.growth.getLatestReveal(defaultUserId),
+        window.ocWorld.growth.listInsights(defaultUserId),
+        window.ocWorld.growth.getProfile(defaultUserId),
       ]);
 
     setCharacter(loadedCharacter);
@@ -111,6 +150,9 @@ export function useChat() {
     setGreeting(loadedGreeting.text);
     setEmotion(loadedGreeting.emotion);
     setHermesStatus(loadedHermesStatus);
+    setActiveReveal(loadedReveal);
+    setGrowthInsights(loadedInsights);
+    setGrowthProfile(loadedProfile);
   }, []);
 
   useEffect(() => {
@@ -193,6 +235,7 @@ export function useChat() {
           : current,
       );
       setTimeline(await window.ocWorld.timeline.list(defaultUserId));
+      await refreshGrowthState();
 
       if (ttsEnabledRef.current) {
         ttsRef.current.speak(result.text);
@@ -211,7 +254,7 @@ export function useChat() {
         setIsSending(false);
       }
     }
-  }, [syncPendingMessages]);
+  }, [refreshGrowthState, syncPendingMessages]);
 
   const scheduleSubmit = useCallback(() => {
     if (submitTimerRef.current) {
@@ -314,6 +357,52 @@ export function useChat() {
     setRelationship(nextRelationship);
   }, []);
 
+  const confirmReveal = useCallback(async (insightId: string) => {
+    if (!window.ocWorld) {
+      return;
+    }
+
+    setRevealBusy(true);
+    try {
+      await window.ocWorld.growth.confirmInsight({ userId: defaultUserId, insightId });
+      await refreshGrowthState();
+    } finally {
+      setRevealBusy(false);
+    }
+  }, [refreshGrowthState]);
+
+  const dismissReveal = useCallback(async (candidateId: string) => {
+    if (!window.ocWorld) {
+      return;
+    }
+
+    setRevealBusy(true);
+    try {
+      await window.ocWorld.growth.dismissReveal({ userId: defaultUserId, candidateId });
+      await refreshGrowthState();
+    } finally {
+      setRevealBusy(false);
+    }
+  }, [refreshGrowthState]);
+
+  const rejectReveal = useCallback(async (insightId: string) => {
+    if (!window.ocWorld) {
+      return;
+    }
+
+    setRevealBusy(true);
+    try {
+      await window.ocWorld.growth.rejectInsight({
+        userId: defaultUserId,
+        insightId,
+        feedback: "这个理解不对",
+      });
+      await refreshGrowthState();
+    } finally {
+      setRevealBusy(false);
+    }
+  }, [refreshGrowthState]);
+
   return useMemo(
     () => ({
       character,
@@ -328,6 +417,10 @@ export function useChat() {
       voiceInputState,
       voiceTranscript,
       hermesStatus,
+      activeReveal,
+      growthInsights,
+      growthProfile,
+      revealBusy,
       cancelSpeech,
       interruptActiveTurn,
       sendMessage,
@@ -336,6 +429,9 @@ export function useChat() {
       stopVoiceInput,
       toggleVoiceInput,
       setDemoIntimacy,
+      confirmReveal,
+      dismissReveal,
+      rejectReveal,
       refreshState: boot,
       defaultCharacterId,
       defaultUserId,
@@ -353,6 +449,10 @@ export function useChat() {
       voiceInputState,
       voiceTranscript,
       hermesStatus,
+      activeReveal,
+      growthInsights,
+      growthProfile,
+      revealBusy,
       cancelSpeech,
       interruptActiveTurn,
       sendMessage,
@@ -361,6 +461,9 @@ export function useChat() {
       stopVoiceInput,
       toggleVoiceInput,
       setDemoIntimacy,
+      confirmReveal,
+      dismissReveal,
+      rejectReveal,
       boot,
     ],
   );

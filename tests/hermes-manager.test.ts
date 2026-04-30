@@ -135,9 +135,9 @@ describe("hermes manager", () => {
     await manager.start();
     await flush();
 
-    const hermesRoot = path.join(process.cwd(), "hermes-agent");
-    const hermesCliPath = path.join(hermesRoot, "hermes_cli", "main.py");
     const [executable, args, options] = spawn.mock.calls[0];
+    const hermesRoot = String(options.cwd);
+    const hermesCliPath = path.join(hermesRoot, "hermes_cli", "main.py");
 
     expect(executable).toEqual(expect.stringMatching(/(?:python3?|hermes)$/));
     const defaultGatewayArgs = ["gateway", "run", "--replace"];

@@ -12,11 +12,14 @@ import type {
   ChatResponse,
   ChatResult,
   ChatSendPayload,
+  GrowthInsight,
+  GrowthProfile,
   HermesRuntimeStatus,
   ImageGenPayload,
   ImageGenResult,
   MemorySummary,
   Relationship,
+  RevealCandidate,
   TtsCancelPayload,
   TtsProviderStatus,
   TtsSynthesizePayload,
@@ -60,6 +63,14 @@ declare global {
       memory: {
         summaries: (userId: string) => Promise<MemorySummary[]>;
         history: (userId: string) => Promise<ChatHistoryEntry[]>;
+      };
+      growth: {
+        getLatestReveal: (userId: string) => Promise<(RevealCandidate & { text?: string; title?: string }) | null>;
+        listInsights: (userId: string) => Promise<GrowthInsight[]>;
+        getProfile: (userId: string) => Promise<GrowthProfile>;
+        confirmInsight: (payload: { userId: string; insightId: string }) => Promise<(RevealCandidate & { text?: string; title?: string }) | null>;
+        dismissReveal: (payload: { userId: string; candidateId: string }) => Promise<(RevealCandidate & { text?: string; title?: string }) | null>;
+        rejectInsight: (payload: { userId: string; insightId: string; feedback?: string }) => Promise<(RevealCandidate & { text?: string; title?: string }) | null>;
       };
       airjelly: {
         getContext: () => Promise<AirJellyContext>;

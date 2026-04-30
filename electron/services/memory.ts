@@ -3,8 +3,12 @@ import path from "node:path";
 import type {
   CharacterConfig,
   ChatHistoryEntry,
+  GrowthEvidence,
+  GrowthInsight,
+  GrowthProfile,
   MemorySummary,
   Relationship,
+  RevealCandidate,
 } from "../../src/types";
 import {
   DEFAULT_CHARACTER,
@@ -14,9 +18,13 @@ import {
 } from "./demo-fallback";
 import {
   parseCharacter,
+  parseGrowthEvidenceList,
+  parseGrowthInsightList,
+  parseGrowthProfile,
   parseHistory,
   parseMemorySummaryList,
   parseRelationship,
+  parseRevealQueue,
 } from "./schemas";
 
 function resolveDataPath(...segments: string[]) {
@@ -39,6 +47,21 @@ async function readJson<T>(filePath: string, fallback: T, parser: (value: unknow
 async function writeJson(filePath: string, value: unknown) {
   await ensureParentDir(filePath);
   await writeFile(filePath, JSON.stringify(value, null, 2), "utf8");
+}
+
+function resolveGrowthPath(userId: string, fileName: string) {
+  return resolveDataPath("growth", userId, fileName);
+}
+
+function createEmptyGrowthProfile(userId: string): GrowthProfile {
+  return {
+    userId,
+    updatedAt: 0,
+    goals: [],
+    strengths: [],
+    preferences: [],
+    openQuestions: [],
+  };
 }
 
 export async function loadRecentSummaries(userId: string, weeks: number): Promise<MemorySummary[]> {
@@ -82,6 +105,48 @@ export async function saveCharacter(characterId: string, character: CharacterCon
   const filePath = resolveDataPath("characters", `${characterId}.json`);
   await writeJson(filePath, character);
   return character;
+}
+
+export async function loadGrowthInsights(userId: string): Promise<GrowthInsight[]> {
+  return readJson(resolveGrowthPath(userId, "insights.json"), [], parseGrowthInsightList);
+}
+
+export async function saveGrowthInsights(userId: string, insights: GrowthInsight[]): Promise<GrowthInsight[]> {
+  await writeJson(resolveGrowthPath(userId, "insights.json"), insights);
+  return insights;
+}
+
+export async function loadGrowthEvidence(userId: string): Promise<GrowthEvidence[]> {
+  return readJson(resolveGrowthPath(userId, "evidence.json"), [], parseGrowthEvidenceList);
+}
+
+export async function saveGrowthEvidence(userId: string, evidence: GrowthEvidence[]): Promise<GrowthEvidence[]> {
+  await writeJson(resolveGrowthPath(userId, "evidence.json"), evidence);
+  return evidence;
+}
+
+export async function loadGrowthProfile(userId: string): Promise<GrowthProfile> {
+  return readJson(resolveGrowthPath(userId, "profile.json"), createEmptyGrowthProfile(userId), parseGrowthProfile);
+}
+
+export async function saveGrowthProfile(userId: string, profile: GrowthProfile): Promise<GrowthProfile> {
+  await writeJson(resolveGrowthPath(userId, "profile.json"), profile);
+  return profile;
+}
+
+export async function loadRevealQueue(userId: string): Promise<RevealCandidate[]> {
+  return readJson(resolveGrowthPath(userId, "reveal-queue.json"), [], parseRevealQueue);
+}
+
+export async function saveRevealQueue(userId: string, queue: RevealCandidate[]): Promise<RevealCandidate[]> {
+  await writeJson(resolveGrowthPath(userId, "reveal-queue.json"), queue);
+  return queue;
+}
+
+export async function appendGrowthLog(userId: string, entry: Record<string, unknown>) {
+  const filePath = resolveGrowthPath(userId, path.join("logs", `${new Date().toISOString().slice(0, 10)}.jsonl`));
+  await ensureParentDir(filePath);
+  await writeFile(filePath, `${JSON.stringify(entry)}\n`, { encoding: "utf8", flag: "a" });
 }
 
 export async function listTimeline(userId: string) {

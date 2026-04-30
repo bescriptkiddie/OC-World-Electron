@@ -38,4 +38,20 @@ describe("prompt builder", () => {
     expect(prompt).toContain("先让 Hermes 使用工具获取，再最终返回 JSON");
     expect(prompt).toContain("不要声称自己没有天气接口");
   });
+
+  it("includes confirmed profile summary without changing the JSON reply contract", () => {
+    const prompt = buildSystemPrompt({
+      character: DEFAULT_CHARACTER,
+      airjellyCtx: DEFAULT_AIRJELLY_CONTEXT,
+      wxMemories: DEFAULT_SUMMARIES,
+      relationship: DEFAULT_RELATIONSHIP,
+      recentChat: DEFAULT_HISTORY,
+      confirmedProfileSummary: "长期目标：做一个会慢慢理解人的成长伙伴",
+    });
+
+    expect(prompt).toContain("【你已经确认的长期理解】");
+    expect(prompt).toContain("长期目标：做一个会慢慢理解人的成长伙伴");
+    expect(prompt).toContain('"growthEvent":"有成长意义就写字符串，否则 null"');
+  });
 });
+

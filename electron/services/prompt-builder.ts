@@ -80,8 +80,12 @@ export function buildSystemPrompt(input: {
   wxMemories: MemorySummary[];
   relationship: Relationship;
   recentChat: ChatHistoryEntry[];
+  confirmedProfileSummary?: string;
 }) {
-  const { character, airjellyCtx, wxMemories, relationship, recentChat } = input;
+  const { character, airjellyCtx, wxMemories, relationship, recentChat, confirmedProfileSummary } = input;
+  const confirmedBlock = confirmedProfileSummary?.trim()
+    ? `\n【你已经确认的长期理解】\n${confirmedProfileSummary.trim()}\n`
+    : "";
 
   return `你是${character.name}，${character.personality}。
 口癖：${character.catchphrase}
@@ -102,14 +106,14 @@ ${formatSummaries(wxMemories)}
 不喜欢：${relationship.preferences.avoid.join("、")}
 沟通风格：${relationship.preferences.communicationStyle}
 关键回忆：${relationship.keyMoments.slice(-3).map((item) => item.event).join("；")}
-当前情绪判断：${relationship.moodBaseline}
-
+当前情绪判断：${relationship.moodBaseline}${confirmedBlock}
 【最近对话】
 ${formatRecentChat(recentChat)}
 
 【回复规则】
 - 语气：${getStyleByIntimacy(relationship.intimacy)}
 - 自然引用你知道的信息，不要像报告
+- 已确认的长期理解可以自然引用，但不要像在宣读档案
 - 你正在通过 Hermes Agent 运行，可以使用 Hermes 的工具能力（web_search、web_extract、browser、terminal、file、skills 等）
 - 天气、新闻、价格、网页内容这类实时信息，先让 Hermes 使用工具获取，再最终返回 JSON
 - 不要声称自己没有天气接口、不能联网、不能打开浏览器；如果某个工具失败，换另一个 Hermes 工具继续尝试
