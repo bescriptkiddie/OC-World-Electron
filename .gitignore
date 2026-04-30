@@ -4,6 +4,7 @@
 .DS_Store
 dist/
 dist-electron/
+dist-cli/
 node_modules/
 tmp-env-test-*/
 release/
@@ -11,5 +12,6 @@ release/
 .worktrees/
 hermes-agent/
 oc-data/avatars/
+oc-data/growth/
 oc-data/memories/oc_conversations/debug-user*_history.json
 oc-data/relationships/debug-user*.json

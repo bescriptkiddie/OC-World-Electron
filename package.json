@@ -4,10 +4,14 @@
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",
+  "bin": {
+    "ocworld": "dist-cli/cli/main.js"
+  },
   "scripts": {
     "dev": "npm run prepare:hermes-source && vite",
     "build": "tsc --noEmit && vite build",
     "prepare:hermes-source": "node scripts/ensure-hermes-agent.mjs",
+    "build:cli": "tsc -p tsconfig.cli.json",
     "prepare:hermes-runtime": "node scripts/prepare-hermes-runtime.mjs",
     "pack:app": "npm run prepare:hermes-runtime && npm run build && electron-builder --dir",
     "dist:app": "npm run prepare:hermes-runtime && npm run build && electron-builder",
@@ -16,7 +20,8 @@
     "typecheck": "tsc --noEmit",
     "seed:demo": "tsx scripts/seed-demo-data.ts",
     "parse:wx": "tsx scripts/parse-wx-chat.ts",
-    "generate:summaries": "tsx scripts/generate-summaries.ts"
+    "generate:summaries": "tsx scripts/generate-summaries.ts",
+    "cli": "tsx cli/main.ts"
   },
   "dependencies": {
     "@airjelly/sdk": "^0.1.0",

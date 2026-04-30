@@ -2,13 +2,10 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ImageGenPayload, ImageGenResult } from "../../src/types";
+import { resolveAvatarsDir } from "../capabilities/storage-paths";
 
 function getEnvValue(key: string): string {
   return process.env[key] ?? "";
-}
-
-function resolveAvatarsDir() {
-  return path.join(process.cwd(), "oc-data", "avatars");
 }
 
 function getMimeTypeForExt(ext: string) {
@@ -63,9 +60,10 @@ async function readCachedImage(dir: string, characterId: string, cacheKey: strin
 export async function generateImage(
   payload: ImageGenPayload,
   characterId = "char-001",
+  dataRoot?: string,
 ): Promise<ImageGenResult> {
   const imageConfig = getImageConfig(payload);
-  const dir = resolveAvatarsDir();
+  const dir = resolveAvatarsDir(dataRoot);
   const cacheKey = getImageCacheKey(payload, imageConfig);
   await mkdir(dir, { recursive: true });
 
