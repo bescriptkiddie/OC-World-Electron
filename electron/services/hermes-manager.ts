@@ -127,10 +127,15 @@ function getHermesArgs(env: HermesEnv) {
 
 function findLocalHermesRoot(env: HermesEnv) {
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+  const cwd = process.cwd();
   const candidates = [
     getEnvValue(env, "HERMES_RUNTIME_ROOT"),
     getEnvValue(env, "HERMES_BUNDLED_ROOT"),
-    path.resolve(process.cwd(), "hermes-agent"),
+    path.resolve(cwd, "hermes-agent"),
+    path.resolve(cwd, "..", "hermes-agent"),
+    path.resolve(cwd, "..", "..", "hermes-agent"),
+    path.resolve(cwd, "..", "..", "..", "hermes-agent"),
+    path.resolve(cwd, "..", "..", "..", "..", "hermes-agent"),
     path.resolve(moduleDir, "..", "hermes-agent"),
     path.resolve(moduleDir, "..", "..", "hermes-agent"),
   ].filter((value): value is string => Boolean(value));

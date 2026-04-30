@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import type { CharacterConfig, Relationship } from "../types";
+import type { CharacterConfig, Relationship, RevealCandidate } from "../types";
 import type { VoiceInputState } from "../lib/voice-input";
 import type { MessageItem, SessionId } from "./shared";
 import { OcAvatar, OcAvatarLarge } from "./OcAvatar";
 import { Composer } from "./Composer";
-import { stageLabel } from "./shared";
+
+type RevealHint = (RevealCandidate & { text?: string; title?: string }) | null;
 
 export function ChatView({
   character,
@@ -16,10 +17,16 @@ export function ChatView({
   voiceTranscript,
   relationship,
   ocAvatarPath,
+  revealHint,
+  revealBusy,
   onSend,
   onInterrupt,
   onTtsToggle,
   onVoiceToggle,
+  onConfirmReveal,
+  onDismissReveal,
+  onRejectReveal,
+  onOpenMemory,
   onNewChat,
 }: {
   character: CharacterConfig | null;
@@ -31,10 +38,16 @@ export function ChatView({
   voiceTranscript: string;
   relationship: Relationship | null;
   ocAvatarPath?: string;
+  revealHint: RevealHint;
+  revealBusy: boolean;
   onSend: (text: string) => Promise<void>;
   onInterrupt: () => void;
   onTtsToggle: () => void;
   onVoiceToggle: () => void;
+  onConfirmReveal: (insightId: string) => Promise<void> | void;
+  onDismissReveal: (candidateId: string) => Promise<void> | void;
+  onRejectReveal: (insightId: string) => Promise<void> | void;
+  onOpenMemory: () => void;
   onNewChat?: () => void;
 }) {
   const [draft, setDraft] = useState("");
@@ -44,7 +57,7 @@ export function ChatView({
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages.length]);
+  }, [messages.length, revealHint?.id]);
 
   const submit = () => {
     const text = draft;
@@ -53,22 +66,23 @@ export function ChatView({
   };
 
   return (
-    <div className="oc-page oc-chat-page">
-      <section className="oc-chat-shell">
-        <div className="oc-chat-shell__header">
-          <div>
-            <p className="oc-kicker mono">LIVE CHAT</p>
-            <h2 className="oc-chat-shell__title serif">{character?.name?.trim() || "你的 OC"}</h2>
+    <div className="oc-page oc-chat-page oc-invisible-chat-page">
+      <section className="oc-chat-shell oc-invisible-chat-shell">
+        <div className="oc-invisible-chat-head">
+          <div className="oc-invisible-chat-head__copy">
+            <div className="oc-kicker mono">live chat</div>
+            <h2 className="serif">{character?.name?.trim() || "Luma"}</h2>
+            <p>你只要说真实发生了什么，系统会在背后慢慢长出来。</p>
           </div>
-          <div className="oc-chat-shell__status">
-            <span className="oc-badge">{isSending ? "thinking" : "ready"}</span>
-            <span className="oc-badge">{stageLabel(relationship?.stage)}</span>
-            <span className="oc-badge">亲密度 {relationship?.intimacy ?? 0}</span>
+          <div className="oc-invisible-chat-head__actions">
             {selectedSession !== "new" && onNewChat && (
-              <button type="button" className="oc-pill-button" onClick={onNewChat}>
+              <button type="button" className="oc-pill-button oc-pill-button--quiet" onClick={onNewChat}>
                 新对话
               </button>
             )}
+            <button type="button" className="oc-pill-button" onClick={onOpenMemory}>
+              探索
+            </button>
           </div>
         </div>
 
@@ -81,7 +95,8 @@ export function ChatView({
             onVoiceToggle={onVoiceToggle}
           />
         ) : (
-          <div ref={scrollRef} className="oc-chat-scroll">
+          <div ref={scrollRef} className="oc-chat-scroll oc-invisible-chat-scroll">
+            <div className="oc-invisible-time-chip">今天 23:08</div>
             {messages.map((message) => (
               <Bubble
                 key={message.key}
@@ -92,14 +107,48 @@ export function ChatView({
                 ocName={character?.name}
               />
             ))}
+            {revealHint && (
+              <div className="oc-invisible-discovery">
+                <p>{revealHint.text ?? "我好像开始看见一个线索。"}</p>
+                <div className="oc-invisible-discovery__actions">
+                  <button
+                    type="button"
+                    className="oc-pill-button is-primary"
+                    disabled={revealBusy}
+                    onClick={() => {
+                      void onConfirmReveal(revealHint.insightId);
+                      onOpenMemory();
+                    }}
+                  >
+                    看看你发现了什么
+                  </button>
+                  <button
+                    type="button"
+                    className="oc-pill-button oc-pill-button--quiet"
+                    disabled={revealBusy}
+                    onClick={() => void onDismissReveal(revealHint.id)}
+                  >
+                    先不用展开
+                  </button>
+                  <button
+                    type="button"
+                    className="oc-pill-button oc-pill-button--quiet"
+                    disabled={revealBusy}
+                    onClick={() => void onRejectReveal(revealHint.insightId)}
+                  >
+                    这个理解不对
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        <div className="oc-chat-composer-wrap">
+        <div className="oc-chat-composer-wrap oc-invisible-composer-wrap">
           <Composer
             draft={draft}
             setDraft={setDraft}
-            placeholder={isSending ? "继续追发，TA 会继续接上。" : "输入消息，或者把一句心事交给 TA。"}
+            placeholder={isSending ? "继续追发，TA 会继续接上。" : "我感觉第一版不应该把成长系统都展示出来。"}
             onSubmit={submit}
             compact
             isSending={isSending}
@@ -135,14 +184,14 @@ function EmptyAgent({
     <div className="oc-chat-empty">
       <OcAvatarLarge size={92} name={character?.name} avatarPath={character?.avatarPath} />
       <div className="oc-chat-empty__copy">
-        <div className="serif oc-chat-empty__title">现在可以开口了</div>
-        <div className="oc-chat-empty__body">TA 已经醒着，等你说第一句话。</div>
+        <div className="serif oc-chat-empty__title">先对话，系统在背后长出来</div>
+        <div className="oc-chat-empty__body">你只需要说话，Luma 会在背后慢慢学会你。</div>
       </div>
       <div className="oc-chat-empty__composer">
         <Composer
           draft={text}
           setDraft={setText}
-          placeholder="比如：今天有点累，陪我聊一会。"
+          placeholder="比如：我感觉第一版不应该把成长系统都展示出来。"
           onSubmit={() => {
             if (text.trim()) {
               void onSend(text);
@@ -183,7 +232,7 @@ function Bubble({
         )}
       </div>
       <div className={isOC ? "oc-bubble" : "oc-bubble is-user"}>
-        <div className="oc-bubble__name mono">{isOC ? ocName || "OC" : userName || "你"}</div>
+        <div className="oc-bubble__name mono">{isOC ? `${ocName || "Luma"} · 慢慢理解你` : userName || "你"}</div>
         <div className="oc-bubble__text">{text}</div>
       </div>
     </article>

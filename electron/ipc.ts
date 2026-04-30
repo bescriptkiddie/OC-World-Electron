@@ -1,6 +1,8 @@
 import { BrowserWindow, ipcMain } from "electron";
 import { chat, generateGreeting } from "./services/chat-engine";
 import { getAirJellyContext } from "./services/airjelly";
+import { confirmInsightToProfile } from "./services/growth-profile";
+import { rejectInsight } from "./services/growth-insights";
 import { hermesManager } from "./services/hermes-manager";
 import { getTtsStatus, synthesizeSpeech } from "./services/tts";
 import { getAsrStatus, VolcengineAsrSession } from "./services/volcengine-asr";
@@ -8,11 +10,17 @@ import { generateImage } from "./services/image-gen";
 import {
   listTimeline,
   loadCharacter,
+  loadGrowthInsights,
+  loadGrowthProfile,
   loadOCHistory,
   loadRecentSummaries,
   loadRelationship,
+  loadRevealQueue,
   saveCharacter,
+  saveGrowthInsights,
+  saveGrowthProfile,
   saveRelationship,
+  saveRevealQueue,
 } from "./services/memory";
 import { getStage } from "./services/relationship";
 import type {
@@ -48,6 +56,12 @@ const ipcChannels = {
   relationshipSetIntimacyForDemo: "relationship:set-intimacy-for-demo",
   memorySummaries: "memory:summaries",
   memoryHistory: "memory:history",
+  growthGetLatestReveal: "growth:get-latest-reveal",
+  growthListInsights: "growth:list-insights",
+  growthGetProfile: "growth:get-profile",
+  growthConfirmInsight: "growth:confirm-insight",
+  growthDismissReveal: "growth:dismiss-reveal",
+  growthRejectInsight: "growth:reject-insight",
   airjellyGetContext: "airjelly:get-context",
   hermesGetStatus: "hermes:get-status",
   imageGenGenerate: "image-gen:generate",
@@ -113,6 +127,33 @@ function stopAsrSession(payload: AsrStopPayload) {
   session.finish();
   activeAsrSessions.delete(payload.sessionId);
   return true;
+}
+
+async function getLatestReveal(userId: string) {
+  const [queue, insights] = await Promise.all([loadRevealQueue(userId), loadGrowthInsights(userId)]);
+  const shownCandidate = queue.find((item) => item.status === "shown");
+  if (shownCandidate) {
+    const shownInsight = insights.find((item) => item.id === shownCandidate.insightId);
+    return shownInsight ? { ...shownCandidate, text: shownInsight.text, title: shownInsight.title } : null;
+  }
+
+  const pendingIndex = queue.findIndex((item) => item.status === "pending");
+  if (pendingIndex === -1) {
+    return null;
+  }
+
+  const pendingCandidate = queue[pendingIndex];
+  const shownAt = Date.now();
+  const promotedCandidate = {
+    ...pendingCandidate,
+    status: "shown" as const,
+    shownAt,
+  };
+  const nextQueue = queue.map((item, index) => (index === pendingIndex ? promotedCandidate : item));
+  await saveRevealQueue(userId, nextQueue);
+
+  const insight = insights.find((item) => item.id === promotedCandidate.insightId);
+  return insight ? { ...promotedCandidate, text: insight.text, title: insight.title } : null;
 }
 
 export function registerIpcHandlers() {
@@ -201,7 +242,11 @@ export function registerIpcHandlers() {
   );
   ipcMain.handle(ipcChannels.timelineList, async (_event, userId: string) => listTimeline(userId));
   ipcMain.handle(ipcChannels.relationshipGet, async (_event, userId: string) => loadRelationship(userId));
-  ipcMain.handle(ipcChannels.relationshipSave, async (_event, payload: { userId: string; relationship: import("../src/types").Relationship }) => saveRelationship(payload.userId, payload.relationship));
+  ipcMain.handle(
+    ipcChannels.relationshipSave,
+    async (_event, payload: { userId: string; relationship: import("../src/types").Relationship }) =>
+      saveRelationship(payload.userId, payload.relationship),
+  );
   ipcMain.handle(
     ipcChannels.relationshipSetIntimacyForDemo,
     async (_event, payload: { userId: string; intimacy: number }) => {
@@ -216,6 +261,70 @@ export function registerIpcHandlers() {
   );
   ipcMain.handle(ipcChannels.memorySummaries, async (_event, userId: string) => loadRecentSummaries(userId, 10));
   ipcMain.handle(ipcChannels.memoryHistory, async (_event, userId: string) => loadOCHistory(userId, 20));
+  ipcMain.handle(ipcChannels.growthGetLatestReveal, async (_event, userId: string) => getLatestReveal(userId));
+  ipcMain.handle(ipcChannels.growthListInsights, async (_event, userId: string) => loadGrowthInsights(userId));
+  ipcMain.handle(ipcChannels.growthGetProfile, async (_event, userId: string) => loadGrowthProfile(userId));
+  ipcMain.handle(ipcChannels.growthConfirmInsight, async (_event, payload: { userId: string; insightId: string }) => {
+    const [insights, profile, queue] = await Promise.all([
+      loadGrowthInsights(payload.userId),
+      loadGrowthProfile(payload.userId),
+      loadRevealQueue(payload.userId),
+    ]);
+    const insight = insights.find((item) => item.id === payload.insightId);
+    if (!insight) {
+      return null;
+    }
+
+    const now = Date.now();
+    await Promise.all([
+      saveGrowthInsights(
+        payload.userId,
+        insights.map((item) =>
+          item.id === payload.insightId ? { ...item, status: "confirmed" as const, updatedAt: now } : item,
+        ),
+      ),
+      saveGrowthProfile(payload.userId, confirmInsightToProfile({ profile, insight, now })),
+      saveRevealQueue(
+        payload.userId,
+        queue.map((item) =>
+          item.insightId === payload.insightId ? { ...item, status: "confirmed" as const, shownAt: now } : item,
+        ),
+      ),
+    ]);
+
+    return getLatestReveal(payload.userId);
+  });
+  ipcMain.handle(ipcChannels.growthDismissReveal, async (_event, payload: { userId: string; candidateId: string }) => {
+    const queue = await loadRevealQueue(payload.userId);
+    await saveRevealQueue(
+      payload.userId,
+      queue.map((item) =>
+        item.id === payload.candidateId ? { ...item, status: "dismissed" as const, shownAt: Date.now() } : item,
+      ),
+    );
+    return getLatestReveal(payload.userId);
+  });
+  ipcMain.handle(ipcChannels.growthRejectInsight, async (_event, payload: { userId: string; insightId: string; feedback?: string }) => {
+    const [insights, queue] = await Promise.all([loadGrowthInsights(payload.userId), loadRevealQueue(payload.userId)]);
+    await Promise.all([
+      saveGrowthInsights(
+        payload.userId,
+        rejectInsight({
+          insights,
+          insightId: payload.insightId,
+          feedback: payload.feedback,
+          now: Date.now(),
+        }),
+      ),
+      saveRevealQueue(
+        payload.userId,
+        queue.map((item) =>
+          item.insightId === payload.insightId ? { ...item, status: "dismissed" as const, shownAt: Date.now() } : item,
+        ),
+      ),
+    ]);
+    return getLatestReveal(payload.userId);
+  });
   ipcMain.handle(ipcChannels.airjellyGetContext, async () => getAirJellyContext());
   ipcMain.handle(ipcChannels.hermesGetStatus, async () => hermesManager.getStatus());
   ipcMain.handle(ipcChannels.imageGenGenerate, async (_event, payload: ImageGenPayload) => generateImage(payload));
@@ -257,6 +366,12 @@ export function unregisterIpcHandlers() {
   ipcMain.removeHandler(ipcChannels.relationshipSetIntimacyForDemo);
   ipcMain.removeHandler(ipcChannels.memorySummaries);
   ipcMain.removeHandler(ipcChannels.memoryHistory);
+  ipcMain.removeHandler(ipcChannels.growthGetLatestReveal);
+  ipcMain.removeHandler(ipcChannels.growthListInsights);
+  ipcMain.removeHandler(ipcChannels.growthGetProfile);
+  ipcMain.removeHandler(ipcChannels.growthConfirmInsight);
+  ipcMain.removeHandler(ipcChannels.growthDismissReveal);
+  ipcMain.removeHandler(ipcChannels.growthRejectInsight);
   ipcMain.removeHandler(ipcChannels.airjellyGetContext);
   ipcMain.removeHandler(ipcChannels.hermesGetStatus);
   ipcMain.removeHandler(ipcChannels.imageGenGenerate);

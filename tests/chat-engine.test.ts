@@ -1,12 +1,30 @@
-import { mkdir, rm } from "node:fs/promises";
+import { access, mkdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as llmModule from "../electron/services/llm";
 import { chat } from "../electron/services/chat-engine";
+import * as distillationModule from "../electron/services/distillation";
 
 const originalCwd = process.cwd();
 let tempDir = "";
+
+async function readJson<T>(filePath: string): Promise<T> {
+  return JSON.parse(await readFile(filePath, "utf8")) as T;
+}
+
+async function waitForFile(filePath: string, retries = 20) {
+  for (let index = 0; index < retries; index += 1) {
+    try {
+      await access(filePath);
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+
+  throw new Error(`Timed out waiting for ${filePath}`);
+}
 
 describe("chat engine", () => {
   beforeEach(async () => {
@@ -50,11 +68,9 @@ describe("chat engine", () => {
       userMessage: "你好",
     });
 
-    expect(callLLMSpy).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(Array),
-      { sessionId: "user-001:char-001" },
-    );
+    expect(callLLMSpy).toHaveBeenCalledWith(expect.any(String), expect.any(Array), {
+      sessionId: "user-001:char-001",
+    });
   });
 
   it("combines burst messages into one agent turn", async () => {
@@ -98,5 +114,39 @@ describe("chat engine", () => {
       ),
     ).rejects.toMatchObject({ name: "AbortError" });
     expect(callLLMSpy).not.toHaveBeenCalled();
+  });
+
+  it("creates growth files after a stable turn", async () => {
+    await chat({
+      characterId: "char-001",
+      userId: "user-001",
+      userMessage: "我想做一个会慢慢理解人的成长伙伴。",
+    });
+
+    const insightsPath = path.join(tempDir, "oc-data", "growth", "user-001", "insights.json");
+    const evidencePath = path.join(tempDir, "oc-data", "growth", "user-001", "evidence.json");
+    await waitForFile(insightsPath);
+    await waitForFile(evidencePath);
+
+    const insights = await readJson<Array<{ title: string }>>(insightsPath);
+    const evidence = await readJson<Array<{ text: string }>>(evidencePath);
+
+    expect(insights[0]?.title).toBe("做一个会慢慢理解人的成长伙伴");
+    expect(evidence.length).toBeGreaterThan(0);
+  });
+
+  it("keeps chat working when growth distillation fails", async () => {
+    vi.spyOn(distillationModule, "distillGrowthTurn").mockImplementation(() => {
+      throw new Error("distill exploded");
+    });
+
+    const result = await chat({
+      characterId: "char-001",
+      userId: "user-001",
+      userMessage: "我想做一个会慢慢理解人的成长伙伴。",
+    });
+
+    expect(result.text.length).toBeGreaterThan(0);
+    expect(result.source).toBe("mock");
   });
 });

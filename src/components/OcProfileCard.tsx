@@ -1,70 +1,102 @@
-import type { CharacterConfig, Relationship } from "../types";
+import type { CharacterConfig, GrowthInsight, GrowthProfile, Relationship, RevealCandidate } from "../types";
 import { OcAvatarLarge } from "./OcAvatar";
-import { IconBolt, IconChat, IconGift } from "./OcWorldIcons";
-import { stageLabel } from "./shared";
+
+type RevealHint = (RevealCandidate & { text?: string; title?: string }) | null;
+
+function countActiveSignals(insights: GrowthInsight[]) {
+  return insights.filter((item) => item.status !== "archived" && item.status !== "rejected").length;
+}
+
+function companionTitle(revealHint: RevealHint) {
+  return revealHint ? "Luma 发现了一点东西" : "Luma 正在学会你";
+}
+
+function companionText(revealHint: RevealHint, profile: GrowthProfile, relationship: Relationship | null) {
+  if (revealHint?.text) {
+    return revealHint.text;
+  }
+
+  if (profile.goals[0]?.text) {
+    return profile.goals[0].text;
+  }
+
+  return relationship?.moodBaseline ?? "第一版不让你管理系统。你只需要说话，OC 会在背后慢慢整理目标、优势、证据和下一步。";
+}
 
 export function OcProfileCard({
   character,
   relationship,
   greeting,
   ttsEnabled,
+  growthInsights,
+  growthProfile,
+  revealHint,
   onTtsToggle,
   onOpenChat,
-  onOpenCreate,
+  onOpenMemory,
 }: {
   character: CharacterConfig | null;
   relationship: Relationship | null;
   greeting: string;
   ttsEnabled: boolean;
+  growthInsights: GrowthInsight[];
+  growthProfile: GrowthProfile;
+  revealHint: RevealHint;
   onTtsToggle: () => void;
   onOpenChat: () => void;
-  onOpenCreate: () => void;
+  onOpenMemory: () => void;
 }) {
-  const title = character?.name?.trim() || "未命名 OC";
-  const personality = character?.personality?.trim() || "还没有被完整写下。";
-  const summary = greeting.trim() || character?.catchphrase?.trim() || "我在这里，等你开口。";
+  const title = character?.name?.trim() || "Luma";
+  const summary = greeting.trim() || character?.catchphrase?.trim() || "你只需要开口，剩下的让我慢慢理解。";
+  const signalCount = countActiveSignals(growthInsights);
 
   return (
-    <div className="oc-profile-card">
-      <div className="oc-profile-card__hero">
-        <OcAvatarLarge size={156} name={title} avatarPath={character?.avatarPath} />
-        <div className="oc-profile-card__meta">
-          <p className="oc-kicker mono">MY OC</p>
-          <h1 className="oc-profile-card__name serif">{title}</h1>
-          <p className="oc-profile-card__summary">{personality}</p>
+    <div className="oc-profile-card oc-invisible-companion">
+      <div className="oc-invisible-companion__titlebar">
+        <span className="oc-kicker mono">quiet growth</span>
+        <span className="oc-badge">{relationship ? "在听" : "初始化中"}</span>
+      </div>
+
+      <div className="oc-invisible-companion__main">
+        <div className="oc-invisible-companion__brand-row">
+          <div className="oc-invisible-companion__brand">
+            <span className="oc-invisible-companion__mark">⌘</span>
+            <span>OC World</span>
+          </div>
+          <span className="oc-badge">{signalCount ? `${signalCount} 个线索` : "正在听"}</span>
         </div>
+
+        <div className="oc-invisible-companion__avatar-wrap">
+          <OcAvatarLarge
+            size={168}
+            name={title}
+            src={character?.avatarPath ? undefined : "file:///Users/pika/ai-pika/oc-world/demos/oc-avatar-pet.png"}
+            avatarPath={character?.avatarPath}
+          />
+        </div>
+
+        <section className="oc-invisible-companion__quiet-panel">
+          <div className="oc-invisible-companion__quiet-head">
+            <h2 className="serif">{companionTitle(revealHint)}</h2>
+            <span>{signalCount ? `${signalCount} 个线索` : "正在听"}</span>
+          </div>
+          <p>{companionText(revealHint, growthProfile, relationship)}</p>
+        </section>
+
+        <div className="oc-invisible-companion__quote">“{summary}”</div>
       </div>
 
-      <div className="oc-profile-card__quote">“{summary}”</div>
-
-      <div className="oc-profile-card__stats">
-        <Stat label="关系阶段" value={stageLabel(relationship?.stage)} />
-        <Stat label="亲密度" value={String(relationship?.intimacy ?? 0)} />
-      </div>
-
-      <div className="oc-profile-card__actions">
+      <div className="oc-invisible-companion__actions">
         <button type="button" className="oc-pill-button is-primary" onClick={onOpenChat}>
-          <IconChat size={14} />
-          去聊天
+          和 Luma 说话
         </button>
-        <button type="button" className="oc-pill-button" onClick={onOpenCreate}>
-          <IconGift size={14} />
-          重新生成
+        <button type="button" className="oc-pill-button" onClick={onOpenMemory}>
+          看看它发现了什么
         </button>
         <button type="button" className={ttsEnabled ? "oc-pill-button is-soft-active" : "oc-pill-button"} onClick={onTtsToggle}>
-          <IconBolt size={14} />
           {ttsEnabled ? "语音已开" : "开启语音"}
         </button>
       </div>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="oc-stat-card">
-      <span className="oc-stat-card__label mono">{label}</span>
-      <span className="oc-stat-card__value">{value}</span>
     </div>
   );
 }

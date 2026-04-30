@@ -62,6 +62,14 @@ contextBridge.exposeInMainWorld("ocWorld", {
     summaries: (userId: string) => ipcRenderer.invoke("memory:summaries", userId),
     history: (userId: string) => ipcRenderer.invoke("memory:history", userId),
   },
+  growth: {
+    getLatestReveal: (userId: string) => ipcRenderer.invoke("growth:get-latest-reveal", userId),
+    listInsights: (userId: string) => ipcRenderer.invoke("growth:list-insights", userId),
+    getProfile: (userId: string) => ipcRenderer.invoke("growth:get-profile", userId),
+    confirmInsight: (payload: { userId: string; insightId: string }) => ipcRenderer.invoke("growth:confirm-insight", payload),
+    dismissReveal: (payload: { userId: string; candidateId: string }) => ipcRenderer.invoke("growth:dismiss-reveal", payload),
+    rejectInsight: (payload: { userId: string; insightId: string; feedback?: string }) => ipcRenderer.invoke("growth:reject-insight", payload),
+  },
   airjelly: {
     getContext: () => ipcRenderer.invoke("airjelly:get-context"),
   },

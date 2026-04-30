@@ -19,6 +19,7 @@ export function OcWorldApp() {
   const [splash, setSplash] = useState<"visible" | "leaving" | "hidden">("visible");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [initialViewResolved, setInitialViewResolved] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
 
   const messages = useMemo(
     () => visibleMessages(chat.history, chat.pendingMessages, chat.isSending, selectedSession),
@@ -34,8 +35,19 @@ export function OcWorldApp() {
     setInitialViewResolved(true);
   }, [chat.character, chat.relationship, initialViewResolved]);
 
+  useEffect(() => {
+    if (memoryOpen) {
+      setView("memory");
+    }
+  }, [memoryOpen]);
+
   const handleViewChange = (nextView: ViewId) => {
     setSettingsOpen(false);
+    if (nextView === "memory") {
+      setMemoryOpen(true);
+      return;
+    }
+    setMemoryOpen(false);
     setView(nextView);
   };
 
@@ -99,13 +111,19 @@ export function OcWorldApp() {
       relationship={chat.relationship}
       greeting={chat.greeting}
       ttsEnabled={chat.ttsEnabled}
+      growthInsights={chat.growthInsights}
+      growthProfile={chat.growthProfile}
+      revealHint={chat.activeReveal}
       onTtsToggle={() => chat.setTtsEnabled(!chat.ttsEnabled)}
-      onOpenChat={() => setView("chat")}
-      onOpenCreate={() => setView("create")}
+      onOpenChat={() => {
+        setView("chat");
+        setMemoryOpen(false);
+      }}
+      onOpenMemory={() => setMemoryOpen(true)}
     />
   );
 
-  const header = <OcWorkspaceHeader current={view} onChange={handleViewChange} onOpenSettings={() => setSettingsOpen(true)} />;
+  const header = <OcWorkspaceHeader current={memoryOpen ? "memory" : view} onChange={handleViewChange} onOpenSettings={() => setSettingsOpen(true)} />;
 
   const content = !initialViewResolved ? (
     <WorkspaceLoading />
@@ -121,7 +139,7 @@ export function OcWorldApp() {
       onBack={() => setSettingsOpen(false)}
     />
   ) : renderView({
-    view,
+    view: memoryOpen ? "chat" : view,
     messages,
     selectedSession,
     chat,
@@ -129,10 +147,15 @@ export function OcWorldApp() {
     onCreateSave: handleCreateSave,
     onCancelCreate: () => setView("oc"),
     canCancelCreate: Boolean(chat.character?.name?.trim()),
-    onOpenChat: () => setView("chat"),
+    onOpenChat: () => {
+      setView("chat");
+      setMemoryOpen(false);
+    },
     onOpenCreate: () => setView("create"),
     onOpenRewind: () => setView("rewind"),
-    onOpenMemory: () => setView("memory"),
+    onOpenMemory: () => setMemoryOpen(true),
+    onCloseMemory: () => setMemoryOpen(false),
+    memoryOpen,
     onNewChat: startBlankChat,
   });
 
@@ -166,6 +189,8 @@ function renderView({
   onOpenCreate,
   onOpenRewind,
   onOpenMemory,
+  onCloseMemory,
+  memoryOpen,
   onNewChat,
 }: {
   view: ViewId;
@@ -180,6 +205,8 @@ function renderView({
   onOpenCreate: () => void;
   onOpenRewind: () => void;
   onOpenMemory: () => void;
+  onCloseMemory: () => void;
+  memoryOpen: boolean;
   onNewChat: () => void;
 }) {
   if (view === "create") {
@@ -202,22 +229,38 @@ function renderView({
 
   if (view === "chat") {
     return (
-      <ChatView
-        character={chat.character}
-        messages={messages}
-        isSending={chat.isSending}
-        selectedSession={selectedSession}
-        ttsEnabled={chat.ttsEnabled}
-        voiceInputState={chat.voiceInputState}
-        voiceTranscript={chat.voiceTranscript}
-        relationship={chat.relationship}
-        ocAvatarPath={chat.character?.avatarPath}
-        onSend={onSend}
-        onInterrupt={chat.interruptActiveTurn}
-        onTtsToggle={() => chat.setTtsEnabled(!chat.ttsEnabled)}
-        onVoiceToggle={chat.toggleVoiceInput}
-        onNewChat={onNewChat}
-      />
+      <>
+        <ChatView
+          character={chat.character}
+          messages={messages}
+          isSending={chat.isSending}
+          selectedSession={selectedSession}
+          ttsEnabled={chat.ttsEnabled}
+          voiceInputState={chat.voiceInputState}
+          voiceTranscript={chat.voiceTranscript}
+          relationship={chat.relationship}
+          ocAvatarPath={chat.character?.avatarPath}
+          revealHint={chat.activeReveal}
+          revealBusy={chat.revealBusy}
+          onSend={onSend}
+          onInterrupt={chat.interruptActiveTurn}
+          onTtsToggle={() => chat.setTtsEnabled(!chat.ttsEnabled)}
+          onVoiceToggle={chat.toggleVoiceInput}
+          onConfirmReveal={chat.confirmReveal}
+          onDismissReveal={chat.dismissReveal}
+          onRejectReveal={chat.rejectReveal}
+          onOpenMemory={onOpenMemory}
+          onNewChat={onNewChat}
+        />
+        <MemoryView
+          relationship={chat.relationship}
+          timeline={chat.timeline}
+          growthProfile={chat.growthProfile}
+          growthInsights={chat.growthInsights}
+          open={memoryOpen}
+          onClose={onCloseMemory}
+        />
+      </>
     );
   }
 
@@ -225,7 +268,16 @@ function renderView({
     return <RewindView timeline={chat.timeline} relationship={chat.relationship} />;
   }
 
-  return <MemoryView relationship={chat.relationship} timeline={chat.timeline} />;
+  return (
+    <MemoryView
+      relationship={chat.relationship}
+      timeline={chat.timeline}
+      growthProfile={chat.growthProfile}
+      growthInsights={chat.growthInsights}
+      open={true}
+      onClose={onCloseMemory}
+    />
+  );
 }
 
 function WorkspaceLoading() {
