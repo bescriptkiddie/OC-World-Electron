@@ -418,35 +418,6 @@
         font-size: 11px;
       }
 
-      .soft-discovery {
-        align-self: stretch;
-        padding: 12px;
-        display: grid;
-        gap: 10px;
-        border: 1px solid rgba(147, 105, 31, 0.24);
-        border-radius: 9px;
-        background: var(--gold-soft);
-      }
-
-      .soft-discovery p {
-        margin: 0;
-        color: #65491c;
-        font-size: 13px;
-        line-height: 1.55;
-      }
-
-      .discovery-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-
-      .discovery-actions .btn {
-        min-height: 32px;
-        background: rgba(251, 252, 248, 0.86);
-        font-size: 12px;
-      }
-
       .system-note {
         align-self: stretch;
         padding: 9px 12px;
@@ -766,7 +737,6 @@
           <div class="head-actions">
             <button class="btn ghost" type="button" id="refreshRuntime">刷新</button>
             <button class="btn ghost" type="button" id="generateAvatar">生成形象</button>
-            <button class="btn blue" type="button" id="runDemo">播放隐形闭环</button>
             <button class="btn ghost" type="button" id="openMemory">探索</button>
           </div>
         </header>
@@ -778,7 +748,7 @@
           <div class="input-row">
             <div class="input-box" id="inputBox">
               <span class="plus">＋</span>
-              <input id="input" placeholder="和 Luma 说点真实发生的事" />
+              <input id="input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="和 Luma 说点真实发生的事" />
               <button class="voice-input-button" type="button" id="voiceInput" aria-label="语音输入" title="语音输入">
                 <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"></path>
@@ -928,6 +898,11 @@
         input.setSelectionRange(input.value.length, input.value.length);
       }
 
+      function clearComposerDraft() {
+        $("input").value = "";
+        setSending(state.isSending);
+      }
+
       function shortTime(timestamp) {
         if (!timestamp) return "刚刚";
         return new Date(timestamp).toLocaleString("zh-CN", {
@@ -995,18 +970,10 @@
         return "我先把这句话记成一个线索，不急着给它命名。等类似的线索多一点，我再帮你看它可能指向什么。";
       }
 
-      function discoveryText() {
-        const revealText = state.activeReveal?.text;
-        return revealText || "我好像开始看见一个线索：你不是想做一个管理人生的仪表盘，而是在做一个会慢慢理解人的成长伙伴。要不要看看我目前发现了什么？";
-      }
-
       function addDiscoveryIfReady() {
-        const text = discoveryText();
-        if ((state.activeReveal || state.signals.length >= 2) && text !== state.lastDiscoveryText) {
-          state.lastDiscoveryText = text;
-          state.messages.push({ id: nextMessageId("discovery"), type: "discovery", text });
+        if (state.activeReveal || state.signals.length >= 2) {
           $("quietTitle").textContent = `${ocName()} 发现了一点东西`;
-          $("quietText").textContent = "它还没有急着变成系统，只是在等待你决定要不要探索。";
+          $("quietText").textContent = "它先留在后台，不插入当前对话。你想看时再点探索。";
         } else {
           $("quietTitle").textContent = `${ocName()} 默默记住了`;
           $("quietText").textContent = "这些线索会先留在后台，不会马上变成指标或任务。";
@@ -1052,17 +1019,6 @@
                 </div>
               `;
             }
-            if (msg.type === "discovery") {
-              return `
-                <div class="soft-discovery">
-                  <p>${esc(msg.text)}</p>
-                  <div class="discovery-actions">
-                    <button class="btn primary" type="button" data-discover="open">看看你发现了什么</button>
-                    <button class="btn" type="button" data-discover="later">先不用展开</button>
-                  </div>
-                </div>
-              `;
-            }
             return `
               <div class="message ${msg.type}">
                 <div class="bubble">${esc(msg.text)}</div>
@@ -1071,16 +1027,6 @@
             `;
           })
           .join("");
-        document.querySelectorAll("[data-discover]").forEach((button) => {
-          button.addEventListener("click", () => {
-            if (button.dataset.discover === "open") openMemory();
-            if (button.dataset.discover === "later") {
-              state.messages.push({ id: nextMessageId("note"), type: "note", text: `${ocName()} 会先继续默默观察，不打断当前对话。` });
-              renderMessages();
-              toast("继续在后台学习");
-            }
-          });
-        });
         $("messages").scrollTop = $("messages").scrollHeight;
       }
 
@@ -1089,10 +1035,10 @@
         document.querySelectorAll("[data-prompt]").forEach((button) => {
           button.addEventListener("click", () => {
             const map = {
-              我今天在想: "我感觉第一版不应该把成长系统都展示出来。",
-              我有点卡住: "我有点卡住，不确定第一版应该验证什么。",
-              你觉得你懂我吗: "你觉得你现在有一点懂我了吗？",
-              我们可以沉淀什么: "如果不展示系统，我们可以先沉淀什么？",
+              我今天在想: "我今天在想：",
+              我有点卡住: "我有点卡住：",
+              你觉得你懂我吗: "你现在怎么看我刚刚说的这些？",
+              我们可以沉淀什么: "这段对话里，有什么值得先记住？",
             };
             $("input").value = map[button.dataset.prompt] || button.dataset.prompt;
             $("input").focus();
@@ -1534,16 +1480,6 @@
         }
       }
 
-      async function runDemo() {
-        $("input").value = "我感觉第一版不应该把成长系统都展示出来。";
-        await sendMessage();
-        await new Promise((resolve) => window.setTimeout(resolve, 300));
-        $("input").value = "你觉得你现在有一点懂我了吗？";
-        await sendMessage();
-        await new Promise((resolve) => window.setTimeout(resolve, 300));
-        openMemory();
-      }
-
       $("send").addEventListener("click", () => void sendMessage());
       $("input").addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
@@ -1560,7 +1496,6 @@
       $("softOpen").addEventListener("click", openMemory);
       $("openMemory").addEventListener("click", openMemory);
       $("closeMemory").addEventListener("click", () => $("memoryDrawer").classList.remove("is-open"));
-      $("runDemo").addEventListener("click", () => void runDemo());
       $("refreshRuntime").addEventListener("click", () => void refreshRuntimeState().then(() => toast("状态已刷新")));
       $("generateAvatar").addEventListener("click", () => void generateAvatar());
       $("voiceInput").addEventListener("click", () => void startVoiceInput().catch((error) => toast(error?.message || "语音输入失败")));
@@ -1573,6 +1508,7 @@
       }
 
       renderPrompts();
+      clearComposerDraft();
       renderMessages();
       renderMemory();
       void refreshRuntimeState({ hydrate: true });
