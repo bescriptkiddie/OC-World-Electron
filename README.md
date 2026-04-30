@@ -28,12 +28,84 @@ OC World 是一个 Electron 桌面应用，打造你的 AI 分身（OC）。不�
 ## 快速开始
 
 ```bash
-# 安装依赖
+git clone https://github.com/bescriptkiddie/OC-World-Electron.git
+cd OC-World-Electron
+
+# 安装主项目依赖
 npm install
 
-# 配置环境变量
+# 准备环境变量
 cp .env.example .env
-# 编辑 .env 填入 API keys
+
+# 启动开发模式
+npm run dev
+```
+
+`npm run dev` 会先执行 `npm run prepare:hermes-source`。如果本地没有 `hermes-agent/`，脚本会自动从 GitHub 下载最新 Hermes Agent 源码到项目根目录。
+
+如果只是想先看 UI 和基础流程，可以在 `.env` 里打开 mock：
+
+```bash
+OC_DEMO_FORCE_MOCK_LLM=1
+OC_DEMO_FORCE_MOCK_AIRJELLY=1
+```
+
+这样即使没有配置大模型、AirJelly、TTS、ASR、图片生成 key，应用也能先跑起来。
+
+## 完整 Hermes Agent 模式
+
+`hermes-agent/` 不提交到本仓库，它是外部运行时依赖。首次 clone 后，源码下载和完整运行时准备分两层：
+
+```bash
+# 只下载 hermes-agent 源码，npm run dev 会自动做这一步
+npm run prepare:hermes-source
+
+# 准备完整 Hermes runtime：Python venv、pip install、Hermes Node 依赖、browser runtime、standalone Hermes
+npm run prepare:hermes-runtime
+```
+
+完整 Hermes runtime 需要：
+
+- Git
+- Node.js 22 或更高版本
+- Python 3.11 或更高版本
+- 可以访问 `https://github.com/NousResearch/hermes-agent.git`
+
+默认下载来源：
+
+```bash
+HERMES_AGENT_REPO=https://github.com/NousResearch/hermes-agent.git
+HERMES_AGENT_REF=main
+```
+
+如果要用自己的 Hermes fork 或固定分支，可以在 `.env` 或 shell 里改这两个变量。
+
+Hermes 启动相关默认配置在 `.env.example` 里：
+
+```bash
+OC_CHAT_PROVIDER=hermes
+HERMES_AUTOSTART=1
+HERMES_BASE_URL=http://127.0.0.1:8642
+HERMES_API_KEY=oc-world-local-key
+API_SERVER_KEY=oc-world-local-key
+```
+
+配置好后运行：
+
+```bash
+npm run dev
+```
+
+Electron 启动时会自动启动 Hermes gateway。如果 Hermes 没启动成功，界面仍然可以打开，聊天会按当前代码走 mock/fallback；此时先检查 `npm run prepare:hermes-runtime` 是否完成、Python 版本是否满足、`.env` 里的模型/API 配置是否有效。
+
+## 常用命令
+
+```bash
+# 下载 hermes-agent 源码
+npm run prepare:hermes-source
+
+# 准备完整 Hermes runtime
+npm run prepare:hermes-runtime
 
 # 开发模式
 npm run dev
@@ -41,23 +113,11 @@ npm run dev
 # 运行测试
 npm run test
 
+# 构建前端/Electron
+npm run build
+
 # 打包
 npm run dist:app
-```
-
-## Hermes Agent 依赖
-
-`hermes-agent/` 是外部运行时依赖，不提交到本仓库。首次启动开发模式或打包前，脚本会自动下载最新 Hermes Agent 源码：
-
-```bash
-npm run prepare:hermes-source
-```
-
-默认来源是 `https://github.com/NousResearch/hermes-agent.git` 的 `main` 分支。需要固定来源或分支时，可以设置：
-
-```bash
-HERMES_AGENT_REPO=https://github.com/NousResearch/hermes-agent.git
-HERMES_AGENT_REF=main
 ```
 
 ## CLI 命令
