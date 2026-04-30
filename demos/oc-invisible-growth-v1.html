@@ -451,7 +451,7 @@
         min-height: 50px;
         padding: 0 14px;
         display: grid;
-        grid-template-columns: auto 1fr;
+        grid-template-columns: auto 1fr auto;
         align-items: center;
         gap: 11px;
         border: 1px solid var(--line);
@@ -462,6 +462,35 @@
       .plus {
         color: var(--muted);
         font-size: 22px;
+      }
+
+      .voice-input-button {
+        width: 32px;
+        height: 32px;
+        display: inline-grid;
+        place-items: center;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+      }
+
+      .voice-input-button:hover {
+        border-color: var(--line);
+        background: rgba(20, 120, 102, 0.06);
+        color: var(--green);
+      }
+
+      .voice-input-button.is-recording {
+        border-color: rgba(181, 78, 63, 0.24);
+        background: rgba(181, 78, 63, 0.1);
+        color: #b54e3f;
+      }
+
+      .voice-input-button:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
       }
 
       input {
@@ -668,8 +697,6 @@
 
         <div class="companion-actions">
           <button class="btn" type="button" id="focusInput">和 Luma 说话</button>
-          <button class="btn" type="button" id="voiceToggle">语音输入</button>
-          <button class="btn" type="button" id="ttsToggle">朗读开启</button>
           <button class="btn blue" type="button" id="softOpen">看看它发现了什么</button>
         </div>
       </aside>
@@ -693,10 +720,17 @@
         <div class="composer">
           <div class="prompts" id="prompts"></div>
           <div class="input-row">
-            <label class="input-box">
+            <div class="input-box">
               <span class="plus">＋</span>
               <input id="input" value="我感觉第一版不应该把成长系统都展示出来。" />
-            </label>
+              <button class="voice-input-button" type="button" id="voiceInput" aria-label="语音输入" title="语音输入">
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                  <path d="M12 19v3"></path>
+                </svg>
+              </button>
+            </div>
             <button class="btn primary" type="button" id="send">发送</button>
           </div>
         </div>
@@ -839,6 +873,7 @@
         state.isSending = isSending;
         $("send").disabled = isSending;
         $("input").disabled = isSending;
+        $("voiceInput").disabled = isSending && !state.isListening;
         $("stateText").textContent = isSending ? "在想" : state.signals.length >= 3 ? "更懂你了" : "在听";
         $("send").textContent = isSending ? "思考中" : "发送";
       }
@@ -854,8 +889,10 @@
         $("hermesText").textContent = hermes;
         $("airjellyText").textContent = airjelly;
         $("voiceStatusText").textContent = speech;
-        $("ttsToggle").textContent = state.ttsEnabled ? "朗读开启" : "朗读关闭";
-        $("voiceToggle").textContent = state.isListening ? "停止录音" : "语音输入";
+        $("voiceInput").classList.toggle("is-recording", state.isListening);
+        $("voiceInput").setAttribute("aria-pressed", state.isListening ? "true" : "false");
+        $("voiceInput").setAttribute("aria-label", state.isListening ? "停止语音输入" : "语音输入");
+        $("voiceInput").setAttribute("title", state.isListening ? "停止语音输入" : "语音输入");
         $("quietTitle").textContent = `${ocName()} 正在学会你`;
       }
 
@@ -1365,12 +1402,7 @@
       $("runDemo").addEventListener("click", () => void runDemo());
       $("refreshRuntime").addEventListener("click", () => void refreshRuntimeState().then(() => toast("状态已刷新")));
       $("generateAvatar").addEventListener("click", () => void generateAvatar());
-      $("ttsToggle").addEventListener("click", () => {
-        state.ttsEnabled = !state.ttsEnabled;
-        if (!state.ttsEnabled) cancelAudio();
-        renderRuntimePanel();
-      });
-      $("voiceToggle").addEventListener("click", () => void startVoiceInput().catch((error) => toast(error?.message || "语音输入失败")));
+      $("voiceInput").addEventListener("click", () => void startVoiceInput().catch((error) => toast(error?.message || "语音输入失败")));
 
       if (runtime?.hermes?.onStatusChanged) {
         runtime.hermes.onStatusChanged((status) => {
