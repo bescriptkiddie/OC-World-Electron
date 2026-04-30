@@ -722,7 +722,7 @@
           <div class="input-row">
             <div class="input-box">
               <span class="plus">＋</span>
-              <input id="input" value="我感觉第一版不应该把成长系统都展示出来。" />
+              <input id="input" placeholder="和 Luma 说点真实发生的事" />
               <button class="voice-input-button" type="button" id="voiceInput" aria-label="语音输入" title="语音输入">
                 <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"></path>
@@ -851,6 +851,12 @@
         $("toast").classList.add("is-visible");
         window.clearTimeout(toast.timer);
         toast.timer = window.setTimeout(() => $("toast").classList.remove("is-visible"), 1500);
+      }
+
+      function focusComposerInput() {
+        const input = $("input");
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
       }
 
       function shortTime(timestamp) {
@@ -1218,8 +1224,10 @@
           toast("语音输入不可用");
           return;
         }
+        focusComposerInput();
         if (state.isListening) {
           await stopVoiceInput();
+          focusComposerInput();
           return;
         }
         cancelAudio();
@@ -1229,6 +1237,7 @@
           detachTranscript = runtime.asr.onTranscript((event) => {
             if (event.sessionId !== sessionId) return;
             $("input").value = event.text;
+            focusComposerInput();
             if (event.isFinal && event.text?.trim()) void sendMessage(event.text.trim());
           });
           detachError = runtime.asr.onError((event) => {
@@ -1328,7 +1337,7 @@
         if (state.isSending || !text) return;
         const fallbackReply = inferReply(text);
         state.messages.push({ type: "user", text, meta: state.relationship?.userName || "你" });
-        $("input").value = "我再补充一点。";
+        $("input").value = "";
         renderMessages();
         toast("已默默记住");
 

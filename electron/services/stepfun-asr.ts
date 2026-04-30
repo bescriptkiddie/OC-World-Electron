@@ -4,6 +4,7 @@ const DEFAULT_ASR_ENDPOINT = "https://api.stepfun.com/v1/audio/asr/sse";
 const DEFAULT_ASR_MODEL = "stepaudio-2.5-asr";
 const DEFAULT_ASR_LANGUAGE = "zh";
 const DEFAULT_ASR_TIMEOUT_MS = 60_000;
+const DEFAULT_ASR_PARTIAL_INTERVAL_MS = 1_600;
 
 interface StepFunAsrSessionOptions {
   onTranscript: (event: AsrTranscriptEvent) => void;
@@ -142,6 +143,7 @@ async function readSseEvents(
   response: Response,
   sessionId: string,
   onTranscript: (event: AsrTranscriptEvent) => void,
+  options: { forceInterim?: boolean } = {},
 ) {
   if (!response.body) {
     throw new Error("StepFun ASR response did not include an SSE body");
@@ -184,7 +186,7 @@ async function readSseEvents(
         onTranscript({
           sessionId,
           text: finalText,
-          isFinal: true,
+          isFinal: !options.forceInterim,
         });
       }
     }
@@ -246,12 +248,17 @@ async function readSseEvents(
     onTranscript({
       sessionId,
       text: accumulatedText.trim(),
-      isFinal: true,
+      isFinal: !options.forceInterim,
     });
   }
 }
 
-async function transcribeAudio(payload: AsrStartPayload, audio: Buffer, options: StepFunAsrSessionOptions) {
+async function transcribeAudio(
+  payload: AsrStartPayload,
+  audio: Buffer,
+  options: StepFunAsrSessionOptions,
+  transcribeOptions: { forceInterim?: boolean } = {},
+) {
   const apiKey = getStepFunApiKey();
 
   if (!apiKey) {
@@ -278,16 +285,32 @@ async function transcribeAudio(payload: AsrStartPayload, audio: Buffer, options:
       throw new Error(`StepFun ASR HTTP ${response.status}${errorText ? `: ${errorText}` : ""}`);
     }
 
-    await readSseEvents(response, payload.sessionId, options.onTranscript);
+    await readSseEvents(response, payload.sessionId, options.onTranscript, transcribeOptions);
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function getPartialIntervalMs() {
+  const interval = getNumberEnv("STEPFUN_ASR_PARTIAL_INTERVAL_MS", DEFAULT_ASR_PARTIAL_INTERVAL_MS);
+
+  if (interval <= 0) {
+    return 0;
+  }
+
+  return Math.max(600, interval);
 }
 
 export class StepFunAsrSession {
   private chunks: Buffer[] = [];
   private isClosing = false;
   private isClosed = false;
+  private partialTimer: ReturnType<typeof setTimeout> | null = null;
+  private partialInFlight = false;
+  private partialQueued = false;
+  private lastPartialByteLength = 0;
+  private lastPartialText = "";
+  private readonly partialIntervalMs = getPartialIntervalMs();
 
   constructor(
     private readonly payload: AsrStartPayload,
@@ -306,6 +329,7 @@ export class StepFunAsrSession {
     }
 
     this.chunks.push(Buffer.from(audio));
+    this.schedulePartialTranscription();
   }
 
   async finish() {
@@ -314,6 +338,7 @@ export class StepFunAsrSession {
     }
 
     this.isClosing = true;
+    this.clearPartialTimer();
 
     try {
       const audio = Buffer.concat(this.chunks);
@@ -340,7 +365,88 @@ export class StepFunAsrSession {
 
     this.isClosed = true;
     this.isClosing = true;
+    this.clearPartialTimer();
     this.chunks = [];
     this.options.onClose();
+  }
+
+  private clearPartialTimer() {
+    if (!this.partialTimer) {
+      return;
+    }
+
+    clearTimeout(this.partialTimer);
+    this.partialTimer = null;
+  }
+
+  private schedulePartialTranscription() {
+    if (this.partialIntervalMs <= 0 || this.partialTimer || this.isClosing || this.isClosed) {
+      return;
+    }
+
+    this.partialTimer = setTimeout(() => {
+      this.partialTimer = null;
+      void this.runPartialTranscription();
+    }, this.partialIntervalMs);
+  }
+
+  private async runPartialTranscription() {
+    if (this.isClosing || this.isClosed) {
+      return;
+    }
+
+    if (this.partialInFlight) {
+      this.partialQueued = true;
+      return;
+    }
+
+    const audio = Buffer.concat(this.chunks);
+
+    if (!audio.byteLength || audio.byteLength === this.lastPartialByteLength) {
+      return;
+    }
+
+    this.partialInFlight = true;
+    this.lastPartialByteLength = audio.byteLength;
+
+    try {
+      await transcribeAudio(
+        this.payload,
+        audio,
+        {
+          ...this.options,
+          onTranscript: (event) => {
+            if (this.isClosing || this.isClosed) {
+              return;
+            }
+
+            const text = event.text.trim();
+
+            if (!text || text === this.lastPartialText) {
+              return;
+            }
+
+            this.lastPartialText = text;
+            this.options.onTranscript({
+              ...event,
+              text,
+              isFinal: false,
+            });
+          },
+        },
+        { forceInterim: true },
+      );
+      lastError = null;
+    } catch (error) {
+      const resolvedError = error instanceof Error ? error : new Error(String(error));
+      lastError = resolvedError.message;
+    } finally {
+      this.partialInFlight = false;
+
+      if (this.partialQueued && !this.isClosing && !this.isClosed) {
+        this.partialQueued = false;
+        this.schedulePartialTranscription();
+      }
+    }
   }
 }
