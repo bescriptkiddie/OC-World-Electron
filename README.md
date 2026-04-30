@@ -52,6 +52,50 @@ OC_DEMO_FORCE_MOCK_AIRJELLY=1
 
 这样即使没有配置大模型、AirJelly、TTS、ASR、图片生成 key，应用也能先跑起来。
 
+## 没有 AirJelly 怎么办
+
+AirJelly 不是必需项。项目里 `@airjelly/sdk` 是 optional dependency，运行时也有兜底逻辑：
+
+1. 如果 `.env` 里设置 `OC_DEMO_FORCE_MOCK_AIRJELLY=1`，直接使用 mock 上下文。
+2. 如果 AirJelly SDK 不存在、未登录、服务不可用或调用失败，会自动 fallback 到 mock 上下文。
+3. mock 数据优先读取 `oc-data/mock/airjelly-context.json`；这个文件也没有时，会使用代码内置默认上下文。
+
+无 AirJelly 模式推荐配置：
+
+```bash
+OC_DEMO_FORCE_MOCK_AIRJELLY=1
+```
+
+需要自定义上下文时，改 `oc-data/mock/airjelly-context.json`：
+
+```json
+{
+  "source": "mock",
+  "events": [
+    {
+      "title": "整理项目方案",
+      "appName": "VS Code",
+      "durationSeconds": 3600,
+      "timestamp": 1777023244485
+    }
+  ],
+  "tasks": [
+    {
+      "title": "跑通 OC World",
+      "progressSummary": "进行中"
+    }
+  ],
+  "appUsage": [
+    {
+      "appName": "VS Code",
+      "totalSeconds": 7200
+    }
+  ]
+}
+```
+
+如果后续要接真实 AirJelly，再把 `OC_DEMO_FORCE_MOCK_AIRJELLY=0`，并确保 `@airjelly/sdk` 安装成功、AirJelly 本地/账号环境可用即可。
+
 ## 完整 Hermes Agent 模式
 
 `hermes-agent/` 不提交到本仓库，它是外部运行时依赖。首次 clone 后，源码下载和完整运行时准备分两层：
