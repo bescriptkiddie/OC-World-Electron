@@ -1,10 +1,15 @@
 .env
 .env.*
 !.env.example
+.DS_Store
 dist/
 dist-electron/
 node_modules/
 tmp-env-test-*/
 release/
-hermes-agent/
+.claude/worktrees/
 .worktrees/
+hermes-agent/
+oc-data/avatars/
+oc-data/memories/oc_conversations/debug-user*_history.json
+oc-data/relationships/debug-user*.json

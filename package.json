@@ -5,8 +5,9 @@
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "vite",
+    "dev": "npm run prepare:hermes-source && vite",
     "build": "tsc --noEmit && vite build",
+    "prepare:hermes-source": "node scripts/ensure-hermes-agent.mjs",
     "prepare:hermes-runtime": "node scripts/prepare-hermes-runtime.mjs",
     "pack:app": "npm run prepare:hermes-runtime && npm run build && electron-builder --dir",
     "dist:app": "npm run prepare:hermes-runtime && npm run build && electron-builder",

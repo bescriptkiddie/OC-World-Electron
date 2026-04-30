@@ -45,6 +45,21 @@ npm run test
 npm run dist:app
 ```
 
+## Hermes Agent 依赖
+
+`hermes-agent/` 是外部运行时依赖，不提交到本仓库。首次启动开发模式或打包前，脚本会自动下载最新 Hermes Agent 源码：
+
+```bash
+npm run prepare:hermes-source
+```
+
+默认来源是 `https://github.com/NousResearch/hermes-agent.git` 的 `main` 分支。需要固定来源或分支时，可以设置：
+
+```bash
+HERMES_AGENT_REPO=https://github.com/NousResearch/hermes-agent.git
+HERMES_AGENT_REF=main
+```
+
 ## 项目结构
 
 ```
@@ -71,10 +86,15 @@ src/
 └── lib/                 # 工具函数
 
 oc-data/                 # 本地数据存储
-hermes-agent/            # Hermes Agent（子模块）
 tests/                   # 测试
 scripts/                 # 脚本工具
 ```
+
+## 对外接入文档
+
+后端能力当前通过 Electron preload 暴露给 renderer，不是传统 HTTP REST API。给外部前端或 Agent 接入时，先看：
+
+- `docs/backend-interface.md`
 
 ## 脚本命令
 

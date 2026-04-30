@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { ensureHermesAgentSource } from "./hermes-agent-source.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -155,6 +156,8 @@ function bundleAgentBrowserRuntime() {
 }
 
 function main() {
+  ensureHermesAgentSource();
+
   if (!fs.existsSync(path.join(hermesRoot, "pyproject.toml"))) {
     throw new Error(`Hermes source not found at ${hermesRoot}`);
   }
