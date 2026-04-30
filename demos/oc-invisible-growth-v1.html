@@ -353,6 +353,10 @@
         align-self: flex-start;
       }
 
+      .message.typing {
+        align-self: flex-start;
+      }
+
       .bubble {
         padding: 13px 15px;
         border: 1px solid var(--line);
@@ -366,6 +370,47 @@
         border-color: rgba(20, 120, 102, 0.28);
         background: var(--green);
         color: white;
+      }
+
+      .message.typing .bubble {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--muted);
+      }
+
+      .typing-dots {
+        display: inline-flex;
+        gap: 3px;
+      }
+
+      .typing-dots i {
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: currentColor;
+        animation: typingPulse 900ms ease-in-out infinite;
+      }
+
+      .typing-dots i:nth-child(2) {
+        animation-delay: 120ms;
+      }
+
+      .typing-dots i:nth-child(3) {
+        animation-delay: 240ms;
+      }
+
+      @keyframes typingPulse {
+        0%,
+        80%,
+        100% {
+          opacity: 0.35;
+          transform: translateY(0);
+        }
+        40% {
+          opacity: 1;
+          transform: translateY(-2px);
+        }
       }
 
       .meta {
@@ -459,6 +504,11 @@
         background: var(--paper);
       }
 
+      .input-box.is-recording {
+        border-color: rgba(181, 78, 63, 0.34);
+        box-shadow: 0 0 0 3px rgba(181, 78, 63, 0.08);
+      }
+
       .plus {
         color: var(--muted);
         font-size: 22px;
@@ -499,6 +549,12 @@
         outline: 0;
         background: transparent;
         color: var(--ink);
+      }
+
+      .composer-status {
+        min-height: 16px;
+        color: var(--faint);
+        font-size: 11px;
       }
 
       .memory-drawer {
@@ -720,7 +776,7 @@
         <div class="composer">
           <div class="prompts" id="prompts"></div>
           <div class="input-row">
-            <div class="input-box">
+            <div class="input-box" id="inputBox">
               <span class="plus">＋</span>
               <input id="input" placeholder="和 Luma 说点真实发生的事" />
               <button class="voice-input-button" type="button" id="voiceInput" aria-label="语音输入" title="语音输入">
@@ -733,6 +789,7 @@
             </div>
             <button class="btn primary" type="button" id="send">发送</button>
           </div>
+          <div class="composer-status" id="composerStatus">可以直接打字，也可以点麦克风说话。</div>
         </div>
       </section>
     </main>
@@ -769,6 +826,7 @@
       let voiceProcessor = null;
       let detachTranscript = null;
       let detachError = null;
+      let messageIdSeq = 0;
 
       const stageLabel = {
         stranger: "陌生",
@@ -817,6 +875,8 @@
       const state = {
         isSending: false,
         isListening: false,
+        queuedMessages: [],
+        lastDiscoveryText: "",
         ttsEnabled: true,
         unlocked: false,
         signals: [],
@@ -846,11 +906,20 @@
         return state.character?.name?.trim() || "Luma";
       }
 
+      function nextMessageId(prefix = "msg") {
+        messageIdSeq += 1;
+        return `${prefix}-${Date.now()}-${messageIdSeq}`;
+      }
+
       function toast(text) {
         $("toast").textContent = text;
         $("toast").classList.add("is-visible");
         window.clearTimeout(toast.timer);
         toast.timer = window.setTimeout(() => $("toast").classList.remove("is-visible"), 1500);
+      }
+
+      function setComposerStatus(text) {
+        $("composerStatus").textContent = text;
       }
 
       function focusComposerInput() {
@@ -877,11 +946,11 @@
 
       function setSending(isSending) {
         state.isSending = isSending;
-        $("send").disabled = isSending;
-        $("input").disabled = isSending;
+        $("send").disabled = false;
+        $("input").disabled = false;
         $("voiceInput").disabled = isSending && !state.isListening;
         $("stateText").textContent = isSending ? "在想" : state.signals.length >= 3 ? "更懂你了" : "在听";
-        $("send").textContent = isSending ? "思考中" : "发送";
+        $("send").textContent = isSending && $("input").value.trim() ? "排队" : "发送";
       }
 
       function renderRuntimePanel() {
@@ -896,6 +965,7 @@
         $("airjellyText").textContent = airjelly;
         $("voiceStatusText").textContent = speech;
         $("voiceInput").classList.toggle("is-recording", state.isListening);
+        $("inputBox").classList.toggle("is-recording", state.isListening);
         $("voiceInput").setAttribute("aria-pressed", state.isListening ? "true" : "false");
         $("voiceInput").setAttribute("aria-label", state.isListening ? "停止语音输入" : "语音输入");
         $("voiceInput").setAttribute("title", state.isListening ? "停止语音输入" : "语音输入");
@@ -931,8 +1001,10 @@
       }
 
       function addDiscoveryIfReady() {
-        if (state.activeReveal || state.signals.length >= 2) {
-          state.messages.push({ type: "discovery", text: discoveryText() });
+        const text = discoveryText();
+        if ((state.activeReveal || state.signals.length >= 2) && text !== state.lastDiscoveryText) {
+          state.lastDiscoveryText = text;
+          state.messages.push({ id: nextMessageId("discovery"), type: "discovery", text });
           $("quietTitle").textContent = `${ocName()} 发现了一点东西`;
           $("quietText").textContent = "它还没有急着变成系统，只是在等待你决定要不要探索。";
         } else {
@@ -944,11 +1016,27 @@
       function hydrateMessagesFromHistory() {
         if (!state.history.length) return;
         const recent = state.history.slice(-3);
-        state.messages = [{ type: "time", text: shortTime(recent[0].timestamp) }];
+        state.messages = [{ id: nextMessageId("time"), type: "time", text: shortTime(recent[0].timestamp) }];
         recent.forEach((entry) => {
-          state.messages.push({ type: "user", text: entry.userMessage, meta: state.relationship?.userName || "你" });
-          state.messages.push({ type: "oc", text: entry.ocResponse, meta: `${ocName()} · 历史记忆` });
+          state.messages.push({ id: nextMessageId("user"), type: "user", text: entry.userMessage, meta: state.relationship?.userName || "你" });
+          state.messages.push({ id: nextMessageId("oc"), type: "oc", text: entry.ocResponse, meta: `${ocName()} · 历史记忆` });
         });
+      }
+
+      function pushTypingMessage(text = `${ocName()} 正在组织回复`) {
+        const id = nextMessageId("typing");
+        state.messages.push({ id, type: "typing", text, meta: "正在回复" });
+        renderMessages();
+        return id;
+      }
+
+      function replaceTypingMessage(id, message) {
+        const index = state.messages.findIndex((item) => item.id === id);
+        if (index >= 0) {
+          state.messages.splice(index, 1, message);
+        } else {
+          state.messages.push(message);
+        }
       }
 
       function renderMessages() {
@@ -956,6 +1044,14 @@
           .map((msg) => {
             if (msg.type === "time") return `<div class="time-chip">${esc(msg.text)}</div>`;
             if (msg.type === "note") return `<div class="system-note">${esc(msg.text)}</div>`;
+            if (msg.type === "typing") {
+              return `
+                <div class="message typing">
+                  <div class="bubble"><span>${esc(msg.text)}</span><span class="typing-dots"><i></i><i></i><i></i></span></div>
+                  <div class="meta">${esc(msg.meta)}</div>
+                </div>
+              `;
+            }
             if (msg.type === "discovery") {
               return `
                 <div class="soft-discovery">
@@ -979,7 +1075,7 @@
           button.addEventListener("click", () => {
             if (button.dataset.discover === "open") openMemory();
             if (button.dataset.discover === "later") {
-              state.messages.push({ type: "note", text: `${ocName()} 会先继续默默观察，不打断当前对话。` });
+              state.messages.push({ id: nextMessageId("note"), type: "note", text: `${ocName()} 会先继续默默观察，不打断当前对话。` });
               renderMessages();
               toast("继续在后台学习");
             }
@@ -1217,6 +1313,7 @@
         detachError = null;
         state.isListening = false;
         renderRuntimePanel();
+        setComposerStatus("语音已停止，可以发送或继续修改。");
       }
 
       async function startVoiceInput() {
@@ -1238,7 +1335,8 @@
             if (event.sessionId !== sessionId) return;
             $("input").value = event.text;
             focusComposerInput();
-            if (event.isFinal && event.text?.trim()) void sendMessage(event.text.trim());
+            setSending(state.isSending);
+            setComposerStatus(event.isFinal ? "识别完成，可以直接发送或继续修改。" : "正在把语音转成文字...");
           });
           detachError = runtime.asr.onError((event) => {
             if (event.sessionId === sessionId) toast(event.message || "语音识别失败");
@@ -1261,6 +1359,7 @@
           voiceProcessor.connect(audioContext.destination);
           state.isListening = true;
           renderRuntimePanel();
+          setComposerStatus("正在听你说，点麦克风结束录音。");
           toast("开始听你说");
         } catch (error) {
           await stopVoiceInput();
@@ -1333,15 +1432,59 @@
         renderMemory();
       }
 
-      async function sendMessage(text = $("input").value.trim()) {
-        if (state.isSending || !text) return;
-        const fallbackReply = inferReply(text);
-        state.messages.push({ type: "user", text, meta: state.relationship?.userName || "你" });
+      function enqueueMessage(text) {
+        const messageId = nextMessageId("queued-user");
+        state.messages.push({ id: messageId, type: "user", text, meta: `${state.relationship?.userName || "你"} · 排队中` });
+        state.queuedMessages.push({ id: messageId, text });
         $("input").value = "";
+        setSending(true);
         renderMessages();
-        toast("已默默记住");
+        focusComposerInput();
+        setComposerStatus(`已排队 ${state.queuedMessages.length} 条，当前回复结束后继续。`);
+      }
+
+      function updateQueuedMessageMeta(id) {
+        const message = state.messages.find((item) => item.id === id);
+        if (message) {
+          message.meta = state.relationship?.userName || "你";
+        }
+      }
+
+      async function processNextQueuedMessage() {
+        const next = state.queuedMessages.shift();
+
+        if (!next) {
+          setComposerStatus("可以继续输入下一句。");
+          focusComposerInput();
+          return;
+        }
+
+        updateQueuedMessageMeta(next.id);
+        renderMessages();
+        await sendMessage(next.text, { alreadyRendered: true });
+      }
+
+      async function sendMessage(text = $("input").value.trim(), options = {}) {
+        if (!text) {
+          focusComposerInput();
+          return;
+        }
+        if (state.isSending) {
+          if (!options.alreadyRendered) enqueueMessage(text);
+          return;
+        }
+        const alreadyRendered = Boolean(options.alreadyRendered);
+        const fallbackReply = inferReply(text);
+        if (!alreadyRendered) {
+          state.messages.push({ id: nextMessageId("user"), type: "user", text, meta: state.relationship?.userName || "你" });
+          $("input").value = "";
+        }
+        renderMessages();
+        focusComposerInput();
+        setComposerStatus("已发送，Luma 正在回复。你可以继续输入下一句。");
 
         setSending(true);
+        const typingId = pushTypingMessage();
 
         let reply = fallbackReply;
         let usedRemote = false;
@@ -1361,12 +1504,13 @@
           setSending(false);
         }
 
-        state.messages.push({ type: "oc", text: reply, meta: usedRemote ? `${ocName()} · MiMo 驱动` : `${ocName()} · 本地演示` });
+        replaceTypingMessage(typingId, { id: nextMessageId("oc"), type: "oc", text: reply, meta: usedRemote ? `${ocName()} · MiMo 驱动` : `${ocName()} · 本地演示` });
         await refreshRuntimeState();
         addDiscoveryIfReady();
         renderRuntimePanel();
         renderMessages();
         void speakText(reply);
+        await processNextQueuedMessage();
       }
 
       async function generateAvatar() {
@@ -1402,9 +1546,17 @@
 
       $("send").addEventListener("click", () => void sendMessage());
       $("input").addEventListener("keydown", (event) => {
-        if (event.key === "Enter") void sendMessage();
+        if (event.key === "Enter") {
+          event.preventDefault();
+          void sendMessage();
+        }
       });
-      $("focusInput").addEventListener("click", () => $("input").focus());
+      $("input").addEventListener("input", () => {
+        if (activeAudio) cancelAudio();
+        setSending(state.isSending);
+        if (!state.isSending && !state.isListening) setComposerStatus("正在输入，可以直接发送。");
+      });
+      $("focusInput").addEventListener("click", focusComposerInput);
       $("softOpen").addEventListener("click", openMemory);
       $("openMemory").addEventListener("click", openMemory);
       $("closeMemory").addEventListener("click", () => $("memoryDrawer").classList.remove("is-open"));
