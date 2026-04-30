@@ -274,6 +274,11 @@
         background: #ffffff;
       }
 
+      .btn:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
       .btn.primary {
         border-color: rgba(20, 120, 102, 0.28);
         background: var(--green);
@@ -519,6 +524,68 @@
         font-weight: 800;
       }
 
+      .runtime-panel {
+        padding: 12px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: rgba(251, 252, 248, 0.74);
+      }
+
+      .runtime-item {
+        min-width: 0;
+        display: grid;
+        gap: 3px;
+      }
+
+      .runtime-item span,
+      .drawer-section-title {
+        color: var(--faint);
+        font-size: 11px;
+        text-transform: uppercase;
+      }
+
+      .runtime-item b {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 12px;
+      }
+
+      .drawer-section {
+        display: grid;
+        gap: 10px;
+      }
+
+      .drawer-section + .drawer-section {
+        padding-top: 4px;
+      }
+
+      .drawer-section-title {
+        padding: 0 2px;
+      }
+
+      .drawer-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .drawer-actions .btn {
+        min-height: 30px;
+        font-size: 12px;
+      }
+
+      .compact-list {
+        margin: 0;
+        padding-left: 16px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.55;
+      }
+
       .toast {
         position: fixed;
         left: 50%;
@@ -590,10 +657,19 @@
             </div>
             <p id="quietText">第一版不让你管理系统。你只需要说话，OC 会在背后慢慢整理目标、优势、证据和下一步。</p>
           </section>
+
+          <section class="runtime-panel">
+            <div class="runtime-item"><span>关系</span><b id="relationshipText">读取中</b></div>
+            <div class="runtime-item"><span>Hermes</span><b id="hermesText">启动中</b></div>
+            <div class="runtime-item"><span>上下文</span><b id="airjellyText">读取中</b></div>
+            <div class="runtime-item"><span>语音</span><b id="voiceStatusText">读取中</b></div>
+          </section>
         </div>
 
         <div class="companion-actions">
           <button class="btn" type="button" id="focusInput">和 Luma 说话</button>
+          <button class="btn" type="button" id="voiceToggle">语音输入</button>
+          <button class="btn" type="button" id="ttsToggle">朗读开启</button>
           <button class="btn blue" type="button" id="softOpen">看看它发现了什么</button>
         </div>
       </aside>
@@ -605,6 +681,8 @@
             <p>一开始不展示人生系统。OC 先陪伴、记住、理解，再等待你探索。</p>
           </div>
           <div class="head-actions">
+            <button class="btn ghost" type="button" id="refreshRuntime">刷新</button>
+            <button class="btn ghost" type="button" id="generateAvatar">生成形象</button>
             <button class="btn blue" type="button" id="runDemo">播放隐形闭环</button>
             <button class="btn ghost" type="button" id="openMemory">探索</button>
           </div>
@@ -641,17 +719,85 @@
     <script>
       const $ = (id) => document.getElementById(id);
       const esc = (text) =>
-        String(text).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[m]);
+        String(text ?? "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[m]);
 
       const prompts = ["我今天在想", "我有点卡住", "你觉得你懂我吗", "我们可以沉淀什么"];
       const runtime = window.ocWorld;
       const defaultUserId = "user-001";
       const defaultCharacterId = "char-001";
+      const targetSampleRate = 16000;
+
+      let activeAudio = null;
+      let voiceSessionId = null;
+      let voiceStream = null;
+      let audioContext = null;
+      let voiceSource = null;
+      let voiceProcessor = null;
+      let detachTranscript = null;
+      let detachError = null;
+
+      const stageLabel = {
+        stranger: "陌生",
+        acquaintance: "相识",
+        friend: "朋友",
+        close_friend: "亲密",
+        soulmate: "灵魂伴侣",
+      };
+
+      const insightLabel = {
+        goal: "目标",
+        strength: "优势",
+        evidence: "证据",
+        plan: "计划",
+        preference: "偏好",
+        open_question: "问题",
+      };
+
+      const fallbackMemory = {
+        target: {
+          title: "可能的长期目标",
+          text: "你在找的不是一个工具，而是一种人和 AI 长期共同成长的关系。",
+          status: "等待更多证据",
+          tag: "目标图谱",
+        },
+        strength: {
+          title: "反复出现的优势",
+          text: "你很擅长从“不对劲的感觉”里提出更准确的产品定义。",
+          status: "已出现 3 次",
+          tag: "优势画像",
+        },
+        evidence: {
+          title: "最近的成长证据",
+          text: "你连续校准了三个方向：不是任务代理、不是桌宠、不是把系统全展示出来。",
+          status: "默默记录",
+          tag: "成长证据",
+        },
+        plan: {
+          title: "下一步规划",
+          text: "先验证一个最小动作：用户是否愿意每天和 OC 说一件真实经历。",
+          status: "适合现在",
+          tag: "规划建议",
+        },
+      };
 
       const state = {
         isSending: false,
+        isListening: false,
+        ttsEnabled: true,
         unlocked: false,
         signals: [],
+        character: null,
+        relationship: null,
+        history: [],
+        timeline: [],
+        summaries: [],
+        activeReveal: null,
+        growthInsights: [],
+        growthProfile: null,
+        airjelly: null,
+        hermesStatus: null,
+        ttsStatus: null,
+        asrStatus: null,
         messages: [
           { type: "time", text: "今天 23:08" },
           {
@@ -660,33 +806,11 @@
             meta: "Luma · 成长伙伴",
           },
         ],
-        memory: {
-          target: {
-            title: "可能的长期目标",
-            text: "你在找的不是一个工具，而是一种人和 AI 长期共同成长的关系。",
-            status: "等待更多证据",
-            tag: "目标图谱",
-          },
-          strength: {
-            title: "反复出现的优势",
-            text: "你很擅长从“不对劲的感觉”里提出更准确的产品定义。",
-            status: "已出现 3 次",
-            tag: "优势画像",
-          },
-          evidence: {
-            title: "最近的成长证据",
-            text: "你连续校准了三个方向：不是任务代理、不是桌宠、不是把系统全展示出来。",
-            status: "默默记录",
-            tag: "成长证据",
-          },
-          plan: {
-            title: "下一步规划",
-            text: "先验证一个最小动作：用户是否愿意每天和 OC 说一件真实经历。",
-            status: "适合现在",
-            tag: "规划建议",
-          },
-        },
       };
+
+      function ocName() {
+        return state.character?.name?.trim() || "Luma";
+      }
 
       function toast(text) {
         $("toast").textContent = text;
@@ -695,10 +819,20 @@
         toast.timer = window.setTimeout(() => $("toast").classList.remove("is-visible"), 1500);
       }
 
+      function shortTime(timestamp) {
+        if (!timestamp) return "刚刚";
+        return new Date(timestamp).toLocaleString("zh-CN", {
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+
       function remember(signal) {
         if (!state.signals.includes(signal)) state.signals.push(signal);
         $("quietCount").textContent = `${state.signals.length} 个线索`;
-        $("stateText").textContent = state.signals.length >= 3 ? "更懂你了" : "在听";
+        renderRuntimePanel();
       }
 
       function setSending(isSending) {
@@ -707,6 +841,22 @@
         $("input").disabled = isSending;
         $("stateText").textContent = isSending ? "在想" : state.signals.length >= 3 ? "更懂你了" : "在听";
         $("send").textContent = isSending ? "思考中" : "发送";
+      }
+
+      function renderRuntimePanel() {
+        const relationship = state.relationship;
+        const intimacy = relationship ? `${relationship.intimacy} · ${stageLabel[relationship.stage] || relationship.stage}` : "未建立";
+        const hermes = state.hermesStatus?.state ? `${state.hermesStatus.state}${state.hermesStatus.pid ? ` #${state.hermesStatus.pid}` : ""}` : "未知";
+        const airjelly = state.airjelly ? `${state.airjelly.source} · ${state.airjelly.events?.length || 0} 事件` : "未读取";
+        const speech = `${state.ttsStatus?.provider || "tts"} / ${state.asrStatus?.configured ? "asr ready" : "asr off"}`;
+
+        $("relationshipText").textContent = intimacy;
+        $("hermesText").textContent = hermes;
+        $("airjellyText").textContent = airjelly;
+        $("voiceStatusText").textContent = speech;
+        $("ttsToggle").textContent = state.ttsEnabled ? "朗读开启" : "朗读关闭";
+        $("voiceToggle").textContent = state.isListening ? "停止录音" : "语音输入";
+        $("quietTitle").textContent = `${ocName()} 正在学会你`;
       }
 
       function inferReply(text) {
@@ -733,18 +883,29 @@
       }
 
       function discoveryText() {
-        return "我好像开始看见一个线索：你不是想做一个管理人生的仪表盘，而是在做一个会慢慢理解人的成长伙伴。要不要看看我目前发现了什么？";
+        const revealText = state.activeReveal?.text;
+        return revealText || "我好像开始看见一个线索：你不是想做一个管理人生的仪表盘，而是在做一个会慢慢理解人的成长伙伴。要不要看看我目前发现了什么？";
       }
 
       function addDiscoveryIfReady() {
-        if (state.signals.length >= 2) {
+        if (state.activeReveal || state.signals.length >= 2) {
           state.messages.push({ type: "discovery", text: discoveryText() });
-          $("quietTitle").textContent = "Luma 发现了一点东西";
+          $("quietTitle").textContent = `${ocName()} 发现了一点东西`;
           $("quietText").textContent = "它还没有急着变成系统，只是在等待你决定要不要探索。";
         } else {
-          $("quietTitle").textContent = "Luma 默默记住了";
+          $("quietTitle").textContent = `${ocName()} 默默记住了`;
           $("quietText").textContent = "这些线索会先留在后台，不会马上变成指标或任务。";
         }
+      }
+
+      function hydrateMessagesFromHistory() {
+        if (!state.history.length) return;
+        const recent = state.history.slice(-3);
+        state.messages = [{ type: "time", text: shortTime(recent[0].timestamp) }];
+        recent.forEach((entry) => {
+          state.messages.push({ type: "user", text: entry.userMessage, meta: state.relationship?.userName || "你" });
+          state.messages.push({ type: "oc", text: entry.ocResponse, meta: `${ocName()} · 历史记忆` });
+        });
       }
 
       function renderMessages() {
@@ -775,7 +936,7 @@
           button.addEventListener("click", () => {
             if (button.dataset.discover === "open") openMemory();
             if (button.dataset.discover === "later") {
-              state.messages.push({ type: "note", text: "Luma 会先继续默默观察，不打断当前对话。" });
+              state.messages.push({ type: "note", text: `${ocName()} 会先继续默默观察，不打断当前对话。` });
               renderMessages();
               toast("继续在后台学习");
             }
@@ -800,27 +961,132 @@
         });
       }
 
-      function renderMemory() {
+      function drawerCard(title, text, tag, footer = "可继续校准", actions = "") {
+        return `
+          <section class="drawer-card">
+            <div class="drawer-card-head"><b>${esc(title)}</b><span class="signal-tag">${esc(tag)}</span></div>
+            <p>${esc(text)}</p>
+            ${actions}
+            <div class="signal-row"><span>${esc(footer)}</span><span>${esc(shortTime(Date.now()))}</span></div>
+          </section>
+        `;
+      }
+
+      function renderProfileSection() {
+        const profile = state.growthProfile;
+        if (!profile) return "";
+        const groups = [
+          ["长期目标", profile.goals],
+          ["优势画像", profile.strengths],
+          ["偏好", profile.preferences],
+          ["开放问题", profile.openQuestions],
+        ];
+        const cards = groups
+          .flatMap(([label, items]) => (items || []).slice(0, 2).map((item) => drawerCard(item.title, item.text, label, "已确认")))
+          .join("");
+        return cards ? `<div class="drawer-section"><div class="drawer-section-title">Growth Profile</div>${cards}</div>` : "";
+      }
+
+      function renderInsightSection() {
+        const reveal = state.activeReveal;
+        const revealCard = reveal?.text
+          ? drawerCard(
+              reveal.title || "它想让你看见一个新线索",
+              reveal.text,
+              "待确认",
+              reveal.reason || "等待你的判断",
+              `<div class="drawer-actions">
+                <button class="btn primary" data-reveal="confirm" data-insight="${esc(reveal.insightId || "")}">确认</button>
+                <button class="btn" data-reveal="reject" data-insight="${esc(reveal.insightId || "")}">不对</button>
+                <button class="btn" data-reveal="dismiss" data-candidate="${esc(reveal.id || "")}">稍后</button>
+              </div>`,
+            )
+          : "";
+        const insightCards = (state.growthInsights || [])
+          .slice(0, 5)
+          .map((item) => drawerCard(item.title, item.text, insightLabel[item.type] || item.type, `${Math.round((item.confidence || 0) * 100)}% · ${item.status}`))
+          .join("");
+        return revealCard || insightCards
+          ? `<div class="drawer-section"><div class="drawer-section-title">Latent Insights</div>${revealCard}${insightCards}</div>`
+          : "";
+      }
+
+      function renderTimelineSection() {
+        const timeline = state.timeline || [];
+        if (!timeline.length) return "";
+        const items = timeline
+          .slice(-5)
+          .reverse()
+          .map((item) => `<li>${esc(item.date)} · ${esc(item.event)} · 亲密度 ${esc(item.intimacyAfter ?? item.impact)}</li>`)
+          .join("");
+        return `<div class="drawer-section"><div class="drawer-section-title">Timeline</div><section class="drawer-card"><ul class="compact-list">${items}</ul></section></div>`;
+      }
+
+      function renderContextSection() {
+        const airjelly = state.airjelly;
+        const summaries = state.summaries || [];
+        const contextBits = [];
+        if (airjelly?.tasks?.length) contextBits.push(...airjelly.tasks.slice(0, 3).map((task) => `任务：${task.title} · ${task.progressSummary}`));
+        if (airjelly?.events?.length) contextBits.push(...airjelly.events.slice(0, 3).map((event) => `事件：${event.title} · ${event.appName}`));
+        if (summaries.length) contextBits.push(...summaries.slice(0, 2).map((summary) => `记忆：${summary.period} · ${summary.topics.join(" / ")}`));
+        if (!contextBits.length) return "";
+        return `<div class="drawer-section"><div class="drawer-section-title">Context</div><section class="drawer-card"><ul class="compact-list">${contextBits.map((item) => `<li>${esc(item)}</li>`).join("")}</ul></section></div>`;
+      }
+
+      function renderFallbackSignalSection() {
         const keys = state.signals.length ? state.signals : [];
-        $("drawerBody").innerHTML = keys.length
-          ? keys
-              .map((key) => {
-                const item = state.memory[key];
-                return `
-                  <section class="drawer-card">
-                    <div class="drawer-card-head"><b>${esc(item.title)}</b><span class="signal-tag">${esc(item.tag)}</span></div>
-                    <p>${esc(item.text)}</p>
-                    <div class="signal-row"><span>${esc(item.status)}</span><span>可继续校准</span></div>
-                  </section>
-                `;
-              })
-              .join("")
-          : `
+        if (!keys.length) {
+          return `
             <section class="empty-signal">
               <h3>还没有足够线索</h3>
               <p>OC 不会太早给你贴标签。先聊几次，让目标和优势自然浮现。</p>
             </section>
           `;
+        }
+        return `<div class="drawer-section"><div class="drawer-section-title">Session Signals</div>${keys
+          .map((key) => {
+            const item = fallbackMemory[key];
+            return item ? drawerCard(item.title, item.text, item.tag, item.status) : "";
+          })
+          .join("")}</div>`;
+      }
+
+      function bindDrawerActions() {
+        document.querySelectorAll("[data-reveal]").forEach((button) => {
+          button.addEventListener("click", async () => {
+            if (!runtime?.growth) return;
+            button.disabled = true;
+            try {
+              if (button.dataset.reveal === "confirm" && button.dataset.insight) {
+                await runtime.growth.confirmInsight({ userId: defaultUserId, insightId: button.dataset.insight });
+                toast("已确认进画像");
+              }
+              if (button.dataset.reveal === "reject" && button.dataset.insight) {
+                await runtime.growth.rejectInsight({ userId: defaultUserId, insightId: button.dataset.insight, feedback: "这个理解不对" });
+                toast("已退回校准");
+              }
+              if (button.dataset.reveal === "dismiss" && button.dataset.candidate) {
+                await runtime.growth.dismissReveal({ userId: defaultUserId, candidateId: button.dataset.candidate });
+                toast("稍后再看");
+              }
+              await refreshRuntimeState();
+            } finally {
+              button.disabled = false;
+            }
+          });
+        });
+      }
+
+      function renderMemory() {
+        const sections = [
+          renderInsightSection(),
+          renderProfileSection(),
+          renderTimelineSection(),
+          renderContextSection(),
+          renderFallbackSignalSection(),
+        ].filter(Boolean);
+        $("drawerBody").innerHTML = sections.join("");
+        bindDrawerActions();
       }
 
       function openMemory() {
@@ -830,26 +1096,201 @@
         toast("你探索到了后台线索");
       }
 
-      async function callOcWorldChat(text) {
-        if (!runtime?.chat?.sendMessage) {
-          return null;
-        }
+      function cancelAudio() {
+        if (!activeAudio) return;
+        activeAudio.pause();
+        activeAudio.removeAttribute("src");
+        activeAudio.load();
+        activeAudio = null;
+      }
 
-        const response = await runtime.chat.sendMessage({
+      async function speakText(text) {
+        if (!state.ttsEnabled || !text?.trim() || !runtime?.tts?.synthesize) return;
+        try {
+          cancelAudio();
+          const result = await runtime.tts.synthesize({ text, userId: defaultUserId, interrupt: true });
+          const audio = new Audio(`data:${result.mimeType};base64,${result.audioBase64}`);
+          activeAudio = audio;
+          audio.onended = () => {
+            if (activeAudio === audio) activeAudio = null;
+          };
+          await audio.play();
+        } catch {
+          toast("朗读暂时不可用");
+        }
+      }
+
+      function getAudioContext() {
+        const Ctor = window.AudioContext || window.webkitAudioContext;
+        return Ctor ? new Ctor() : null;
+      }
+
+      function resampleTo16k(input, sourceSampleRate) {
+        if (sourceSampleRate === targetSampleRate) return input;
+        const ratio = sourceSampleRate / targetSampleRate;
+        const outputLength = Math.floor(input.length / ratio);
+        const output = new Float32Array(outputLength);
+        for (let index = 0; index < outputLength; index += 1) {
+          const sourceIndex = index * ratio;
+          const leftIndex = Math.floor(sourceIndex);
+          const rightIndex = Math.min(leftIndex + 1, input.length - 1);
+          const fraction = sourceIndex - leftIndex;
+          output[index] = input[leftIndex] + (input[rightIndex] - input[leftIndex]) * fraction;
+        }
+        return output;
+      }
+
+      function floatTo16BitPcm(input) {
+        const output = new ArrayBuffer(input.length * 2);
+        const view = new DataView(output);
+        for (let index = 0; index < input.length; index += 1) {
+          const sample = Math.max(-1, Math.min(1, input[index]));
+          view.setInt16(index * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+        }
+        return output;
+      }
+
+      async function stopVoiceInput() {
+        const currentSessionId = voiceSessionId;
+        voiceSessionId = null;
+        voiceProcessor?.disconnect();
+        voiceSource?.disconnect();
+        voiceProcessor = null;
+        voiceSource = null;
+        voiceStream?.getTracks().forEach((track) => track.stop());
+        voiceStream = null;
+        if (audioContext && audioContext.state !== "closed") await audioContext.close();
+        audioContext = null;
+        if (currentSessionId) {
+          try {
+            await runtime?.asr?.stop({ sessionId: currentSessionId });
+          } catch {
+            /* ASR may already have closed the session. */
+          }
+        }
+        detachTranscript?.();
+        detachError?.();
+        detachTranscript = null;
+        detachError = null;
+        state.isListening = false;
+        renderRuntimePanel();
+      }
+
+      async function startVoiceInput() {
+        if (!runtime?.asr || !navigator.mediaDevices?.getUserMedia) {
+          toast("语音输入不可用");
+          return;
+        }
+        if (state.isListening) {
+          await stopVoiceInput();
+          return;
+        }
+        cancelAudio();
+        const sessionId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        try {
+          voiceSessionId = sessionId;
+          detachTranscript = runtime.asr.onTranscript((event) => {
+            if (event.sessionId !== sessionId) return;
+            $("input").value = event.text;
+            if (event.isFinal && event.text?.trim()) void sendMessage(event.text.trim());
+          });
+          detachError = runtime.asr.onError((event) => {
+            if (event.sessionId === sessionId) toast(event.message || "语音识别失败");
+          });
+          await runtime.asr.start({ sessionId, userId: defaultUserId, language: "zh-CN" });
+          voiceStream = await navigator.mediaDevices.getUserMedia({
+            audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          });
+          audioContext = getAudioContext();
+          if (!audioContext) throw new Error("AudioContext is not available");
+          voiceSource = audioContext.createMediaStreamSource(voiceStream);
+          voiceProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+          voiceProcessor.onaudioprocess = (event) => {
+            if (!voiceSessionId) return;
+            const channel = event.inputBuffer.getChannelData(0);
+            const resampled = resampleTo16k(channel, audioContext.sampleRate || targetSampleRate);
+            runtime.asr.sendAudio({ sessionId: voiceSessionId, audio: floatTo16BitPcm(resampled) });
+          };
+          voiceSource.connect(voiceProcessor);
+          voiceProcessor.connect(audioContext.destination);
+          state.isListening = true;
+          renderRuntimePanel();
+          toast("开始听你说");
+        } catch (error) {
+          await stopVoiceInput();
+          throw error;
+        }
+      }
+
+      async function callOcWorldChat(text) {
+        if (!runtime?.chat?.sendMessage) return null;
+        return runtime.chat.sendMessage({
           userId: defaultUserId,
           characterId: defaultCharacterId,
           userMessage: text,
+          userMessages: [text],
           interrupt: true,
         });
+      }
 
-        return response?.text?.trim() ? response.text.trim() : null;
+      async function refreshRuntimeState({ hydrate = false } = {}) {
+        if (!runtime) {
+          renderRuntimePanel();
+          renderMemory();
+          return;
+        }
+        const [
+          character,
+          relationship,
+          history,
+          timeline,
+          summaries,
+          reveal,
+          insights,
+          profile,
+          airjelly,
+          hermesStatus,
+          ttsStatus,
+          asrStatus,
+        ] = await Promise.all([
+          runtime.character?.getCurrent(defaultCharacterId).catch(() => null),
+          runtime.relationship?.get(defaultUserId).catch(() => null),
+          runtime.memory?.history(defaultUserId).catch(() => []),
+          runtime.timeline?.list(defaultUserId).catch(() => []),
+          runtime.memory?.summaries(defaultUserId).catch(() => []),
+          runtime.growth?.getLatestReveal(defaultUserId).catch(() => null),
+          runtime.growth?.listInsights(defaultUserId).catch(() => []),
+          runtime.growth?.getProfile(defaultUserId).catch(() => null),
+          runtime.airjelly?.getContext().catch(() => null),
+          runtime.hermes?.getStatus().catch(() => null),
+          runtime.tts?.getStatus().catch(() => null),
+          runtime.asr?.getStatus().catch(() => null),
+        ]);
+
+        Object.assign(state, {
+          character,
+          relationship,
+          history: history || [],
+          timeline: timeline || [],
+          summaries: summaries || [],
+          activeReveal: reveal,
+          growthInsights: insights || [],
+          growthProfile: profile,
+          airjelly,
+          hermesStatus,
+          ttsStatus,
+          asrStatus,
+        });
+        if (hydrate) hydrateMessagesFromHistory();
+        renderRuntimePanel();
+        renderMessages();
+        renderMemory();
       }
 
       async function sendMessage(text = $("input").value.trim()) {
-        if (state.isSending) return;
-        if (!text) return;
+        if (state.isSending || !text) return;
         const fallbackReply = inferReply(text);
-        state.messages.push({ type: "user", text, meta: "你" });
+        state.messages.push({ type: "user", text, meta: state.relationship?.userName || "你" });
         $("input").value = "我再补充一点。";
         renderMessages();
         toast("已默默记住");
@@ -859,10 +1300,13 @@
         let reply = fallbackReply;
         let usedRemote = false;
         try {
-          const remoteReply = await callOcWorldChat(text);
-          if (remoteReply) {
-            reply = remoteReply;
+          const result = await callOcWorldChat(text);
+          if (result?.text?.trim()) {
+            reply = result.text.trim();
             usedRemote = true;
+            if (result.intimacy !== undefined && state.relationship) {
+              state.relationship = { ...state.relationship, intimacy: result.intimacy, stage: result.stage || state.relationship.stage };
+            }
           }
         } catch {
           reply = fallbackReply;
@@ -871,9 +1315,33 @@
           setSending(false);
         }
 
-        state.messages.push({ type: "oc", text: reply, meta: usedRemote ? "Luma · MiMo 驱动" : "Luma · 本地演示" });
+        state.messages.push({ type: "oc", text: reply, meta: usedRemote ? `${ocName()} · MiMo 驱动` : `${ocName()} · 本地演示` });
+        await refreshRuntimeState();
         addDiscoveryIfReady();
+        renderRuntimePanel();
         renderMessages();
+        void speakText(reply);
+      }
+
+      async function generateAvatar() {
+        if (!runtime?.imageGen?.generate) {
+          toast("生图能力不可用");
+          return;
+        }
+        $("generateAvatar").disabled = true;
+        try {
+          const character = state.character || {};
+          const prompt = `像素风原创角色头像，OC World 成长伙伴，名字 ${character.name || "Luma"}，性格 ${character.personality || "敏锐、安静、陪伴感"}，透明背景，适合桌面应用侧栏展示`;
+          const image = await runtime.imageGen.generate({ prompt, aspectRatio: "1:1", imageSize: "1024x1024", cacheKey: `oc-avatar-${character.id || defaultCharacterId}` });
+          if (image?.imageBase64) {
+            document.querySelector(".avatar img").src = `data:${image.mimeType || "image/png"};base64,${image.imageBase64}`;
+            toast(image.cached ? "已使用缓存形象" : "形象已生成");
+          }
+        } catch {
+          toast("生图暂时不可用");
+        } finally {
+          $("generateAvatar").disabled = false;
+        }
       }
 
       async function runDemo() {
@@ -894,11 +1362,27 @@
       $("softOpen").addEventListener("click", openMemory);
       $("openMemory").addEventListener("click", openMemory);
       $("closeMemory").addEventListener("click", () => $("memoryDrawer").classList.remove("is-open"));
-      $("runDemo").addEventListener("click", runDemo);
+      $("runDemo").addEventListener("click", () => void runDemo());
+      $("refreshRuntime").addEventListener("click", () => void refreshRuntimeState().then(() => toast("状态已刷新")));
+      $("generateAvatar").addEventListener("click", () => void generateAvatar());
+      $("ttsToggle").addEventListener("click", () => {
+        state.ttsEnabled = !state.ttsEnabled;
+        if (!state.ttsEnabled) cancelAudio();
+        renderRuntimePanel();
+      });
+      $("voiceToggle").addEventListener("click", () => void startVoiceInput().catch((error) => toast(error?.message || "语音输入失败")));
+
+      if (runtime?.hermes?.onStatusChanged) {
+        runtime.hermes.onStatusChanged((status) => {
+          state.hermesStatus = status;
+          renderRuntimePanel();
+        });
+      }
 
       renderPrompts();
       renderMessages();
       renderMemory();
+      void refreshRuntimeState({ hydrate: true });
     </script>
   </body>
 </html>
