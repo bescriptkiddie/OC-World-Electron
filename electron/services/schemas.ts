@@ -7,8 +7,13 @@ import type {
   GrowthInsight,
   GrowthProfile,
   MemorySummary,
+  Project,
+  ProjectsState,
+  RecallEvent,
+  RecallSignalState,
   Relationship,
   RevealCandidate,
+  WorkItem,
 } from "../../src/types";
 
 const appEventSchema = z.object({
@@ -141,6 +146,76 @@ const revealCandidateSchema = z.object({
   shownAt: z.number().optional(),
 });
 
+const awarenessEpisodeSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  source: z.enum(["chat", "airjelly", "manual"]),
+  createdAt: z.number(),
+  title: z.string(),
+  keyMoments: z.array(z.string()),
+  behaviorSignals: z.array(z.string()),
+  candidateMemoryUpdates: z.array(z.string()),
+  openThreads: z.array(z.string()),
+  relatedInsightIds: z.array(z.string()).default([]),
+});
+
+const workItemNoteSchema = z.object({
+  at: z.number(),
+  text: z.string(),
+  source: z.enum(["chat", "airjelly", "manual", "distillation"]),
+});
+
+const workItemSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  title: z.string(),
+  description: z.string(),
+  status: z.enum(["pending", "in_progress", "completed", "blocked", "cancelled"]),
+  source: z.enum(["chat", "airjelly", "manual", "distillation"]),
+  relatedSignals: z.array(z.string()),
+  notes: z.array(workItemNoteSchema),
+  summary: z.string(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
+const projectSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  title: z.string(),
+  description: z.string(),
+  workItemIds: z.array(z.string()),
+  confidence: z.number(),
+  rationale: z.string(),
+  updatedAt: z.number(),
+});
+
+const projectsStateSchema = z.object({
+  version: z.literal(1),
+  generatedAt: z.number(),
+  userId: z.string(),
+  projects: z.array(projectSchema),
+});
+
+const recallEventSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  signal: z.string(),
+  text: z.string(),
+  source: z.enum(["airjelly", "memory", "work-item"]),
+  status: z.enum(["candidate", "shown", "dismissed"]),
+  createdAt: z.number(),
+});
+
+const recallSignalStateSchema = z.object({
+  userId: z.string(),
+  signal: z.string(),
+  count: z.number(),
+  firstSeenAt: z.number(),
+  lastSeenAt: z.number(),
+  lastTriggeredAt: z.number().optional(),
+});
+
 export const airJellyContextListSchema = airJellyContextSchema;
 export const memorySummaryListSchema = z.array(summarySchema);
 export const relationshipStateSchema = relationshipSchema;
@@ -150,6 +225,12 @@ export const growthEvidenceListSchema = z.array(growthEvidenceSchema);
 export const growthInsightListSchema = z.array(growthInsightSchema);
 export const growthProfileStateSchema = growthProfileSchema;
 export const revealQueueSchema = z.array(revealCandidateSchema);
+export const awarenessEpisodeStateSchema = awarenessEpisodeSchema;
+export const workItemStateSchema = workItemSchema;
+export const workItemListSchema = z.array(workItemSchema);
+export const projectsStateListSchema = projectsStateSchema;
+export const recallEventListSchema = z.array(recallEventSchema);
+export const recallSignalStateListSchema = z.array(recallSignalStateSchema);
 
 export function parseAirJellyContext(value: unknown): AirJellyContext {
   return airJellyContextListSchema.parse(value) as AirJellyContext;
@@ -185,4 +266,28 @@ export function parseGrowthProfile(value: unknown): GrowthProfile {
 
 export function parseRevealQueue(value: unknown): RevealCandidate[] {
   return revealQueueSchema.parse(value) as RevealCandidate[];
+}
+
+export function parseAwarenessEpisode(value: unknown) {
+  return awarenessEpisodeStateSchema.parse(value);
+}
+
+export function parseWorkItem(value: unknown): WorkItem {
+  return workItemStateSchema.parse(value) as WorkItem;
+}
+
+export function parseWorkItemList(value: unknown): WorkItem[] {
+  return workItemListSchema.parse(value) as WorkItem[];
+}
+
+export function parseProjectsState(value: unknown): ProjectsState {
+  return projectsStateListSchema.parse(value) as ProjectsState;
+}
+
+export function parseRecallEventList(value: unknown): RecallEvent[] {
+  return recallEventListSchema.parse(value) as RecallEvent[];
+}
+
+export function parseRecallSignalStateList(value: unknown): RecallSignalState[] {
+  return recallSignalStateListSchema.parse(value) as RecallSignalState[];
 }

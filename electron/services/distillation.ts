@@ -1,4 +1,4 @@
-import type { ContextSnapshot, GrowthEvidence, GrowthInsight } from "../../src/types";
+import type { AwarenessEpisode, ContextSnapshot, GrowthEvidence, GrowthInsight } from "../../src/types";
 
 interface DistillGrowthTurnInput {
   userId: string;
@@ -12,6 +12,7 @@ interface DistillGrowthTurnInput {
 interface DistillGrowthTurnResult {
   evidence: GrowthEvidence[];
   insights: GrowthInsight[];
+  awareness: AwarenessEpisode;
 }
 
 const GOAL_PATTERNS = [
@@ -50,15 +51,39 @@ export function distillGrowthTurn(input: DistillGrowthTurnInput): DistillGrowthT
     evidence.push(createEvidence(`evidence-goal-${input.now}`, `目标线索：${goalTitle}`, input.now));
   }
 
+  const insightId = `insight-${input.now}`;
+  const awareness: AwarenessEpisode = {
+    id: `awareness-${input.now}`,
+    userId: input.userId,
+    source: "chat",
+    createdAt: input.now,
+    title: goalTitle ? `目标线索：${goalTitle}` : "对话轮次候选观察",
+    keyMoments: [
+      trimmedUserMessage,
+      input.ocResponse.trim(),
+      input.growthEvent ? `关系事件：${input.growthEvent}` : "",
+    ].filter(Boolean),
+    behaviorSignals: [
+      goalTitle ? `明确目标表达：${goalTitle}` : "",
+      input.snapshot.realtimeContext.tasks.length
+        ? `当前 AirJelly 待办：${input.snapshot.realtimeContext.tasks.map((task) => task.title).join("；")}`
+        : "",
+    ].filter(Boolean),
+    candidateMemoryUpdates: goalTitle ? [`用户可能在推进：${goalTitle}`] : [],
+    openThreads: goalTitle ? ["需要等待更多证据或用户确认后再写入长期记忆。"] : ["本轮信息较弱，暂时只保留为 awareness。"],
+    relatedInsightIds: goalTitle ? [insightId] : [],
+  };
+
   if (!goalTitle) {
-    return { evidence, insights: [] };
+    return { evidence, insights: [], awareness };
   }
 
   return {
     evidence,
+    awareness,
     insights: [
       {
-        id: `insight-${input.now}`,
+        id: insightId,
         userId: input.userId,
         type: "goal",
         title: goalTitle,

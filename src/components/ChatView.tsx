@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { CharacterConfig, Relationship, RevealCandidate } from "../types";
+import type { CharacterConfig, RecallHintEvent, Relationship, RevealCandidate } from "../types";
 import type { VoiceInputState } from "../lib/voice-input";
 import type { MessageItem, SessionId } from "./shared";
 import { OcAvatar, OcAvatarLarge } from "./OcAvatar";
@@ -19,6 +19,7 @@ export function ChatView({
   ocAvatarPath,
   revealHint,
   revealBusy,
+  recallHint,
   onSend,
   onInterrupt,
   onTtsToggle,
@@ -26,6 +27,7 @@ export function ChatView({
   onConfirmReveal,
   onDismissReveal,
   onRejectReveal,
+  onDismissRecallHint,
   onOpenMemory,
   onNewChat,
 }: {
@@ -40,6 +42,7 @@ export function ChatView({
   ocAvatarPath?: string;
   revealHint: RevealHint;
   revealBusy: boolean;
+  recallHint: RecallHintEvent | null;
   onSend: (text: string) => Promise<void>;
   onInterrupt: () => void;
   onTtsToggle: () => void;
@@ -47,6 +50,7 @@ export function ChatView({
   onConfirmReveal: (insightId: string) => Promise<void> | void;
   onDismissReveal: (candidateId: string) => Promise<void> | void;
   onRejectReveal: (insightId: string) => Promise<void> | void;
+  onDismissRecallHint: () => void;
   onOpenMemory: () => void;
   onNewChat?: () => void;
 }) {
@@ -57,7 +61,7 @@ export function ChatView({
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages.length, revealHint?.id]);
+  }, [messages.length, recallHint?.id, revealHint?.id]);
 
   const submit = () => {
     const text = draft;
@@ -141,6 +145,18 @@ export function ChatView({
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {recallHint && (
+          <div className="oc-recall-hint">
+            <div className="oc-recall-hint__copy">
+              <span className="oc-recall-hint__label mono">recall</span>
+              <p>{recallHint.text}</p>
+            </div>
+            <button type="button" className="oc-pill-button oc-pill-button--quiet" onClick={onDismissRecallHint}>
+              知道了
+            </button>
           </div>
         )}
 
