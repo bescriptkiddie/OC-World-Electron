@@ -61,6 +61,35 @@ contextBridge.exposeInMainWorld("ocWorld", {
   memory: {
     summaries: (userId: string) => ipcRenderer.invoke("memory:summaries", userId),
     history: (userId: string) => ipcRenderer.invoke("memory:history", userId),
+    getLongTerm: (userId: string) => ipcRenderer.invoke("memory:get-long-term", userId),
+    getVoice: (userId: string) => ipcRenderer.invoke("memory:get-voice", userId),
+    runDistill: (payload: { userId: string; characterId?: string }) => ipcRenderer.invoke("memory:run-distill", payload),
+  },
+  awareness: {
+    list: (payload: { userId: string; limit?: number }) => ipcRenderer.invoke("awareness:list", payload),
+  },
+  workItems: {
+    list: (userId: string) => ipcRenderer.invoke("work-items:list", userId),
+  },
+  projects: {
+    list: (userId: string) => ipcRenderer.invoke("projects:list", userId),
+  },
+  recall: {
+    listRecent: (payload: { userId: string; limit?: number }) => ipcRenderer.invoke("recall:list-recent", payload),
+    evaluateNow: (payload: import("../src/types").RecallEvaluatePayload) => ipcRenderer.invoke("recall:evaluate-now", payload),
+    startPolling: (payload: import("../src/types").RecallEvaluatePayload) => ipcRenderer.invoke("recall:start-polling", payload),
+    stopPolling: (payload: import("../src/types").RecallEvaluatePayload) => ipcRenderer.invoke("recall:stop-polling", payload),
+    onHint: (callback: (event: import("../src/types").RecallHintEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, hint: import("../src/types").RecallHintEvent) => {
+        callback(hint);
+      };
+
+      ipcRenderer.on("recall:hint", listener);
+
+      return () => {
+        ipcRenderer.removeListener("recall:hint", listener);
+      };
+    },
   },
   growth: {
     getLatestReveal: (userId: string) => ipcRenderer.invoke("growth:get-latest-reveal", userId),

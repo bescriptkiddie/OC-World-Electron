@@ -242,6 +242,7 @@ function renderView({
           ocAvatarPath={chat.character?.avatarPath}
           revealHint={chat.activeReveal}
           revealBusy={chat.revealBusy}
+          recallHint={chat.activeRecallHint}
           onSend={onSend}
           onInterrupt={chat.interruptActiveTurn}
           onTtsToggle={() => chat.setTtsEnabled(!chat.ttsEnabled)}
@@ -249,6 +250,7 @@ function renderView({
           onConfirmReveal={chat.confirmReveal}
           onDismissReveal={chat.dismissReveal}
           onRejectReveal={chat.rejectReveal}
+          onDismissRecallHint={chat.dismissRecallHint}
           onOpenMemory={onOpenMemory}
           onNewChat={onNewChat}
         />

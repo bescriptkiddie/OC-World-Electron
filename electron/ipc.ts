@@ -1,12 +1,14 @@
 import { BrowserWindow, ipcMain } from "electron";
 import { chat, generateGreeting } from "./services/chat-engine";
 import { getAirJellyContext } from "./services/airjelly";
+import { runManualDistillationPipeline } from "./services/growth-pipeline";
 import { confirmInsightToProfile } from "./services/growth-profile";
 import { rejectInsight } from "./services/growth-insights";
 import { hermesManager } from "./services/hermes-manager";
 import { getTtsStatus, synthesizeSpeech } from "./services/tts";
 import { getAsrStatus, StepFunAsrSession } from "./services/stepfun-asr";
 import { generateImage } from "./services/image-gen";
+import { evaluateContextRecall, startRecallPolling, stopAllRecallPolling, stopRecallPolling } from "./services/recall-service";
 import {
   listTimeline,
   loadCharacter,
@@ -22,6 +24,14 @@ import {
   saveRelationship,
   saveRevealQueue,
 } from "./services/memory";
+import {
+  appendConfirmedMemoryNote,
+  listAwarenessEpisodes,
+  listRecentRecallEvents,
+  listWorkItems,
+  loadLongTermMemory,
+  loadProjectsState,
+} from "./services/unified-memory";
 import { getStage } from "./services/relationship";
 import type {
   CharacterConfig,
@@ -31,6 +41,8 @@ import type {
   ChatCancelPayload,
   ChatSendPayload,
   ImageGenPayload,
+  RecallEvent,
+  RecallEvaluatePayload,
   TtsCancelPayload,
   TtsSynthesizePayload,
 } from "../src/types";
@@ -56,6 +68,17 @@ const ipcChannels = {
   relationshipSetIntimacyForDemo: "relationship:set-intimacy-for-demo",
   memorySummaries: "memory:summaries",
   memoryHistory: "memory:history",
+  memoryGetLongTerm: "memory:get-long-term",
+  memoryGetVoice: "memory:get-voice",
+  memoryRunDistill: "memory:run-distill",
+  awarenessList: "awareness:list",
+  workItemsList: "work-items:list",
+  projectsList: "projects:list",
+  recallListRecent: "recall:list-recent",
+  recallEvaluateNow: "recall:evaluate-now",
+  recallStartPolling: "recall:start-polling",
+  recallStopPolling: "recall:stop-polling",
+  recallHint: "recall:hint",
   growthGetLatestReveal: "growth:get-latest-reveal",
   growthListInsights: "growth:list-insights",
   growthGetProfile: "growth:get-profile",
@@ -154,6 +177,15 @@ async function getLatestReveal(userId: string) {
 
   const insight = insights.find((item) => item.id === promotedCandidate.insightId);
   return insight ? { ...promotedCandidate, text: insight.text, title: insight.title } : null;
+}
+
+function broadcastRecallHint(event: RecallEvent) {
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send(ipcChannels.recallHint, {
+      ...event,
+      emittedAt: Date.now(),
+    });
+  }
 }
 
 export function registerIpcHandlers() {
@@ -261,6 +293,49 @@ export function registerIpcHandlers() {
   );
   ipcMain.handle(ipcChannels.memorySummaries, async (_event, userId: string) => loadRecentSummaries(userId, 10));
   ipcMain.handle(ipcChannels.memoryHistory, async (_event, userId: string) => loadOCHistory(userId, 20));
+  ipcMain.handle(ipcChannels.memoryGetLongTerm, async (_event, userId: string) => loadLongTermMemory(userId));
+  ipcMain.handle(ipcChannels.memoryGetVoice, async (_event, userId: string) => {
+    const longTermMemory = await loadLongTermMemory(userId);
+    return {
+      userId,
+      voiceMarkdown: longTermMemory.voiceMarkdown,
+      updatedAt: longTermMemory.updatedAt,
+    };
+  });
+  ipcMain.handle(ipcChannels.memoryRunDistill, async (_event, payload: { userId: string; characterId?: string }) =>
+    runManualDistillationPipeline(payload),
+  );
+  ipcMain.handle(ipcChannels.awarenessList, async (_event, payload: { userId: string; limit?: number }) =>
+    listAwarenessEpisodes(payload.userId, payload.limit ?? 20),
+  );
+  ipcMain.handle(ipcChannels.workItemsList, async (_event, userId: string) => listWorkItems(userId));
+  ipcMain.handle(ipcChannels.projectsList, async (_event, userId: string) => loadProjectsState(userId));
+  ipcMain.handle(ipcChannels.recallListRecent, async (_event, payload: { userId: string; limit?: number }) =>
+    listRecentRecallEvents(payload.userId, payload.limit ?? 20),
+  );
+  ipcMain.handle(ipcChannels.recallEvaluateNow, async (_event, payload: RecallEvaluatePayload) => {
+    const events = await evaluateContextRecall({
+      ...payload,
+      dataRoot: process.cwd(),
+    });
+    for (const event of events) {
+      broadcastRecallHint(event);
+    }
+    return events;
+  });
+  ipcMain.handle(ipcChannels.recallStartPolling, async (_event, payload: RecallEvaluatePayload) =>
+    startRecallPolling({
+      ...payload,
+      dataRoot: process.cwd(),
+      onHint: broadcastRecallHint,
+    }),
+  );
+  ipcMain.handle(ipcChannels.recallStopPolling, async (_event, payload: RecallEvaluatePayload) =>
+    stopRecallPolling({
+      ...payload,
+      dataRoot: process.cwd(),
+    }),
+  );
   ipcMain.handle(ipcChannels.growthGetLatestReveal, async (_event, userId: string) => getLatestReveal(userId));
   ipcMain.handle(ipcChannels.growthListInsights, async (_event, userId: string) => loadGrowthInsights(userId));
   ipcMain.handle(ipcChannels.growthGetProfile, async (_event, userId: string) => loadGrowthProfile(userId));
@@ -284,6 +359,13 @@ export function registerIpcHandlers() {
         ),
       ),
       saveGrowthProfile(payload.userId, confirmInsightToProfile({ profile, insight, now })),
+      appendConfirmedMemoryNote({
+        insightId: insight.id,
+        title: insight.title,
+        text: insight.text,
+        type: insight.type === "preference" ? "voice" : "memory",
+        now,
+      }),
       saveRevealQueue(
         payload.userId,
         queue.map((item) =>
@@ -347,6 +429,7 @@ export function unregisterIpcHandlers() {
     session.close();
   }
   activeAsrSessions.clear();
+  stopAllRecallPolling();
 
   ipcMain.removeHandler(ipcChannels.chatSendMessage);
   ipcMain.removeHandler(ipcChannels.chatCancelActive);
@@ -366,6 +449,16 @@ export function unregisterIpcHandlers() {
   ipcMain.removeHandler(ipcChannels.relationshipSetIntimacyForDemo);
   ipcMain.removeHandler(ipcChannels.memorySummaries);
   ipcMain.removeHandler(ipcChannels.memoryHistory);
+  ipcMain.removeHandler(ipcChannels.memoryGetLongTerm);
+  ipcMain.removeHandler(ipcChannels.memoryGetVoice);
+  ipcMain.removeHandler(ipcChannels.memoryRunDistill);
+  ipcMain.removeHandler(ipcChannels.awarenessList);
+  ipcMain.removeHandler(ipcChannels.workItemsList);
+  ipcMain.removeHandler(ipcChannels.projectsList);
+  ipcMain.removeHandler(ipcChannels.recallListRecent);
+  ipcMain.removeHandler(ipcChannels.recallEvaluateNow);
+  ipcMain.removeHandler(ipcChannels.recallStartPolling);
+  ipcMain.removeHandler(ipcChannels.recallStopPolling);
   ipcMain.removeHandler(ipcChannels.growthGetLatestReveal);
   ipcMain.removeHandler(ipcChannels.growthListInsights);
   ipcMain.removeHandler(ipcChannels.growthGetProfile);

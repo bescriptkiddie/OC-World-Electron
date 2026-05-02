@@ -2,8 +2,10 @@ import type {
   AirJellyContext,
   CharacterConfig,
   ChatHistoryEntry,
+  ContextSnapshot,
   MemorySummary,
   Relationship,
+  RetrievedMemoryBundle,
 } from "../../src/types";
 
 function formatEvents(events: AirJellyContext["events"]) {
@@ -74,15 +76,90 @@ function getStyleByIntimacy(intimacy: number) {
   return "亲密、直接、情绪明显，会主动表达在意。";
 }
 
-export function buildSystemPrompt(input: {
+type LegacyPromptInput = {
   character: CharacterConfig;
   airjellyCtx: AirJellyContext;
   wxMemories: MemorySummary[];
   relationship: Relationship;
   recentChat: ChatHistoryEntry[];
   confirmedProfileSummary?: string;
-}) {
-  const { character, airjellyCtx, wxMemories, relationship, recentChat, confirmedProfileSummary } = input;
+  retrievedMemoryBundle?: RetrievedMemoryBundle;
+};
+
+type SnapshotPromptInput = {
+  snapshot: ContextSnapshot;
+  confirmedProfileSummary?: string;
+  retrievedMemoryBundle?: RetrievedMemoryBundle;
+};
+
+function normalizePromptInput(input: LegacyPromptInput | SnapshotPromptInput): LegacyPromptInput {
+  if ("snapshot" in input) {
+    return {
+      character: input.snapshot.characterState,
+      airjellyCtx: input.snapshot.realtimeContext,
+      wxMemories: input.snapshot.socialMemory,
+      relationship: input.snapshot.relationshipState,
+      recentChat: input.snapshot.conversationState.recentChat,
+      confirmedProfileSummary: input.confirmedProfileSummary,
+      retrievedMemoryBundle: input.retrievedMemoryBundle ?? input.snapshot.retrievedMemoryBundle,
+    };
+  }
+
+  return input;
+}
+
+function formatWorkItems(items: RetrievedMemoryBundle["relevantWorkItems"]) {
+  if (!items.length) {
+    return "暂无活跃成长事项。";
+  }
+
+  return items.map((item) => `- ${item.title}（${item.status}）：${item.summary}`).join("\n");
+}
+
+function formatProjects(projects: RetrievedMemoryBundle["activeProjects"]) {
+  if (!projects.length) {
+    return "暂无聚合项目。";
+  }
+
+  return projects.map((project) => `- ${project.title}：${project.description}`).join("\n");
+}
+
+function formatAwareness(episodes: RetrievedMemoryBundle["recentAwarenessHighlights"]) {
+  if (!episodes.length) {
+    return "暂无新的 awareness。";
+  }
+
+  return episodes
+    .map((episode) => `- ${episode.title}：${episode.keyMoments.slice(0, 2).join("；") || "候选洞察待确认"}`)
+    .join("\n");
+}
+
+function formatMemoryBundle(bundle: RetrievedMemoryBundle | undefined) {
+  if (!bundle) {
+    return "统一记忆层尚未加载。";
+  }
+
+  return `【长期记忆 memory.md】
+${bundle.longTermFacts || "暂无确认内容。"}
+
+【voice.md】
+${bundle.voiceHints || "暂无确认内容。"}
+
+【系统提醒】
+${bundle.systemReminders || "暂无。"}
+
+【活跃成长事项】
+${formatWorkItems(bundle.relevantWorkItems)}
+
+【聚合项目】
+${formatProjects(bundle.activeProjects)}
+
+【最近 Awareness】
+${formatAwareness(bundle.recentAwarenessHighlights)}`;
+}
+
+export function buildSystemPrompt(input: LegacyPromptInput | SnapshotPromptInput) {
+  const { character, airjellyCtx, wxMemories, relationship, recentChat, confirmedProfileSummary, retrievedMemoryBundle } = normalizePromptInput(input);
   const confirmedBlock = confirmedProfileSummary?.trim()
     ? `\n【你已经确认的长期理解】\n${confirmedProfileSummary.trim()}\n`
     : "";
@@ -107,6 +184,9 @@ ${formatSummaries(wxMemories)}
 沟通风格：${relationship.preferences.communicationStyle}
 关键回忆：${relationship.keyMoments.slice(-3).map((item) => item.event).join("；")}
 当前情绪判断：${relationship.moodBaseline}${confirmedBlock}
+【统一记忆层】
+${formatMemoryBundle(retrievedMemoryBundle)}
+
 【最近对话】
 ${formatRecentChat(recentChat)}
 

@@ -10,6 +10,7 @@ import type {
   GrowthProfile,
   HermesRuntimeStatus,
   PendingChatMessage,
+  RecallHintEvent,
   Relationship,
   RevealCandidate,
   TimelineItem,
@@ -61,6 +62,7 @@ export function useChat() {
   const [growthInsights, setGrowthInsights] = useState<GrowthInsight[]>([]);
   const [growthProfile, setGrowthProfile] = useState<GrowthProfile>(createEmptyProfile());
   const [revealBusy, setRevealBusy] = useState(false);
+  const [activeRecallHint, setActiveRecallHint] = useState<RecallHintEvent | null>(null);
   const pendingMessagesRef = useRef<PendingChatMessage[]>([]);
   const submitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestCounterRef = useRef(0);
@@ -178,6 +180,28 @@ export function useChat() {
     return window.ocWorld.hermes.onStatusChanged((status) => {
       setHermesStatus(status);
     });
+  }, []);
+
+  useEffect(() => {
+    if (!window.ocWorld) {
+      return;
+    }
+
+    const unsubscribe = window.ocWorld.recall.onHint((hint) => {
+      setActiveRecallHint(hint);
+    });
+    void window.ocWorld.recall.startPolling({
+      userId: defaultUserId,
+      characterId: defaultCharacterId,
+    });
+
+    return () => {
+      unsubscribe();
+      void window.ocWorld?.recall.stopPolling({
+        userId: defaultUserId,
+        characterId: defaultCharacterId,
+      });
+    };
   }, []);
 
   const submitPendingTurn = useCallback(async () => {
@@ -403,6 +427,10 @@ export function useChat() {
     }
   }, [refreshGrowthState]);
 
+  const dismissRecallHint = useCallback(() => {
+    setActiveRecallHint(null);
+  }, []);
+
   return useMemo(
     () => ({
       character,
@@ -421,6 +449,7 @@ export function useChat() {
       growthInsights,
       growthProfile,
       revealBusy,
+      activeRecallHint,
       cancelSpeech,
       interruptActiveTurn,
       sendMessage,
@@ -432,6 +461,7 @@ export function useChat() {
       confirmReveal,
       dismissReveal,
       rejectReveal,
+      dismissRecallHint,
       refreshState: boot,
       defaultCharacterId,
       defaultUserId,
@@ -453,6 +483,7 @@ export function useChat() {
       growthInsights,
       growthProfile,
       revealBusy,
+      activeRecallHint,
       cancelSpeech,
       interruptActiveTurn,
       sendMessage,
@@ -464,6 +495,7 @@ export function useChat() {
       confirmReveal,
       dismissReveal,
       rejectReveal,
+      dismissRecallHint,
       boot,
     ],
   );

@@ -1,5 +1,6 @@
 import type {
   AirJellyContext,
+  AwarenessEpisode,
   AsrAudioPayload,
   AsrErrorEvent,
   AsrProviderStatus,
@@ -17,7 +18,13 @@ import type {
   HermesRuntimeStatus,
   ImageGenPayload,
   ImageGenResult,
+  LongTermMemory,
+  ManualDistillationResult,
   MemorySummary,
+  ProjectsState,
+  RecallEvent,
+  RecallEvaluatePayload,
+  RecallHintEvent,
   Relationship,
   RevealCandidate,
   TtsCancelPayload,
@@ -25,6 +32,7 @@ import type {
   TtsSynthesizePayload,
   TtsSynthesizeResult,
   TimelineItem,
+  WorkItem,
 } from "./index";
 
 declare global {
@@ -63,6 +71,25 @@ declare global {
       memory: {
         summaries: (userId: string) => Promise<MemorySummary[]>;
         history: (userId: string) => Promise<ChatHistoryEntry[]>;
+        getLongTerm: (userId: string) => Promise<LongTermMemory>;
+        getVoice: (userId: string) => Promise<{ userId: string; voiceMarkdown: string; updatedAt: number }>;
+        runDistill: (payload: { userId: string; characterId?: string }) => Promise<ManualDistillationResult>;
+      };
+      awareness: {
+        list: (payload: { userId: string; limit?: number }) => Promise<AwarenessEpisode[]>;
+      };
+      workItems: {
+        list: (userId: string) => Promise<WorkItem[]>;
+      };
+      projects: {
+        list: (userId: string) => Promise<ProjectsState>;
+      };
+      recall: {
+        listRecent: (payload: { userId: string; limit?: number }) => Promise<RecallEvent[]>;
+        evaluateNow: (payload: RecallEvaluatePayload) => Promise<RecallEvent[]>;
+        startPolling: (payload: RecallEvaluatePayload) => Promise<boolean>;
+        stopPolling: (payload: RecallEvaluatePayload) => Promise<boolean>;
+        onHint: (callback: (event: RecallHintEvent) => void) => () => void;
       };
       growth: {
         getLatestReveal: (userId: string) => Promise<(RevealCandidate & { text?: string; title?: string }) | null>;

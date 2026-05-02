@@ -191,6 +191,124 @@ export interface RevealCandidate {
   shownAt?: number;
 }
 
+export interface LongTermMemory {
+  userId: string;
+  memoryMarkdown: string;
+  voiceMarkdown: string;
+  systemRemindersMarkdown: string;
+  updatedAt: number;
+}
+
+export type AwarenessSource = "chat" | "airjelly" | "manual";
+
+export interface AwarenessEpisode {
+  id: string;
+  userId: string;
+  source: AwarenessSource;
+  createdAt: number;
+  title: string;
+  keyMoments: string[];
+  behaviorSignals: string[];
+  candidateMemoryUpdates: string[];
+  openThreads: string[];
+  relatedInsightIds: string[];
+}
+
+export type WorkItemStatus = "pending" | "in_progress" | "completed" | "blocked" | "cancelled";
+export type WorkItemSource = "chat" | "airjelly" | "manual" | "distillation";
+
+export interface WorkItemNote {
+  at: number;
+  text: string;
+  source: WorkItemSource;
+}
+
+export interface WorkItem {
+  id: string;
+  userId: string;
+  title: string;
+  description: string;
+  status: WorkItemStatus;
+  source: WorkItemSource;
+  relatedSignals: string[];
+  notes: WorkItemNote[];
+  summary: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface Project {
+  id: string;
+  userId: string;
+  title: string;
+  description: string;
+  workItemIds: string[];
+  confidence: number;
+  rationale: string;
+  updatedAt: number;
+}
+
+export interface ProjectsState {
+  version: 1;
+  generatedAt: number;
+  userId: string;
+  projects: Project[];
+}
+
+export interface RecallEvent {
+  id: string;
+  userId: string;
+  signal: string;
+  text: string;
+  source: "airjelly" | "memory" | "work-item";
+  status: "candidate" | "shown" | "dismissed";
+  createdAt: number;
+}
+
+export interface RecallSignalState {
+  userId: string;
+  signal: string;
+  count: number;
+  firstSeenAt: number;
+  lastSeenAt: number;
+  lastTriggeredAt?: number;
+}
+
+export interface RecallEvaluatePayload {
+  userId: string;
+  characterId?: string;
+}
+
+export interface RecallHintEvent extends RecallEvent {
+  emittedAt: number;
+}
+
+export interface MemoryMergeDecision {
+  episodeId: string;
+  insightId: string | null;
+  status: "merged" | "deferred" | "discarded";
+  target: "memory" | "voice" | "none";
+  reason: string;
+  text: string;
+}
+
+export interface ManualDistillationResult {
+  episode: AwarenessEpisode;
+  memoryMergeDecisions: MemoryMergeDecision[];
+  workItems: WorkItem[];
+  projects: ProjectsState;
+  recallEvents: RecallEvent[];
+}
+
+export interface RetrievedMemoryBundle {
+  longTermFacts: string;
+  voiceHints: string;
+  systemReminders: string;
+  activeProjects: Project[];
+  relevantWorkItems: WorkItem[];
+  recentAwarenessHighlights: AwarenessEpisode[];
+}
+
 export interface ContextSnapshot {
   builtAt: number;
   airjellyCtx: AirJellyContext;
@@ -200,6 +318,14 @@ export interface ContextSnapshot {
   character: CharacterConfig;
   growthProfile: GrowthProfile;
   latentInsights: GrowthInsight[];
+  retrievedMemoryBundle: RetrievedMemoryBundle;
+  realtimeContext: AirJellyContext;
+  socialMemory: MemorySummary[];
+  conversationState: {
+    recentChat: ChatHistoryEntry[];
+  };
+  relationshipState: Relationship;
+  characterState: CharacterConfig;
 }
 
 export interface TtsSynthesizePayload {
