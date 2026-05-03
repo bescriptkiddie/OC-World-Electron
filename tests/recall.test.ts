@@ -39,14 +39,6 @@ function createSnapshot(): ContextSnapshot {
     character: DEFAULT_CHARACTER,
     growthProfile,
     latentInsights: [],
-    retrievedMemoryBundle: {
-      longTermFacts: "",
-      voiceHints: "",
-      systemReminders: "",
-      activeProjects: [],
-      relevantWorkItems: [],
-      recentAwarenessHighlights: [],
-    },
     realtimeContext: airjellyCtx,
     socialMemory: DEFAULT_SUMMARIES,
     conversationState: {

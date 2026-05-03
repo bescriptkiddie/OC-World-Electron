@@ -215,7 +215,9 @@ export async function evaluateRecallCandidates(input: {
     : null;
 
   for (const signal of eligibleSignals) {
-    const relatedContext = relatedBundle ? buildRelatedContext(signal, relatedBundle) : {};
+    const relatedContext: { relatedMemory?: string; relatedWorkItem?: string } = relatedBundle
+      ? buildRelatedContext(signal, relatedBundle)
+      : {};
     nextEvents.push({
       id: `recall-${input.now}-${nextEvents.length}`,
       userId: input.userId,
