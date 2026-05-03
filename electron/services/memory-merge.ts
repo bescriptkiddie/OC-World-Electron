@@ -93,6 +93,7 @@ export async function mergeAwarenessCandidates(input: {
 
     const insight = input.insights.find((item) => item.id === decision.insightId);
     await appendConfirmedMemoryNote({
+      userId: input.episode.userId,
       insightId: decision.insightId,
       title: insight?.title ?? decision.text,
       text: decision.text,

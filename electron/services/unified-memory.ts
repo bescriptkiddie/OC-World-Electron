@@ -65,44 +65,85 @@ const DEFAULT_SYSTEM_REMINDERS_MARKDOWN = `# System Reminders
 - 长期记忆只写入用户确认过或多次稳定出现的内容。
 - 记忆链失败不能阻断聊天主链。
 `;
+const DEFAULT_LEGACY_MEMORY_USER_ID = "user-001";
 
 function resolveDataPath(dataRoot: string | undefined, ...segments: string[]) {
   return resolveOcDataPath(dataRoot, ...segments);
 }
 
-function resolveMemoryPath(dataRoot?: string) {
+function getLegacyMemoryUserId() {
+  return process.env.OC_LEGACY_MEMORY_USER_ID?.trim() || DEFAULT_LEGACY_MEMORY_USER_ID;
+}
+
+function shouldUseLegacyMemoryFallback(userId: string) {
+  return userId === getLegacyMemoryUserId();
+}
+
+function resolveUserScopeDir(dataRoot: string | undefined, scope: string, userId: string) {
+  return resolveDataPath(dataRoot, scope, "users", slug(userId));
+}
+
+function resolveMemoryPath(userId: string, dataRoot?: string) {
+  return path.join(resolveUserScopeDir(dataRoot, "memory", userId), "memory.md");
+}
+
+function resolveLegacyMemoryPath(dataRoot?: string) {
   return resolveDataPath(dataRoot, "memory", "memory.md");
 }
 
-function resolveVoicePath(dataRoot?: string) {
+function resolveVoicePath(userId: string, dataRoot?: string) {
+  return path.join(resolveUserScopeDir(dataRoot, "memory", userId), "voice.md");
+}
+
+function resolveLegacyVoicePath(dataRoot?: string) {
   return resolveDataPath(dataRoot, "memory", "voice.md");
 }
 
-function resolveSystemRemindersPath(dataRoot?: string) {
+function resolveSystemRemindersPath(userId: string, dataRoot?: string) {
+  return path.join(resolveUserScopeDir(dataRoot, "memory", userId), "system-reminders.md");
+}
+
+function resolveLegacySystemRemindersPath(dataRoot?: string) {
   return resolveDataPath(dataRoot, "memory", "scopes", "default", "system-reminders.md");
 }
 
-function resolveAwarenessEpisodesDir(dataRoot?: string) {
+function resolveAwarenessEpisodesDir(userId: string, dataRoot?: string) {
+  return path.join(resolveUserScopeDir(dataRoot, "awareness", userId), "episodes");
+}
+
+function resolveLegacyAwarenessEpisodesDir(dataRoot?: string) {
   return resolveDataPath(dataRoot, "awareness", "episodes");
 }
 
-function resolveAwarenessNotesDir(dataRoot?: string) {
-  return resolveDataPath(dataRoot, "awareness", "notes");
+function resolveAwarenessNotesDir(userId: string, dataRoot?: string) {
+  return path.join(resolveUserScopeDir(dataRoot, "awareness", userId), "notes");
 }
 
 function resolveWorkItemsDir(dataRoot?: string) {
   return resolveDataPath(dataRoot, "work-items");
 }
 
-function resolveProjectsPath(dataRoot?: string) {
+function resolveProjectsPath(userId: string, dataRoot?: string) {
+  return path.join(resolveUserScopeDir(dataRoot, "projects", userId), "projects.json");
+}
+
+function resolveLegacyProjectsPath(dataRoot?: string) {
   return resolveDataPath(dataRoot, "projects", "projects.json");
 }
 
-function resolveRecallPath(dataRoot?: string) {
+function resolveRecallPath(userId: string, dataRoot?: string) {
+  return path.join(resolveUserScopeDir(dataRoot, "recall", userId), "events.json");
+}
+
+function resolveLegacyRecallPath(dataRoot?: string) {
   return resolveDataPath(dataRoot, "recall", "events.json");
 }
 
-function resolveRecallSignalsPath(dataRoot?: string) {
+function resolveRecallSignalsPath(userId: string, dataRoot?: string) {
+  return path.join(resolveUserScopeDir(dataRoot, "recall", userId), "signals.json");
+}
+
+function resolveLegacyRecallSignalsPath(dataRoot?: string) {
   return resolveDataPath(dataRoot, "recall", "signals.json");
 }
 
@@ -110,14 +151,18 @@ async function ensureDir(dirPath: string) {
   await mkdir(dirPath, { recursive: true });
 }
 
-async function ensureTextFile(filePath: string, fallback: string) {
+async function ensureTextFileWithLegacy(filePath: string, legacyFilePath: string | null, fallback: string) {
   await ensureDir(path.dirname(filePath));
 
   try {
     await readFile(filePath, "utf8");
+    return;
   } catch {
-    await writeFile(filePath, fallback, "utf8");
+    // Continue to seed from the legacy global file when available.
   }
+
+  const initial = legacyFilePath ? await readTextFile(legacyFilePath, fallback) : fallback;
+  await writeFile(filePath, initial, "utf8");
 }
 
 async function readTextFile(filePath: string, fallback: string) {
@@ -125,6 +170,14 @@ async function readTextFile(filePath: string, fallback: string) {
     return await readFile(filePath, "utf8");
   } catch {
     return fallback;
+  }
+}
+
+async function readTextFileWithLegacy(filePath: string, legacyFilePath: string | null, fallback: string) {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch {
+    return legacyFilePath ? readTextFile(legacyFilePath, fallback) : fallback;
   }
 }
 
@@ -137,9 +190,26 @@ async function readJsonFile<T>(filePath: string, fallback: T, parser: (value: un
   }
 }
 
+async function readJsonFileWithLegacy<T>(filePath: string, legacyFilePath: string, fallback: T, parser: (value: unknown) => T): Promise<T> {
+  try {
+    const raw = await readFile(filePath, "utf8");
+    return parser(JSON.parse(raw));
+  } catch {
+    return readJsonFile(legacyFilePath, fallback, parser);
+  }
+}
+
 async function writeJsonFile(filePath: string, value: unknown) {
   await ensureDir(path.dirname(filePath));
   await writeFile(filePath, JSON.stringify(value, null, 2), "utf8");
+}
+
+async function listFiles(dirPath: string) {
+  try {
+    return await readdir(dirPath);
+  } catch {
+    return [];
+  }
 }
 
 function createEmptyProjectsState(userId: string): ProjectsState {
@@ -254,31 +324,56 @@ async function getLatestUpdatedAt(filePaths: string[]) {
 }
 
 export async function ensureUnifiedMemoryRepository(userId: string, dataRoot?: string) {
+  const legacyMemoryPath = shouldUseLegacyMemoryFallback(userId) ? resolveLegacyMemoryPath(dataRoot) : null;
+  const legacyVoicePath = shouldUseLegacyMemoryFallback(userId) ? resolveLegacyVoicePath(dataRoot) : null;
+
   await Promise.all([
-    ensureTextFile(resolveMemoryPath(dataRoot), DEFAULT_MEMORY_MARKDOWN),
-    ensureTextFile(resolveVoicePath(dataRoot), DEFAULT_VOICE_MARKDOWN),
-    ensureTextFile(resolveSystemRemindersPath(dataRoot), DEFAULT_SYSTEM_REMINDERS_MARKDOWN),
-    ensureDir(resolveAwarenessEpisodesDir(dataRoot)),
-    ensureDir(resolveAwarenessNotesDir(dataRoot)),
+    ensureTextFileWithLegacy(resolveMemoryPath(userId, dataRoot), legacyMemoryPath, DEFAULT_MEMORY_MARKDOWN),
+    ensureTextFileWithLegacy(resolveVoicePath(userId, dataRoot), legacyVoicePath, DEFAULT_VOICE_MARKDOWN),
+    ensureTextFileWithLegacy(
+      resolveSystemRemindersPath(userId, dataRoot),
+      resolveLegacySystemRemindersPath(dataRoot),
+      DEFAULT_SYSTEM_REMINDERS_MARKDOWN,
+    ),
+    ensureDir(resolveAwarenessEpisodesDir(userId, dataRoot)),
+    ensureDir(resolveAwarenessNotesDir(userId, dataRoot)),
     ensureDir(resolveWorkItemsDir(dataRoot)),
-    writeJsonFile(resolveProjectsPath(dataRoot), await loadProjectsState(userId, dataRoot)),
-    writeJsonFile(resolveRecallPath(dataRoot), await loadRecallEvents(userId, dataRoot)),
-    writeJsonFile(resolveRecallSignalsPath(dataRoot), await loadRecallSignalStates(userId, dataRoot)),
+    writeJsonFile(resolveProjectsPath(userId, dataRoot), await loadProjectsState(userId, dataRoot)),
+    writeJsonFile(resolveRecallPath(userId, dataRoot), await loadRecallEvents(userId, dataRoot)),
+    writeJsonFile(resolveRecallSignalsPath(userId, dataRoot), await loadRecallSignalStates(userId, dataRoot)),
   ]);
 }
 
 export async function loadLongTermMemory(userId: string, dataRoot?: string): Promise<LongTermMemory> {
+  const legacyMemoryPath = shouldUseLegacyMemoryFallback(userId) ? resolveLegacyMemoryPath(dataRoot) : null;
+  const legacyVoicePath = shouldUseLegacyMemoryFallback(userId) ? resolveLegacyVoicePath(dataRoot) : null;
+
   await Promise.all([
-    ensureTextFile(resolveMemoryPath(dataRoot), DEFAULT_MEMORY_MARKDOWN),
-    ensureTextFile(resolveVoicePath(dataRoot), DEFAULT_VOICE_MARKDOWN),
-    ensureTextFile(resolveSystemRemindersPath(dataRoot), DEFAULT_SYSTEM_REMINDERS_MARKDOWN),
+    ensureTextFileWithLegacy(resolveMemoryPath(userId, dataRoot), legacyMemoryPath, DEFAULT_MEMORY_MARKDOWN),
+    ensureTextFileWithLegacy(resolveVoicePath(userId, dataRoot), legacyVoicePath, DEFAULT_VOICE_MARKDOWN),
+    ensureTextFileWithLegacy(
+      resolveSystemRemindersPath(userId, dataRoot),
+      resolveLegacySystemRemindersPath(dataRoot),
+      DEFAULT_SYSTEM_REMINDERS_MARKDOWN,
+    ),
   ]);
 
   const [memoryMarkdown, voiceMarkdown, systemRemindersMarkdown, updatedAt] = await Promise.all([
-    readTextFile(resolveMemoryPath(dataRoot), DEFAULT_MEMORY_MARKDOWN),
-    readTextFile(resolveVoicePath(dataRoot), DEFAULT_VOICE_MARKDOWN),
-    readTextFile(resolveSystemRemindersPath(dataRoot), DEFAULT_SYSTEM_REMINDERS_MARKDOWN),
-    getLatestUpdatedAt([resolveMemoryPath(dataRoot), resolveVoicePath(dataRoot), resolveSystemRemindersPath(dataRoot)]),
+    readTextFileWithLegacy(resolveMemoryPath(userId, dataRoot), legacyMemoryPath, DEFAULT_MEMORY_MARKDOWN),
+    readTextFileWithLegacy(resolveVoicePath(userId, dataRoot), legacyVoicePath, DEFAULT_VOICE_MARKDOWN),
+    readTextFileWithLegacy(
+      resolveSystemRemindersPath(userId, dataRoot),
+      resolveLegacySystemRemindersPath(dataRoot),
+      DEFAULT_SYSTEM_REMINDERS_MARKDOWN,
+    ),
+    getLatestUpdatedAt([
+      resolveMemoryPath(userId, dataRoot),
+      resolveVoicePath(userId, dataRoot),
+      resolveSystemRemindersPath(userId, dataRoot),
+      ...(legacyMemoryPath ? [legacyMemoryPath] : []),
+      ...(legacyVoicePath ? [legacyVoicePath] : []),
+      resolveLegacySystemRemindersPath(dataRoot),
+    ]),
   ]);
 
   return {
@@ -291,24 +386,31 @@ export async function loadLongTermMemory(userId: string, dataRoot?: string): Pro
 }
 
 export async function appendAwarenessEpisode(episode: AwarenessEpisode, dataRoot?: string) {
-  await ensureDir(resolveAwarenessEpisodesDir(dataRoot));
+  await ensureDir(resolveAwarenessEpisodesDir(episode.userId, dataRoot));
   const fileName = `${getDateKey(episode.createdAt)}_${slug(episode.id)}_${slug(episode.title)}.md`;
-  const filePath = path.join(resolveAwarenessEpisodesDir(dataRoot), fileName);
+  const filePath = path.join(resolveAwarenessEpisodesDir(episode.userId, dataRoot), fileName);
   await writeFile(filePath, renderAwarenessEpisode(episode), "utf8");
   return episode;
 }
 
-export async function listAwarenessEpisodes(userId: string, limit = 10, dataRoot?: string): Promise<AwarenessEpisode[]> {
-  await ensureDir(resolveAwarenessEpisodesDir(dataRoot));
-
-  const names = await readdir(resolveAwarenessEpisodesDir(dataRoot));
-  const episodes = await Promise.all(
+async function readAwarenessEpisodesFromDir(dirPath: string) {
+  const names = await listFiles(dirPath);
+  return Promise.all(
     names
       .filter((name) => name.endsWith(".md"))
       .sort()
       .reverse()
-      .map(async (name) => parseAwarenessEpisodeMarkdown(await readFile(path.join(resolveAwarenessEpisodesDir(dataRoot), name), "utf8"))),
+      .map(async (name) => parseAwarenessEpisodeMarkdown(await readFile(path.join(dirPath, name), "utf8"))),
   );
+}
+
+export async function listAwarenessEpisodes(userId: string, limit = 10, dataRoot?: string): Promise<AwarenessEpisode[]> {
+  await ensureDir(resolveAwarenessEpisodesDir(userId, dataRoot));
+
+  const episodes = [
+    ...(await readAwarenessEpisodesFromDir(resolveAwarenessEpisodesDir(userId, dataRoot))),
+    ...(await readAwarenessEpisodesFromDir(resolveLegacyAwarenessEpisodesDir(dataRoot))),
+  ];
 
   return episodes
     .filter((episode): episode is AwarenessEpisode => Boolean(episode && episode.userId === userId))
@@ -342,33 +444,40 @@ export function createWorkItemId(userId: string, title: string) {
 
 export async function loadProjectsState(userId: string, dataRoot?: string): Promise<ProjectsState> {
   const fallback = createEmptyProjectsState(userId);
-  const state = await readJsonFile(resolveProjectsPath(dataRoot), fallback, parseProjectsState);
+  const state = await readJsonFileWithLegacy(resolveProjectsPath(userId, dataRoot), resolveLegacyProjectsPath(dataRoot), fallback, parseProjectsState);
   return state.userId === userId ? state : fallback;
 }
 
 export async function saveProjectsState(state: ProjectsState, dataRoot?: string) {
-  await writeJsonFile(resolveProjectsPath(dataRoot), state);
+  await writeJsonFile(resolveProjectsPath(state.userId, dataRoot), state);
   return state;
 }
 
 export async function loadRecallEvents(userId: string, dataRoot?: string): Promise<RecallEvent[]> {
-  const events = await readJsonFile(resolveRecallPath(dataRoot), [], parseRecallEventList);
+  const events = await readJsonFileWithLegacy(resolveRecallPath(userId, dataRoot), resolveLegacyRecallPath(dataRoot), [], parseRecallEventList);
   return events.filter((event) => event.userId === userId);
 }
 
-export async function saveRecallEvents(events: RecallEvent[], dataRoot?: string) {
-  await writeJsonFile(resolveRecallPath(dataRoot), events);
-  return events;
+export async function saveRecallEvents(userId: string, events: RecallEvent[], dataRoot?: string) {
+  const scopedEvents = events.filter((event) => event.userId === userId);
+  await writeJsonFile(resolveRecallPath(userId, dataRoot), scopedEvents);
+  return scopedEvents;
 }
 
 export async function loadRecallSignalStates(userId: string, dataRoot?: string): Promise<RecallSignalState[]> {
-  const states = await readJsonFile(resolveRecallSignalsPath(dataRoot), [], parseRecallSignalStateList);
+  const states = await readJsonFileWithLegacy(
+    resolveRecallSignalsPath(userId, dataRoot),
+    resolveLegacyRecallSignalsPath(dataRoot),
+    [],
+    parseRecallSignalStateList,
+  );
   return states.filter((state) => state.userId === userId);
 }
 
-export async function saveRecallSignalStates(states: RecallSignalState[], dataRoot?: string) {
-  await writeJsonFile(resolveRecallSignalsPath(dataRoot), states);
-  return states;
+export async function saveRecallSignalStates(userId: string, states: RecallSignalState[], dataRoot?: string) {
+  const scopedStates = states.filter((state) => state.userId === userId);
+  await writeJsonFile(resolveRecallSignalsPath(userId, dataRoot), scopedStates);
+  return scopedStates;
 }
 
 export async function listRecentRecallEvents(userId: string, limit = 10, dataRoot?: string) {
@@ -415,6 +524,7 @@ function appendNoteToMarkdown(markdown: string, section: string, note: string) {
 }
 
 export async function appendConfirmedMemoryNote(input: {
+  userId: string;
   insightId: string;
   title: string;
   text: string;
@@ -422,12 +532,15 @@ export async function appendConfirmedMemoryNote(input: {
   now: number;
   dataRoot?: string;
 }) {
-  const filePath = input.type === "voice" ? resolveVoicePath(input.dataRoot) : resolveMemoryPath(input.dataRoot);
-  await ensureTextFile(filePath, input.type === "voice" ? DEFAULT_VOICE_MARKDOWN : DEFAULT_MEMORY_MARKDOWN);
+  const legacyMemoryPath = shouldUseLegacyMemoryFallback(input.userId) ? resolveLegacyMemoryPath(input.dataRoot) : null;
+  const legacyVoicePath = shouldUseLegacyMemoryFallback(input.userId) ? resolveLegacyVoicePath(input.dataRoot) : null;
+  const filePath = input.type === "voice" ? resolveVoicePath(input.userId, input.dataRoot) : resolveMemoryPath(input.userId, input.dataRoot);
+  const legacyFilePath = input.type === "voice" ? legacyVoicePath : legacyMemoryPath;
+  await ensureTextFileWithLegacy(filePath, legacyFilePath, input.type === "voice" ? DEFAULT_VOICE_MARKDOWN : DEFAULT_MEMORY_MARKDOWN);
   const section = input.type === "voice" ? "已确认的沟通偏好" : "Confirmed Growth";
   const marker = `<!-- insight:${input.insightId} -->`;
   const note = `- ${new Date(input.now).toISOString().slice(0, 10)} ${marker} ${input.title}：${input.text}`;
-  const current = await readTextFile(filePath, input.type === "voice" ? DEFAULT_VOICE_MARKDOWN : DEFAULT_MEMORY_MARKDOWN);
+  const current = await readTextFileWithLegacy(filePath, legacyFilePath, input.type === "voice" ? DEFAULT_VOICE_MARKDOWN : DEFAULT_MEMORY_MARKDOWN);
   const next = appendNoteToMarkdown(current, section, note);
   await writeFile(filePath, next, "utf8");
 }
@@ -443,8 +556,8 @@ export async function appendAwarenessNote(input: {
     return null;
   }
 
-  await ensureDir(resolveAwarenessNotesDir(input.dataRoot));
-  const filePath = path.join(resolveAwarenessNotesDir(input.dataRoot), `${getDateKey(input.now)}_${slug(input.episodeId)}.md`);
+  await ensureDir(resolveAwarenessNotesDir(input.userId, input.dataRoot));
+  const filePath = path.join(resolveAwarenessNotesDir(input.userId, input.dataRoot), `${getDateKey(input.now)}_${slug(input.episodeId)}.md`);
   await writeFile(
     filePath,
     `# Awareness Merge Note

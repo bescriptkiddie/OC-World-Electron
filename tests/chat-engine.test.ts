@@ -154,9 +154,9 @@ describe("chat engine", () => {
 
     const insightsPath = path.join(tempDir, "oc-data", "growth", "user-001", "insights.json");
     const evidencePath = path.join(tempDir, "oc-data", "growth", "user-001", "evidence.json");
-    const awarenessDir = path.join(tempDir, "oc-data", "awareness", "episodes");
+    const awarenessDir = path.join(tempDir, "oc-data", "awareness", "users", "user-001", "episodes");
     const workItemsDir = path.join(tempDir, "oc-data", "work-items");
-    const projectsPath = path.join(tempDir, "oc-data", "projects", "projects.json");
+    const projectsPath = path.join(tempDir, "oc-data", "projects", "users", "user-001", "projects.json");
     await waitForFile(insightsPath);
     await waitForFile(evidencePath);
     await waitForFile(projectsPath);
@@ -200,7 +200,7 @@ describe("chat engine", () => {
       userMessage: "我想做一个会慢慢理解人的成长伙伴。",
     });
 
-    const awarenessDir = path.join(tempDir, "oc-data", "awareness", "episodes");
+    const awarenessDir = path.join(tempDir, "oc-data", "awareness", "users", "user-001", "episodes");
     const workItemsDir = path.join(tempDir, "oc-data", "work-items");
 
     expect(result.text.length).toBeGreaterThan(0);

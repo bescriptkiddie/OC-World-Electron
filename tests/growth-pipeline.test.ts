@@ -44,6 +44,7 @@ describe("growth pipeline", () => {
   it("runs the full manual distillation chain", async () => {
     await saveGrowthInsights("user-001", [createGoalInsight()], tempDir);
     await saveRecallSignalStates(
+      "user-001",
       [
         {
           userId: "user-001",

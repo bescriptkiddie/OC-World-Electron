@@ -360,6 +360,7 @@ export function registerIpcHandlers() {
       ),
       saveGrowthProfile(payload.userId, confirmInsightToProfile({ profile, insight, now })),
       appendConfirmedMemoryNote({
+        userId: payload.userId,
         insightId: insight.id,
         title: insight.title,
         text: insight.text,

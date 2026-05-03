@@ -79,6 +79,7 @@ describe("recall evaluator", () => {
     expect(events).toEqual([
       expect.objectContaining({
         signal: "跑通 Chat 主链路",
+        text: expect.stringContaining("待办：跑通 Chat 主链路，进度：进行中"),
         status: "candidate",
       }),
     ]);
