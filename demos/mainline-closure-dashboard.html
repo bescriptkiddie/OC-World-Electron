@@ -469,6 +469,16 @@
 
           <div class="entry">
             <div class="entry-head">
+              <div class="entry-title">补齐 Hermes error 事件和 recall 读取成本控制</div>
+              <div class="entry-time">2026-05-04 01:52:50 CST</div>
+            </div>
+            <div class="entry-body">
+              聊天失败时现在也会补发 `error` 和 `turn_end`，前端不会留下悬空回合；同时 recall 只在本轮真的命中候选信号时才批量读取长期记忆和事项，避免按 signal 重复打磁盘。
+            </div>
+          </div>
+
+          <div class="entry">
+            <div class="entry-head">
               <div class="entry-title">补齐 Hermes status / reveal IPC 断口并准备并回主线</div>
               <div class="entry-time">2026-05-04 01:20:01 CST</div>
             </div>
