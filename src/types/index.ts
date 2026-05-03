@@ -318,7 +318,6 @@ export interface ContextSnapshot {
   character: CharacterConfig;
   growthProfile: GrowthProfile;
   latentInsights: GrowthInsight[];
-  retrievedMemoryBundle: RetrievedMemoryBundle;
   realtimeContext: AirJellyContext;
   socialMemory: MemorySummary[];
   conversationState: {
@@ -397,6 +396,41 @@ export interface HermesRuntimeStatus {
   lastError: string | null;
   lastStartedAt: number | null;
   lastHealthCheckAt: number | null;
+}
+
+export type HermesBridgeTransport = "none" | "plugin" | "sidecar";
+
+export interface HermesBridgeStatus {
+  connected: boolean;
+  transport: HermesBridgeTransport;
+  lastEventAt: number | null;
+}
+
+export type HermesSessionEventKind =
+  | "turn_start"
+  | "text_delta"
+  | "tool_call_start"
+  | "tool_call_end"
+  | "turn_end"
+  | "error";
+
+export interface HermesSessionEvent {
+  id: string;
+  sessionId: string;
+  turnId: string;
+  kind: HermesSessionEventKind;
+  emittedAt: number;
+  text?: string;
+  toolName?: string;
+  payload?: Record<string, unknown>;
+}
+
+export interface HermesSessionEventQuery {
+  sessionId?: string;
+  turnId?: string;
+  userId?: string;
+  characterId?: string;
+  limit?: number;
 }
 
 export interface TimelineItem extends GrowthMoment {

@@ -22,13 +22,15 @@ afterEach(() => {
 });
 
 describe("oc world capabilities facade", () => {
-  it("delegates chat, memory, airjelly, hermes, tts, and image capabilities", async () => {
+  it("delegates chat memory airjelly hermes bridge tts and image capabilities", async () => {
     const chat = vi.fn().mockResolvedValue(chatResult);
     const generateGreeting = vi.fn().mockResolvedValue(greetingResult);
     const loadOCHistory = vi.fn().mockResolvedValue([{ userMessage: "hi" }]);
     const loadRecentSummaries = vi.fn().mockResolvedValue([{ period: "最近" }]);
     const getAirJellyContext = vi.fn().mockResolvedValue({ source: "mock", events: [], tasks: [], appUsage: [] });
     const getStatus = vi.fn().mockReturnValue({ state: "healthy", pid: 1, restartCount: 0, lastError: null, lastStartedAt: null, lastHealthCheckAt: null });
+    const getHermesBridgeStatus = vi.fn().mockResolvedValue({ connected: false, transport: "none", lastEventAt: null });
+    const listHermesSessionEvents = vi.fn().mockResolvedValue([]);
     const getTtsStatus = vi.fn().mockReturnValue({ provider: "stepfun", configured: true, voiceType: "voice", lastError: null });
     const synthesizeSpeech = vi.fn().mockResolvedValue({ provider: "stepfun", requestId: "req-1", audioBase64: "AAAA", mimeType: "audio/mpeg", encoding: "mp3", durationMs: null });
     const generateImage = vi.fn().mockResolvedValue({ imageBase64: "BBBB", mimeType: "image/png", savedPath: "/tmp/avatar.png" });
@@ -41,6 +43,8 @@ describe("oc world capabilities facade", () => {
         loadRecentSummaries,
         getAirJellyContext,
         hermesManager: { getStatus },
+        getHermesBridgeStatus,
+        listHermesSessionEvents,
         getTtsStatus,
         synthesizeSpeech,
         generateImage,
@@ -59,6 +63,8 @@ describe("oc world capabilities facade", () => {
     await expect(capabilities.memory.summaries("user-001", 3)).resolves.toEqual([{ period: "最近" }]);
     await expect(capabilities.airjelly.getContext()).resolves.toEqual({ source: "mock", events: [], tasks: [], appUsage: [] });
     await expect(capabilities.hermes.getStatus()).resolves.toEqual({ state: "healthy", pid: 1, restartCount: 0, lastError: null, lastStartedAt: null, lastHealthCheckAt: null });
+    await expect(capabilities.hermes.getBridgeStatus()).resolves.toEqual({ connected: false, transport: "none", lastEventAt: null });
+    await expect(capabilities.hermes.listSessionEvents({ userId: "user-001", characterId: "char-001" })).resolves.toEqual([]);
     await expect(capabilities.tts.getStatus()).resolves.toEqual({ provider: "stepfun", configured: true, voiceType: "voice", lastError: null });
     await expect(capabilities.tts.synthesize({ text: "hello" })).resolves.toEqual({ provider: "stepfun", requestId: "req-1", audioBase64: "AAAA", mimeType: "audio/mpeg", encoding: "mp3", durationMs: null });
     await expect(capabilities.image.generate({ prompt: "avatar" })).resolves.toEqual({ imageBase64: "BBBB", mimeType: "image/png", savedPath: "/tmp/avatar.png" });
@@ -69,6 +75,8 @@ describe("oc world capabilities facade", () => {
     expect(loadRecentSummaries).toHaveBeenCalledWith("user-001", 3, undefined);
     expect(getAirJellyContext).toHaveBeenCalledWith(undefined);
     expect(getStatus).toHaveBeenCalled();
+    expect(getHermesBridgeStatus).toHaveBeenCalled();
+    expect(listHermesSessionEvents).toHaveBeenCalledWith({ userId: "user-001", characterId: "char-001" });
     expect(getTtsStatus).toHaveBeenCalled();
     expect(synthesizeSpeech).toHaveBeenCalledWith(expect.objectContaining({ text: "hello", requestId: expect.any(String) }), { signal: expect.any(AbortSignal) });
     expect(generateImage).toHaveBeenCalledWith({ prompt: "avatar" }, "char-001", undefined);

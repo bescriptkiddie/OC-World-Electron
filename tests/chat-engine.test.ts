@@ -154,9 +154,9 @@ describe("chat engine", () => {
 
     const insightsPath = path.join(tempDir, "oc-data", "growth", "user-001", "insights.json");
     const evidencePath = path.join(tempDir, "oc-data", "growth", "user-001", "evidence.json");
-    const awarenessDir = path.join(tempDir, "oc-data", "awareness", "episodes");
+    const awarenessDir = path.join(tempDir, "oc-data", "awareness", "users", "user-001", "episodes");
     const workItemsDir = path.join(tempDir, "oc-data", "work-items");
-    const projectsPath = path.join(tempDir, "oc-data", "projects", "projects.json");
+    const projectsPath = path.join(tempDir, "oc-data", "projects", "users", "user-001", "projects.json");
     await waitForFile(insightsPath);
     await waitForFile(evidencePath);
     await waitForFile(projectsPath);
@@ -171,7 +171,7 @@ describe("chat engine", () => {
     expect(evidence.length).toBeGreaterThan(0);
     expect(awarenessFiles.length).toBeGreaterThan(0);
     expect(workItemFiles.length).toBeGreaterThan(0);
-    expect(projects.projects[0]?.title).toContain("成长方向");
+    expect(projects.projects[0]?.title).toContain("做一个会慢慢理解人的成长伙伴");
   });
 
   it("keeps chat working when growth distillation fails", async () => {
@@ -189,6 +189,99 @@ describe("chat engine", () => {
     expect(result.source).toBe("mock");
   });
 
+  it("clears cached snapshots after relationship and history writes", async () => {
+    vi.resetModules();
+
+    const clearContextSnapshotCache = vi.fn();
+    const buildContextSnapshot = vi.fn().mockResolvedValue({
+      realtimeContext: { source: "mock", events: [], tasks: [], appUsage: [] },
+      growthProfile: { userId: "user-001", updatedAt: 0, goals: [], strengths: [], preferences: [], openQuestions: [] },
+      conversationState: { recentChat: [] },
+      relationshipState: {
+        userId: "user-001",
+        userName: "Pika",
+        intimacy: 10,
+        stage: "friend",
+        preferences: { topics: [], avoid: [], communicationStyle: "direct" },
+        keyMoments: [],
+        lastInteraction: 0,
+        moodBaseline: "steady",
+      },
+      socialMemory: [],
+      recentChat: [],
+      relationship: {
+        userId: "user-001",
+        userName: "Pika",
+        intimacy: 10,
+        stage: "friend",
+        preferences: { topics: [], avoid: [], communicationStyle: "direct" },
+        keyMoments: [],
+        lastInteraction: 0,
+        moodBaseline: "steady",
+      },
+      character: {
+        id: "char-001",
+        name: "小橘",
+        personality: "敏锐直接",
+        catchphrase: "哼。",
+        relationshipSetup: "陪你一起推进项目",
+        avatarLabel: "橘发少女",
+      },
+      wxMemories: [],
+      airjellyCtx: { source: "mock", events: [], tasks: [], appUsage: [] },
+      builtAt: 1,
+      latentInsights: [],
+      characterState: {
+        id: "char-001",
+        name: "小橘",
+        personality: "敏锐直接",
+        catchphrase: "哼。",
+        relationshipSetup: "陪你一起推进项目",
+        avatarLabel: "橘发少女",
+      },
+    });
+    const runGrowthPipeline = vi.fn().mockResolvedValue(undefined);
+    const appendOCHistory = vi.fn().mockResolvedValue(undefined);
+    const saveRelationship = vi.fn().mockResolvedValue(undefined);
+
+    vi.doMock("../electron/services/context-snapshot", async () => {
+      const actual = await vi.importActual<typeof import("../electron/services/context-snapshot")>("../electron/services/context-snapshot");
+      return {
+        ...actual,
+        buildContextSnapshot,
+        clearContextSnapshotCache,
+      };
+    });
+    vi.doMock("../electron/services/growth-pipeline", async () => {
+      const actual = await vi.importActual<typeof import("../electron/services/growth-pipeline")>("../electron/services/growth-pipeline");
+      return {
+        ...actual,
+        runGrowthPipeline,
+      };
+    });
+    vi.doMock("../electron/services/memory", async () => {
+      const actual = await vi.importActual<typeof import("../electron/services/memory")>("../electron/services/memory");
+      return {
+        ...actual,
+        appendOCHistory,
+        saveRelationship,
+      };
+    });
+
+    const { chat: reloadedChat } = await import("../electron/services/chat-engine");
+
+    await reloadedChat({
+      characterId: "char-001",
+      userId: "user-001",
+      userMessage: "你好",
+    });
+
+    expect(buildContextSnapshot).toHaveBeenCalled();
+    expect(saveRelationship).toHaveBeenCalled();
+    expect(appendOCHistory).toHaveBeenCalled();
+    expect(clearContextSnapshotCache).toHaveBeenCalledTimes(1);
+  });
+
   it("can disable the new memory pipeline with feature flags", async () => {
     process.env.OC_ENABLE_UNIFIED_MEMORY = "0";
     process.env.OC_ENABLE_DISTILLATION = "0";
@@ -200,7 +293,7 @@ describe("chat engine", () => {
       userMessage: "我想做一个会慢慢理解人的成长伙伴。",
     });
 
-    const awarenessDir = path.join(tempDir, "oc-data", "awareness", "episodes");
+    const awarenessDir = path.join(tempDir, "oc-data", "awareness", "users", "user-001", "episodes");
     const workItemsDir = path.join(tempDir, "oc-data", "work-items");
 
     expect(result.text.length).toBeGreaterThan(0);
