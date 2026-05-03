@@ -2,7 +2,7 @@ import { mkdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { runManualDistillationPipeline } from "../electron/services/growth-pipeline";
+import { runManualDistillationPipeline, runGrowthPipeline } from "../electron/services/growth-pipeline";
 import { saveGrowthInsights } from "../electron/services/memory";
 import {
   listAwarenessEpisodes,
@@ -10,7 +10,8 @@ import {
   loadProjectsState,
   saveRecallSignalStates,
 } from "../electron/services/unified-memory";
-import type { GrowthInsight } from "../src/types";
+import { DEFAULT_AIRJELLY_CONTEXT, DEFAULT_CHARACTER, DEFAULT_HISTORY, DEFAULT_RELATIONSHIP, DEFAULT_SUMMARIES } from "../electron/services/demo-fallback";
+import type { ContextSnapshot, GrowthInsight } from "../src/types";
 
 let tempDir = "";
 
@@ -26,6 +27,38 @@ function createGoalInsight(): GrowthInsight {
     status: "latent",
     createdAt: 1,
     updatedAt: 1,
+  };
+}
+
+function createSnapshot(): ContextSnapshot {
+  return {
+    builtAt: 1713000000000,
+    airjellyCtx: DEFAULT_AIRJELLY_CONTEXT,
+    wxMemories: DEFAULT_SUMMARIES,
+    recentChat: DEFAULT_HISTORY,
+    relationship: DEFAULT_RELATIONSHIP,
+    character: DEFAULT_CHARACTER,
+    growthProfile: {
+      userId: "user-001",
+      updatedAt: 0,
+      goals: [],
+      strengths: [],
+      preferences: [],
+      openQuestions: [],
+    },
+    latentInsights: [],
+    realtimeContext: {
+      events: DEFAULT_AIRJELLY_CONTEXT.events,
+      tasks: [{ title: "Ship OC World MVP", progressSummary: "进行中" }],
+      appUsage: DEFAULT_AIRJELLY_CONTEXT.appUsage,
+      source: DEFAULT_AIRJELLY_CONTEXT.source,
+    },
+    socialMemory: DEFAULT_SUMMARIES,
+    conversationState: {
+      recentChat: DEFAULT_HISTORY,
+    },
+    relationshipState: DEFAULT_RELATIONSHIP,
+    characterState: DEFAULT_CHARACTER,
   };
 }
 
@@ -72,10 +105,41 @@ describe("growth pipeline", () => {
     expect(result.episode.source).toBe("manual");
     expect(result.memoryMergeDecisions[0]).toEqual(expect.objectContaining({ status: "deferred" }));
     expect(result.workItems[0]?.title).toBe("跑通完整记忆闭环");
-    expect(result.projects.projects[0]?.title).toContain("成长方向");
+    expect(result.projects.projects[0]?.title).toContain("跑通完整记忆闭环");
     expect(result.recallEvents[0]).toEqual(expect.objectContaining({ signal: "跑通 Chat 主链路" }));
     expect(episodes[0]?.id).toBe(result.episode.id);
     expect(workItems[0]?.title).toBe("跑通完整记忆闭环");
-    expect(projects.projects[0]?.title).toContain("成长方向");
+    expect(projects.projects[0]?.title).toContain("跑通完整记忆闭环");
+  });
+
+  it("creates work items and projects from strong intent turns through the full pipeline", async () => {
+    const result = await runGrowthPipeline({
+      userId: "user-001",
+      userMessage: "我想先把 MVP 发出来，并继续推进这个版本。",
+      ocResponse: "先把最关键的链路收紧。",
+      growthEvent: "继续推进 MVP",
+      snapshot: createSnapshot(),
+      dataRoot: tempDir,
+      now: 1713000000500,
+    });
+
+    const [workItems, projects] = await Promise.all([
+      listWorkItems("user-001", tempDir),
+      loadProjectsState("user-001", tempDir),
+    ]);
+
+    expect(result.workItems[0]).toEqual(
+      expect.objectContaining({
+        title: "Ship OC World MVP",
+        relatedSignals: expect.arrayContaining(["继续推进 MVP", "Ship OC World MVP"]),
+      }),
+    );
+    expect(workItems[0]?.title).toBe("Ship OC World MVP");
+    expect(projects.projects[0]).toEqual(
+      expect.objectContaining({
+        title: "Ship OC World MVP",
+        workItemIds: [workItems[0]?.id],
+      }),
+    );
   });
 });

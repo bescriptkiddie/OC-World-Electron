@@ -15,7 +15,10 @@ import type {
   ChatSendPayload,
   GrowthInsight,
   GrowthProfile,
+  HermesBridgeStatus,
   HermesRuntimeStatus,
+  HermesSessionEvent,
+  HermesSessionEventQuery,
   ImageGenPayload,
   ImageGenResult,
   LongTermMemory,
@@ -104,7 +107,10 @@ declare global {
       };
       hermes: {
         getStatus: () => Promise<HermesRuntimeStatus>;
+        getBridgeStatus: () => Promise<HermesBridgeStatus>;
+        listSessionEvents: (payload: HermesSessionEventQuery) => Promise<HermesSessionEvent[]>;
         onStatusChanged: (callback: (status: HermesRuntimeStatus) => void) => () => void;
+        onSessionEvent: (callback: (event: HermesSessionEvent) => void) => () => void;
       };
       imageGen: {
         generate: (payload: ImageGenPayload) => Promise<ImageGenResult>;

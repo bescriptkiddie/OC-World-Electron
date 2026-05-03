@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 const hermesStatusChangedChannel = "hermes:status-changed";
+const hermesSessionEventChannel = "hermes:session-event";
 
 contextBridge.exposeInMainWorld("ocWorld", {
   chat: {
@@ -104,6 +105,8 @@ contextBridge.exposeInMainWorld("ocWorld", {
   },
   hermes: {
     getStatus: () => ipcRenderer.invoke("hermes:get-status"),
+    getBridgeStatus: () => ipcRenderer.invoke("hermes:get-bridge-status"),
+    listSessionEvents: (payload: import("../src/types").HermesSessionEventQuery) => ipcRenderer.invoke("hermes:list-session-events", payload),
     onStatusChanged: (callback: (status: import("../src/types").HermesRuntimeStatus) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, status: import("../src/types").HermesRuntimeStatus) => {
         callback(status);
@@ -113,6 +116,17 @@ contextBridge.exposeInMainWorld("ocWorld", {
 
       return () => {
         ipcRenderer.removeListener(hermesStatusChangedChannel, listener);
+      };
+    },
+    onSessionEvent: (callback: (event: import("../src/types").HermesSessionEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, sessionEvent: import("../src/types").HermesSessionEvent) => {
+        callback(sessionEvent);
+      };
+
+      ipcRenderer.on(hermesSessionEventChannel, listener);
+
+      return () => {
+        ipcRenderer.removeListener(hermesSessionEventChannel, listener);
       };
     },
   },

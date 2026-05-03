@@ -101,7 +101,7 @@ function normalizePromptInput(input: LegacyPromptInput | SnapshotPromptInput): L
       relationship: input.snapshot.relationshipState,
       recentChat: input.snapshot.conversationState.recentChat,
       confirmedProfileSummary: input.confirmedProfileSummary,
-      retrievedMemoryBundle: input.retrievedMemoryBundle ?? input.snapshot.retrievedMemoryBundle,
+      retrievedMemoryBundle: input.retrievedMemoryBundle,
     };
   }
 

@@ -11,7 +11,10 @@ import type {
   TtsProviderStatus,
   TtsSynthesizePayload,
   TtsSynthesizeResult,
+  HermesBridgeStatus,
   HermesRuntimeStatus,
+  HermesSessionEvent,
+  HermesSessionEventQuery,
   AirJellyContext,
 } from "../../src/types";
 
@@ -22,6 +25,8 @@ interface CapabilityServices {
   loadRecentSummaries: (userId: string, weeks: number, dataRoot?: string) => Promise<MemorySummary[]>;
   getAirJellyContext: (dataRoot?: string) => Promise<AirJellyContext>;
   hermesManager: { getStatus: () => HermesRuntimeStatus };
+  getHermesBridgeStatus?: () => Promise<HermesBridgeStatus>;
+  listHermesSessionEvents?: (query: HermesSessionEventQuery) => Promise<HermesSessionEvent[]>;
   getTtsStatus: () => TtsProviderStatus;
   synthesizeSpeech: (payload: TtsSynthesizePayload, options?: { signal?: AbortSignal }) => Promise<TtsSynthesizeResult>;
   generateImage: (payload: ImageGenPayload, characterId?: string, dataRoot?: string) => Promise<ImageGenResult>;
@@ -101,6 +106,12 @@ export function createOcWorldCapabilities(options: CreateOcWorldCapabilitiesOpti
     hermes: {
       async getStatus() {
         return services.hermesManager.getStatus();
+      },
+      async getBridgeStatus() {
+        return services.getHermesBridgeStatus?.() ?? { connected: false, transport: "none", lastEventAt: null };
+      },
+      async listSessionEvents(query: HermesSessionEventQuery) {
+        return services.listHermesSessionEvents?.(query) ?? [];
       },
     },
     tts: {

@@ -22,14 +22,6 @@ function createSnapshot(): ContextSnapshot {
     character: DEFAULT_CHARACTER,
     growthProfile,
     latentInsights: [],
-    retrievedMemoryBundle: {
-      longTermFacts: "",
-      voiceHints: "",
-      systemReminders: "",
-      activeProjects: [],
-      relevantWorkItems: [],
-      recentAwarenessHighlights: [],
-    },
     realtimeContext: DEFAULT_AIRJELLY_CONTEXT,
     socialMemory: DEFAULT_SUMMARIES,
     conversationState: {
@@ -41,10 +33,10 @@ function createSnapshot(): ContextSnapshot {
 }
 
 describe("distillation service", () => {
-  it("creates evidence and a goal insight from explicit user intent", () => {
+  it("creates richer goal and preference signals from explicit user intent", () => {
     const result = distillGrowthTurn({
       userId: "user-001",
-      userMessage: "我想做一个会慢慢理解人的成长伙伴。",
+      userMessage: "我想做一个会慢慢理解人的成长伙伴，表达上你就直接一点。",
       ocResponse: "先别做大，先把最关键的链路跑通。",
       growthEvent: null,
       now: 1_713_000_000_000,
@@ -52,16 +44,34 @@ describe("distillation service", () => {
     });
 
     expect(result.evidence).toHaveLength(2);
-    expect(result.awareness.candidateMemoryUpdates).toContain("用户可能在推进：做一个会慢慢理解人的成长伙伴");
-    expect(result.insights).toEqual([
-      expect.objectContaining({
-        type: "goal",
-        title: "做一个会慢慢理解人的成长伙伴",
-        text: "你反复在朝这个目标靠近：做一个会慢慢理解人的成长伙伴。",
-        confidence: 0.45,
-        status: "latent",
-      }),
-    ]);
+    expect(result.awareness.keyMoments).toEqual(expect.arrayContaining(["我想做一个会慢慢理解人的成长伙伴，表达上你就直接一点。"]));
+    expect(result.awareness.candidateMemoryUpdates).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("长期目标：做一个会慢慢理解人的成长伙伴"),
+        "用户偏好更直接、短句式的表达。",
+      ]),
+    );
+    expect(result.awareness.attributeSignals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ domainKey: "communication", trend: "up" }),
+      ]),
+    );
+    expect(result.insights).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "goal",
+          title: expect.stringContaining("做一个会慢慢理解人的成长伙伴"),
+          text: expect.stringContaining("你反复在朝这个目标靠近"),
+          confidence: 0.45,
+          status: "latent",
+        }),
+        expect.objectContaining({
+          type: "preference",
+          text: "用户偏好更直接、短句式的表达。",
+          status: "latent",
+        }),
+      ]),
+    );
   });
 
   it("keeps weak turns as evidence only", () => {
@@ -74,8 +84,8 @@ describe("distillation service", () => {
       snapshot: createSnapshot(),
     });
 
-    expect(result.evidence).toHaveLength(1);
+    expect(result.evidence).toHaveLength(2);
     expect(result.insights).toHaveLength(0);
-    expect(result.awareness.openThreads[0]).toContain("信息较弱");
+    expect(result.awareness.openThreads[0]).toContain("还需要更多轮对话确认长期目标");
   });
 });

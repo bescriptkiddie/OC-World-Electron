@@ -1,7 +1,9 @@
 import type { ContextSnapshot, RecallEvent, RecallSignalState } from "../../src/types";
 import {
+  loadLongTermMemory,
   loadRecallEvents,
   loadRecallSignalStates,
+  listWorkItems,
   saveRecallEvents,
   saveRecallSignalStates,
 } from "./unified-memory";
@@ -58,9 +60,86 @@ function getSignalContexts(snapshot: ContextSnapshot) {
   return contexts;
 }
 
-function buildRecallText(signal: string, contexts: Map<string, string[]>) {
-  const details = contexts.get(signal)?.slice(0, 2).join("；") || "在当前上下文里连续出现";
-  return `AirJelly 反复出现“${signal}”：${details}。已经连续出现 ${REQUIRED_REPEAT_COUNT} 次，可以轻轻提醒。`;
+function extractBulletItems(document: string, sectionTitle: string) {
+  const sectionPattern = new RegExp(`## ${sectionTitle}\\n([\\s\\S]*?)(?=\\n## |$)`);
+  const match = document.match(sectionPattern);
+  if (!match?.[1]) {
+    return [];
+  }
+
+  return match[1]
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("- "))
+    .map((line) => line.replace(/^\-\s*/, ""));
+}
+
+function tokenize(text: string) {
+  return Array.from(
+    new Set(
+      text
+        .toLowerCase()
+        .split(/[^\p{L}\p{N}]+/u)
+        .map((token) => token.trim())
+        .filter((token) => token.length > 1),
+    ),
+  );
+}
+
+function scoreByOverlap(text: string, signal: string) {
+  const haystack = tokenize(text);
+  const needle = tokenize(signal);
+  return needle.reduce((score, token) => score + (haystack.includes(token) ? 1 : 0), 0);
+}
+
+async function buildRelatedContextBundle(userId: string, dataRoot?: string) {
+  const [longTermMemory, workItems] = await Promise.all([
+    loadLongTermMemory(userId, dataRoot),
+    listWorkItems(userId, dataRoot),
+  ]);
+
+  return {
+    memoryFacts: [
+      ...extractBulletItems(longTermMemory.memoryMarkdown, "Growth Focus"),
+      ...extractBulletItems(longTermMemory.memoryMarkdown, "Preferences"),
+      ...extractBulletItems(longTermMemory.memoryMarkdown, "Recent"),
+    ],
+    workItems,
+  };
+}
+
+function buildRelatedContext(signal: string, relatedBundle: Awaited<ReturnType<typeof buildRelatedContextBundle>>) {
+  const relatedMemory = relatedBundle.memoryFacts
+    .map((item) => ({ item, score: scoreByOverlap(item, signal) }))
+    .sort((left, right) => right.score - left.score)
+    .find((item) => item.score > 0)?.item;
+  const relatedWorkItem = relatedBundle.workItems
+    .map((item) => ({
+      item,
+      score: scoreByOverlap(`${item.title} ${item.summary} ${item.description} ${item.relatedSignals.join(" ")}`, signal),
+    }))
+    .sort((left, right) => right.score - left.score || right.item.updatedAt - left.item.updatedAt)
+    .find((item) => item.score > 0)?.item.title;
+
+  return {
+    relatedMemory,
+    relatedWorkItem,
+  };
+}
+
+function buildRecallText(input: {
+  signal: string;
+  contexts: Map<string, string[]>;
+  relatedMemory?: string;
+  relatedWorkItem?: string;
+}) {
+  const details = input.contexts.get(input.signal)?.slice(0, 2).join("；") || "在当前上下文里连续出现";
+  const relatedBits = [
+    input.relatedMemory ? `相关记忆：${input.relatedMemory}` : null,
+    input.relatedWorkItem ? `相关事项：${input.relatedWorkItem}` : null,
+  ].filter((item): item is string => Boolean(item));
+  const suffix = relatedBits.length ? ` ${relatedBits.join("；")}` : "";
+  return `AirJelly 反复出现“${input.signal}”：${details}。已经连续出现 ${REQUIRED_REPEAT_COUNT} 次，可以轻轻提醒。${suffix}`;
 }
 
 function isCoolingDown(state: RecallSignalState | undefined, now: number) {
@@ -127,17 +206,26 @@ export async function evaluateRecallCandidates(input: {
     now: input.now,
   });
 
-  for (const signal of seenSignals) {
+  const eligibleSignals = seenSignals.filter((signal) => {
     const state = nextStates.find((item) => item.signal === signal);
-    if (!state || state.count < REQUIRED_REPEAT_COUNT || isCoolingDown(state, input.now)) {
-      continue;
-    }
+    return Boolean(state && state.count >= REQUIRED_REPEAT_COUNT && !isCoolingDown(state, input.now));
+  });
+  const relatedBundle = eligibleSignals.length
+    ? await buildRelatedContextBundle(input.userId, input.dataRoot)
+    : null;
 
+  for (const signal of eligibleSignals) {
+    const relatedContext = relatedBundle ? buildRelatedContext(signal, relatedBundle) : {};
     nextEvents.push({
       id: `recall-${input.now}-${nextEvents.length}`,
       userId: input.userId,
       signal,
-      text: buildRecallText(signal, signalContexts),
+      text: buildRecallText({
+        signal,
+        contexts: signalContexts,
+        relatedMemory: relatedContext.relatedMemory,
+        relatedWorkItem: relatedContext.relatedWorkItem,
+      }),
       source: "airjelly",
       status: "candidate",
       createdAt: input.now,

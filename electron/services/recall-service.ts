@@ -72,6 +72,7 @@ export async function evaluateContextRecall(input: EvaluateContextRecallInput): 
     recentChatLimit: 6,
     summariesLimit: 3,
     dataRoot,
+    bypassCache: true,
   });
   const events = await evaluateRecallCandidates({
     userId: input.userId,

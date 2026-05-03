@@ -7,17 +7,18 @@ import {
   appendConfirmedMemoryNote,
   ensureUnifiedMemoryRepository,
   listAwarenessEpisodes,
-  loadRecallEvents,
-  loadRecallSignalStates,
-  listWorkItems,
   loadLongTermMemory,
   loadProjectsState,
+  loadRecallEvents,
+  loadRecallSignalStates,
   loadRetrievedMemoryBundle,
+  listWorkItems,
   saveProjectsState,
   saveRecallEvents,
   saveRecallSignalStates,
   saveWorkItem,
 } from "../electron/services/unified-memory";
+import type { ProjectsState } from "../src/types";
 
 let tempDir = "";
 
@@ -175,6 +176,55 @@ describe("unified memory repository", () => {
     await expect(loadRecallEvents("user-002", tempDir)).resolves.toEqual([expect.objectContaining({ signal: "用户二信号" })]);
     await expect(loadRecallSignalStates("user-001", tempDir)).resolves.toEqual([expect.objectContaining({ signal: "用户一信号" })]);
     await expect(loadRecallSignalStates("user-002", tempDir)).resolves.toEqual([expect.objectContaining({ signal: "用户二信号" })]);
+  });
+
+  it("falls back to legacy projects and recall only for the legacy user", async () => {
+    await mkdir(path.join(tempDir, "oc-data", "projects"), { recursive: true });
+    await mkdir(path.join(tempDir, "oc-data", "recall"), { recursive: true });
+    await writeFile(
+      path.join(tempDir, "oc-data", "projects", "projects.json"),
+      JSON.stringify(
+        {
+          version: 1,
+          generatedAt: 1,
+          userId: "user-001",
+          projects: [
+            {
+              id: "legacy-project",
+              userId: "user-001",
+              title: "旧单用户项目",
+              description: "legacy",
+              workItemIds: [],
+              confidence: 0.7,
+              rationale: "legacy",
+              updatedAt: 1,
+            },
+          ],
+        } satisfies ProjectsState,
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    await writeFile(
+      path.join(tempDir, "oc-data", "recall", "events.json"),
+      JSON.stringify([
+        { id: "legacy-recall", userId: "user-001", signal: "旧信号", text: "旧提示", source: "airjelly", status: "candidate", createdAt: 1 },
+      ], null, 2),
+      "utf8",
+    );
+
+    const [legacyProjects, otherProjects, legacyRecall, otherRecall] = await Promise.all([
+      loadProjectsState("user-001", tempDir),
+      loadProjectsState("user-002", tempDir),
+      loadRecallEvents("user-001", tempDir),
+      loadRecallEvents("user-002", tempDir),
+    ]);
+
+    expect(legacyProjects.projects[0]?.title).toBe("旧单用户项目");
+    expect(otherProjects.projects).toEqual([]);
+    expect(legacyRecall[0]?.signal).toBe("旧信号");
+    expect(otherRecall).toEqual([]);
   });
 
   it("builds a retrieved memory bundle from memory, awareness, work-items and projects", async () => {

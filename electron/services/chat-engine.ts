@@ -1,5 +1,6 @@
 import type { ChatResponse, ChatResult, ChatSendPayload } from "../../src/types";
-import { buildContextSnapshot } from "./context-snapshot";
+import { buildContextSnapshot, clearContextSnapshotCache } from "./context-snapshot";
+import { getMemoryFeatureFlags } from "./feature-flags";
 import { buildConfirmedProfileSummary } from "./growth-profile";
 import { runGrowthPipeline } from "./growth-pipeline";
 import { callLLM } from "./llm";
@@ -8,6 +9,7 @@ import {
   appendOCHistory,
   saveRelationship,
 } from "./memory";
+import { retrieveMemoryBundle } from "./memory-retrieval";
 import { buildSystemPrompt } from "./prompt-builder";
 import { calculateIntimacyDelta, updateRelationshipState } from "./relationship";
 
@@ -33,10 +35,20 @@ function throwIfAborted(signal?: AbortSignal) {
   throw error;
 }
 
+function buildQuerySignals(snapshot: Awaited<ReturnType<typeof buildContextSnapshot>>, combinedUserMessage: string) {
+  return [
+    combinedUserMessage,
+    ...snapshot.realtimeContext.tasks.slice(0, 2).map((task) => task.title),
+    ...snapshot.realtimeContext.events.slice(0, 2).map((event) => event.title),
+    ...snapshot.realtimeContext.appUsage.slice(0, 2).map((item) => item.appName),
+  ];
+}
+
 export async function chat(payload: ChatSendPayload, options: ChatOptions = {}): Promise<ChatResult> {
   const dataRoot = process.cwd();
   const turnMessages = getTurnMessages(payload);
   const combinedUserMessage = turnMessages.join("\n");
+  const flags = getMemoryFeatureFlags();
 
   throwIfAborted(options.signal);
 
@@ -47,10 +59,18 @@ export async function chat(payload: ChatSendPayload, options: ChatOptions = {}):
     recentChatLimit: 10,
     dataRoot,
   });
+  const retrievedMemoryBundle = flags.unifiedMemory
+    ? await retrieveMemoryBundle({
+        userId: payload.userId,
+        dataRoot,
+        querySignals: buildQuerySignals(snapshot, combinedUserMessage),
+      })
+    : undefined;
 
   const systemPrompt = buildSystemPrompt({
     snapshot,
     confirmedProfileSummary: buildConfirmedProfileSummary(snapshot.growthProfile),
+    ...(retrievedMemoryBundle ? { retrievedMemoryBundle } : {}),
   });
 
   const messages = [
@@ -87,6 +107,7 @@ export async function chat(payload: ChatSendPayload, options: ChatOptions = {}):
       dataRoot,
     ),
   ]);
+  clearContextSnapshotCache();
 
   void runGrowthPipeline({
     userId: payload.userId,
@@ -121,6 +142,7 @@ export async function generateGreeting(payload: {
   userId: string;
 }): Promise<ChatResponse> {
   const dataRoot = process.cwd();
+  const flags = getMemoryFeatureFlags();
   const snapshot = await buildContextSnapshot({
     userId: payload.userId,
     characterId: payload.characterId,
@@ -128,10 +150,22 @@ export async function generateGreeting(payload: {
     recentChatLimit: 6,
     dataRoot,
   });
+  const retrievedMemoryBundle = flags.unifiedMemory
+    ? await retrieveMemoryBundle({
+        userId: payload.userId,
+        dataRoot,
+        querySignals: [
+          ...snapshot.realtimeContext.tasks.slice(0, 2).map((task) => task.title),
+          ...snapshot.realtimeContext.events.slice(0, 2).map((event) => event.title),
+          ...snapshot.realtimeContext.appUsage.slice(0, 2).map((item) => item.appName),
+        ],
+      })
+    : undefined;
 
   const systemPrompt = buildSystemPrompt({
     snapshot,
     confirmedProfileSummary: buildConfirmedProfileSummary(snapshot.growthProfile),
+    ...(retrievedMemoryBundle ? { retrievedMemoryBundle } : {}),
   });
 
   return callLLM(

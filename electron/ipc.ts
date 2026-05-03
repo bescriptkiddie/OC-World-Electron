@@ -40,6 +40,9 @@ import type {
   AsrStopPayload,
   ChatCancelPayload,
   ChatSendPayload,
+  HermesBridgeStatus,
+  HermesSessionEvent,
+  HermesSessionEventQuery,
   ImageGenPayload,
   RecallEvent,
   RecallEvaluatePayload,
@@ -87,6 +90,10 @@ const ipcChannels = {
   growthRejectInsight: "growth:reject-insight",
   airjellyGetContext: "airjelly:get-context",
   hermesGetStatus: "hermes:get-status",
+  hermesStatusChanged: "hermes:status-changed",
+  hermesGetBridgeStatus: "hermes:get-bridge-status",
+  hermesListSessionEvents: "hermes:list-session-events",
+  hermesSessionEvent: "hermes:session-event",
   imageGenGenerate: "image-gen:generate",
 } as const;
 
@@ -152,6 +159,24 @@ async function stopAsrSession(payload: AsrStopPayload) {
   return true;
 }
 
+function createDefaultHermesBridgeStatus(): HermesBridgeStatus {
+  return {
+    connected: false,
+    transport: "none",
+    lastEventAt: null,
+  };
+}
+
+function listDefaultHermesSessionEvents(_query: HermesSessionEventQuery): HermesSessionEvent[] {
+  return [];
+}
+
+function broadcastHermesSessionEvent(event: HermesSessionEvent) {
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send(ipcChannels.hermesSessionEvent, event);
+  }
+}
+
 async function getLatestReveal(userId: string) {
   const [queue, insights] = await Promise.all([loadRevealQueue(userId), loadGrowthInsights(userId)]);
   const shownCandidate = queue.find((item) => item.status === "shown");
@@ -196,12 +221,13 @@ export function registerIpcHandlers() {
   registered = true;
   detachHermesListener = hermesManager.onStatusChanged((status) => {
     for (const window of BrowserWindow.getAllWindows()) {
-      window.webContents.send("hermes:status-changed", status);
+      window.webContents.send(ipcChannels.hermesStatusChanged, status);
     }
   });
 
   ipcMain.handle(ipcChannels.chatSendMessage, async (_event, payload: ChatSendPayload) => {
     const sessionKey = getChatSessionKey(payload);
+    const turnId = `${sessionKey}:${Date.now()}`;
 
     if (payload.interrupt !== false) {
       abortActiveChat(payload);
@@ -210,8 +236,43 @@ export function registerIpcHandlers() {
     const controller = new AbortController();
     activeChatControllers.set(sessionKey, controller);
 
+    broadcastHermesSessionEvent({
+      id: `${turnId}:start`,
+      sessionId: sessionKey,
+      turnId,
+      kind: "turn_start",
+      emittedAt: Date.now(),
+      payload: { userId: payload.userId, characterId: payload.characterId },
+    });
+
     try {
-      return await chat(payload, { signal: controller.signal });
+      const result = await chat(payload, { signal: controller.signal });
+      broadcastHermesSessionEvent({
+        id: `${turnId}:end`,
+        sessionId: sessionKey,
+        turnId,
+        kind: "turn_end",
+        emittedAt: Date.now(),
+      });
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      broadcastHermesSessionEvent({
+        id: `${turnId}:error`,
+        sessionId: sessionKey,
+        turnId,
+        kind: "error",
+        emittedAt: Date.now(),
+        text: message,
+      });
+      broadcastHermesSessionEvent({
+        id: `${turnId}:end`,
+        sessionId: sessionKey,
+        turnId,
+        kind: "turn_end",
+        emittedAt: Date.now(),
+      });
+      throw error;
     } finally {
       if (activeChatControllers.get(sessionKey) === controller) {
         activeChatControllers.delete(sessionKey);
@@ -410,6 +471,10 @@ export function registerIpcHandlers() {
   });
   ipcMain.handle(ipcChannels.airjellyGetContext, async () => getAirJellyContext());
   ipcMain.handle(ipcChannels.hermesGetStatus, async () => hermesManager.getStatus());
+  ipcMain.handle(ipcChannels.hermesGetBridgeStatus, async () => createDefaultHermesBridgeStatus());
+  ipcMain.handle(ipcChannels.hermesListSessionEvents, async (_event, payload: HermesSessionEventQuery) =>
+    listDefaultHermesSessionEvents(payload),
+  );
   ipcMain.handle(ipcChannels.imageGenGenerate, async (_event, payload: ImageGenPayload) => generateImage(payload));
 }
 
@@ -468,5 +533,7 @@ export function unregisterIpcHandlers() {
   ipcMain.removeHandler(ipcChannels.growthRejectInsight);
   ipcMain.removeHandler(ipcChannels.airjellyGetContext);
   ipcMain.removeHandler(ipcChannels.hermesGetStatus);
+  ipcMain.removeHandler(ipcChannels.hermesGetBridgeStatus);
+  ipcMain.removeHandler(ipcChannels.hermesListSessionEvents);
   ipcMain.removeHandler(ipcChannels.imageGenGenerate);
 }
