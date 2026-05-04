@@ -134,4 +134,11 @@ contextBridge.exposeInMainWorld("ocWorld", {
     generate: (payload: import("../src/types").ImageGenPayload) =>
       ipcRenderer.invoke("image-gen:generate", payload),
   },
+  floatingOc: {
+    show: () => ipcRenderer.invoke("floating-oc:show"),
+    close: () => ipcRenderer.invoke("floating-oc:close"),
+    toggle: () => ipcRenderer.invoke("floating-oc:toggle"),
+    getState: () => ipcRenderer.invoke("floating-oc:get-state"),
+    focusMain: () => ipcRenderer.invoke("floating-oc:focus-main"),
+  },
 });

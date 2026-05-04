@@ -24,7 +24,6 @@ export function ChatView({
   onInterrupt,
   onTtsToggle,
   onVoiceToggle,
-  onConfirmReveal,
   onDismissReveal,
   onRejectReveal,
   onDismissRecallHint,
@@ -47,7 +46,6 @@ export function ChatView({
   onInterrupt: () => void;
   onTtsToggle: () => void;
   onVoiceToggle: () => void;
-  onConfirmReveal: (insightId: string) => Promise<void> | void;
   onDismissReveal: (candidateId: string) => Promise<void> | void;
   onRejectReveal: (insightId: string) => Promise<void> | void;
   onDismissRecallHint: () => void;
@@ -119,10 +117,7 @@ export function ChatView({
                     type="button"
                     className="oc-pill-button is-primary"
                     disabled={revealBusy}
-                    onClick={() => {
-                      void onConfirmReveal(revealHint.insightId);
-                      onOpenMemory();
-                    }}
+                    onClick={onOpenMemory}
                   >
                     看看你发现了什么
                   </button>

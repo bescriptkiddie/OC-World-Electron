@@ -1,5 +1,7 @@
 import type { CharacterConfig, GrowthInsight, GrowthProfile, Relationship, RevealCandidate } from "../types";
-import { OcAvatarLarge } from "./OcAvatar";
+import type { OcInteractionMoment } from "./OcInteractionSystem";
+import { OcInteractionLoop, resolveOcInteractionMoment } from "./OcInteractionSystem";
+import { OcSpriteStage } from "./OcSpriteStage";
 
 type RevealHint = (RevealCandidate & { text?: string; title?: string }) | null;
 
@@ -7,11 +9,11 @@ function countActiveSignals(insights: GrowthInsight[]) {
   return insights.filter((item) => item.status !== "archived" && item.status !== "rejected").length;
 }
 
-function companionTitle(revealHint: RevealHint) {
-  return revealHint ? "Luma 发现了一点东西" : "Luma 正在学会你";
+function companionTitle(revealHint: RevealHint, moment: OcInteractionMoment) {
+  return revealHint ? "Luma 发现了一点东西" : moment.headline;
 }
 
-function companionText(revealHint: RevealHint, profile: GrowthProfile, relationship: Relationship | null) {
+function companionText(revealHint: RevealHint, profile: GrowthProfile, relationship: Relationship | null, moment: OcInteractionMoment) {
   if (revealHint?.text) {
     return revealHint.text;
   }
@@ -20,7 +22,7 @@ function companionText(revealHint: RevealHint, profile: GrowthProfile, relations
     return profile.goals[0].text;
   }
 
-  return relationship?.moodBaseline ?? "第一版不让你管理系统。你只需要说话，OC 会在背后慢慢整理目标、优势、证据和下一步。";
+  return relationship?.moodBaseline ?? moment.body;
 }
 
 export function OcProfileCard({
@@ -49,6 +51,7 @@ export function OcProfileCard({
   const title = character?.name?.trim() || "Luma";
   const summary = greeting.trim() || character?.catchphrase?.trim() || "你只需要开口，剩下的让我慢慢理解。";
   const signalCount = countActiveSignals(growthInsights);
+  const moment = resolveOcInteractionMoment({ relationship, signalCount, revealHint });
 
   return (
     <div className="oc-profile-card oc-invisible-companion">
@@ -67,20 +70,24 @@ export function OcProfileCard({
         </div>
 
         <div className="oc-invisible-companion__avatar-wrap">
-          <OcAvatarLarge
-            size={168}
-            name={title}
-            src={character?.avatarPath ? undefined : "file:///Users/pika/ai-pika/oc-world/demos/oc-avatar-pet.png"}
-            avatarPath={character?.avatarPath}
+          <OcSpriteStage
+            character={character}
+            title={title}
+            subtitle={relationship?.moodBaseline ?? "正在学习你的节奏。"}
+            size={148}
+            compact
+            controls={false}
+            stateId={moment.visualState}
           />
         </div>
 
         <section className="oc-invisible-companion__quiet-panel">
           <div className="oc-invisible-companion__quiet-head">
-            <h2 className="serif">{companionTitle(revealHint)}</h2>
-            <span>{signalCount ? `${signalCount} 个线索` : "正在听"}</span>
+            <h2 className="serif">{companionTitle(revealHint, moment)}</h2>
+            <span>{signalCount ? `${signalCount} 个线索` : moment.label}</span>
           </div>
-          <p>{companionText(revealHint, growthProfile, relationship)}</p>
+          <p>{companionText(revealHint, growthProfile, relationship, moment)}</p>
+          <OcInteractionLoop moment={moment} compact />
         </section>
 
         <div className="oc-invisible-companion__quote">“{summary}”</div>

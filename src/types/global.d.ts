@@ -115,6 +115,13 @@ declare global {
       imageGen: {
         generate: (payload: ImageGenPayload) => Promise<ImageGenResult>;
       };
+      floatingOc: {
+        show: () => Promise<{ open: boolean }>;
+        close: () => Promise<{ open: boolean }>;
+        toggle: () => Promise<{ open: boolean }>;
+        getState: () => Promise<{ open: boolean }>;
+        focusMain: () => Promise<boolean>;
+      };
     };
   }
 }

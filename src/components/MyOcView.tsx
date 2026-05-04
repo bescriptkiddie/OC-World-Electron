@@ -1,5 +1,7 @@
 import type { CharacterConfig, Relationship } from "../types";
 import { IconChat, IconGift, IconRewind, IconTasks } from "./OcWorldIcons";
+import { OcInteractionLoop, resolveOcInteractionMoment } from "./OcInteractionSystem";
+import { OcSpriteStage } from "./OcSpriteStage";
 import { stageLabel } from "./shared";
 
 export function MyOcView({
@@ -19,6 +21,11 @@ export function MyOcView({
   onOpenRewind: () => void;
   onOpenMemory: () => void;
 }) {
+  const moment = resolveOcInteractionMoment({
+    relationship,
+    signalCount: relationship?.keyMoments.length ?? 0,
+  });
+
   return (
     <div className="oc-page oc-myoc-page">
       <section className="oc-hero-card">
@@ -33,13 +40,24 @@ export function MyOcView({
         </div>
       </section>
 
-      <section className="oc-grid-two">
+      <section className="oc-myoc-visual-grid">
+        <OcSpriteStage
+          character={character}
+          title={character?.name?.trim() || "未命名 OC"}
+          subtitle="像 Codex pet 一样，用状态行表达 TA 现在的反应。"
+          size={220}
+          stateId={moment.visualState}
+        />
+
         <article className="oc-surface-card">
           <p className="oc-kicker mono">TA 对你说</p>
           <div className="oc-quote-block serif">“{greeting.trim() || character?.catchphrase?.trim() || "嗯，我在。"}”</div>
           <p className="oc-page-copy">{character?.relationshipSetup?.trim() || "先完成角色生成，再让这段关系长出来。"}</p>
+          <OcInteractionLoop moment={moment} />
         </article>
+      </section>
 
+      <section className="oc-grid-two">
         <article className="oc-surface-card">
           <p className="oc-kicker mono">QUICK ACTIONS</p>
           <div className="oc-action-grid">
@@ -47,6 +65,17 @@ export function MyOcView({
             <ActionCard icon={<IconGift size={16} />} title="重新生成" body="回到创建流程，重做人设、外观和语气。" onClick={onOpenCreate} />
             <ActionCard icon={<IconRewind size={16} />} title="查看回溯" body="看关系是怎么一步步长出来的。" onClick={onOpenRewind} />
             <ActionCard icon={<IconTasks size={16} />} title="查看记忆" body="翻 TA 记住的关于你的小事。" onClick={onOpenMemory} />
+          </div>
+        </article>
+        <article className="oc-surface-card">
+          <p className="oc-kicker mono">VISUAL PACKAGE</p>
+          <div className="oc-visual-package">
+            <span>package</span>
+            <strong>{character?.visualProfile?.packageName ?? "pending"}</strong>
+            <span>spritesheet</span>
+            <strong>{character?.visualProfile?.spritesheetPath ? "ready" : "front-end draft"}</strong>
+            <span>states</span>
+            <strong>{character?.visualProfile?.states.length ?? 9} animation rows</strong>
           </div>
         </article>
       </section>

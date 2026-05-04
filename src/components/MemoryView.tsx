@@ -1,4 +1,6 @@
-import type { GrowthInsight, GrowthProfile, Relationship, TimelineItem } from "../types";
+import type { GrowthInsight, GrowthProfile, Relationship, RevealCandidate, TimelineItem } from "../types";
+
+type RevealHint = (RevealCandidate & { text?: string; title?: string }) | null;
 
 function latestWorries(timeline: TimelineItem[]) {
   const items = timeline.slice(-3).reverse().map((item) => item.event);
@@ -14,20 +16,31 @@ export function MemoryView({
   timeline,
   growthProfile,
   growthInsights,
+  revealHint,
+  revealBusy,
   open,
   onClose,
+  onConfirmReveal,
+  onDismissReveal,
+  onRejectReveal,
 }: {
   relationship: Relationship | null;
   timeline: TimelineItem[];
   growthProfile: GrowthProfile;
   growthInsights: GrowthInsight[];
+  revealHint: RevealHint;
+  revealBusy: boolean;
   open: boolean;
   onClose: () => void;
+  onConfirmReveal: (insightId: string) => Promise<void> | void;
+  onDismissReveal: (candidateId: string) => Promise<void> | void;
+  onRejectReveal: (insightId: string) => Promise<void> | void;
 }) {
   const target = firstLatent(growthInsights, "goal");
   const strength = firstLatent(growthInsights, "strength") ?? growthProfile.strengths[0];
   const plan = firstLatent(growthInsights, "plan");
   const evidence = latestWorries(timeline);
+  const revealInsight = revealHint ? growthInsights.find((item) => item.id === revealHint.insightId) : null;
 
   const cards = [
     {
@@ -68,6 +81,45 @@ export function MemoryView({
         </button>
       </div>
       <div className="oc-memory-drawer__body">
+        {revealHint && (
+          <section className="oc-memory-drawer__card is-reveal">
+            <div className="oc-memory-drawer__card-head">
+              <b>{revealHint.title ?? revealInsight?.title ?? "Luma 发现的一条线索"}</b>
+              <span className="oc-memory-drawer__tag">温和浮现</span>
+            </div>
+            <p>{revealHint.text ?? revealInsight?.text ?? "我好像开始看见一个线索。"}</p>
+            <div className="oc-memory-drawer__signal-row">
+              <span>等待你确认</span>
+              <span>不会自动写入你的成长画像</span>
+            </div>
+            <div className="oc-memory-drawer__actions">
+              <button
+                type="button"
+                className="oc-pill-button is-primary"
+                disabled={revealBusy}
+                onClick={() => void onConfirmReveal(revealHint.insightId)}
+              >
+                确认这个理解
+              </button>
+              <button
+                type="button"
+                className="oc-pill-button oc-pill-button--quiet"
+                disabled={revealBusy}
+                onClick={() => void onDismissReveal(revealHint.id)}
+              >
+                先不用展开
+              </button>
+              <button
+                type="button"
+                className="oc-pill-button oc-pill-button--quiet"
+                disabled={revealBusy}
+                onClick={() => void onRejectReveal(revealHint.insightId)}
+              >
+                这个理解不对
+              </button>
+            </div>
+          </section>
+        )}
         {cards.map((card) => (
           <section key={card.title} className="oc-memory-drawer__card">
             <div className="oc-memory-drawer__card-head">

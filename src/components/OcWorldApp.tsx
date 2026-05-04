@@ -11,6 +11,7 @@ import { RewindView } from "./RewindView";
 import { SettingsView } from "./SettingsView";
 import { SplashScreen } from "./SplashScreen";
 import { type SessionId, bootRows, type ViewId, resolveInitialView, visibleMessages } from "./shared";
+import type { OcVisualProfile } from "../types";
 
 export function OcWorldApp() {
   const chat = useChat();
@@ -20,6 +21,8 @@ export function OcWorldApp() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [initialViewResolved, setInitialViewResolved] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const [floatingOcOpen, setFloatingOcOpen] = useState(false);
+  const floatingOcAvailable = Boolean(window.ocWorld?.floatingOc);
 
   const messages = useMemo(
     () => visibleMessages(chat.history, chat.pendingMessages, chat.isSending, selectedSession),
@@ -40,6 +43,26 @@ export function OcWorldApp() {
       setView("memory");
     }
   }, [memoryOpen]);
+
+  useEffect(() => {
+    if (!window.ocWorld?.floatingOc) {
+      return;
+    }
+
+    let cancelled = false;
+    window.ocWorld.floatingOc.getState().then((state) => {
+      if (!cancelled) {
+        setFloatingOcOpen(state.open);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setFloatingOcOpen(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleViewChange = (nextView: ViewId) => {
     setSettingsOpen(false);
@@ -63,12 +86,21 @@ export function OcWorldApp() {
     setView("chat");
   };
 
+  const toggleFloatingOc = async () => {
+    if (!window.ocWorld?.floatingOc) {
+      return;
+    }
+
+    const state = await window.ocWorld.floatingOc.toggle();
+    setFloatingOcOpen(state.open);
+  };
+
   const dismissSplash = () => {
     setSplash("leaving");
     window.setTimeout(() => setSplash("hidden"), 500);
   };
 
-  const handleCreateSave = async (data: { name: string; personality: string; catchphrase: string; relationshipSetup: string; avatarPath?: string }) => {
+  const handleCreateSave = async (data: { name: string; personality: string; catchphrase: string; relationshipSetup: string; avatarPath?: string; visualProfile?: OcVisualProfile }) => {
     if (!window.ocWorld) {
       throw new Error("IPC not available");
     }
@@ -83,6 +115,7 @@ export function OcWorldApp() {
         relationshipSetup: data.relationshipSetup,
         avatarLabel: data.name,
         avatarPath: data.avatarPath,
+        visualProfile: data.visualProfile,
       },
     });
 
@@ -123,7 +156,16 @@ export function OcWorldApp() {
     />
   );
 
-  const header = <OcWorkspaceHeader current={memoryOpen ? "memory" : view} onChange={handleViewChange} onOpenSettings={() => setSettingsOpen(true)} />;
+  const header = (
+    <OcWorkspaceHeader
+      current={memoryOpen ? "memory" : view}
+      floatingOpen={floatingOcOpen}
+      floatingAvailable={floatingOcAvailable}
+      onChange={handleViewChange}
+      onOpenSettings={() => setSettingsOpen(true)}
+      onToggleFloating={toggleFloatingOc}
+    />
+  );
 
   const content = !initialViewResolved ? (
     <WorkspaceLoading />
@@ -198,7 +240,7 @@ function renderView({
   selectedSession: SessionId;
   chat: ReturnType<typeof useChat>;
   onSend: (text: string) => Promise<void>;
-  onCreateSave: (data: { name: string; personality: string; catchphrase: string; relationshipSetup: string; avatarPath?: string }) => Promise<void>;
+  onCreateSave: (data: { name: string; personality: string; catchphrase: string; relationshipSetup: string; avatarPath?: string; visualProfile?: OcVisualProfile }) => Promise<void>;
   onCancelCreate: () => void;
   canCancelCreate: boolean;
   onOpenChat: () => void;
@@ -247,7 +289,6 @@ function renderView({
           onInterrupt={chat.interruptActiveTurn}
           onTtsToggle={() => chat.setTtsEnabled(!chat.ttsEnabled)}
           onVoiceToggle={chat.toggleVoiceInput}
-          onConfirmReveal={chat.confirmReveal}
           onDismissReveal={chat.dismissReveal}
           onRejectReveal={chat.rejectReveal}
           onDismissRecallHint={chat.dismissRecallHint}
@@ -259,8 +300,13 @@ function renderView({
           timeline={chat.timeline}
           growthProfile={chat.growthProfile}
           growthInsights={chat.growthInsights}
+          revealHint={chat.activeReveal}
+          revealBusy={chat.revealBusy}
           open={memoryOpen}
           onClose={onCloseMemory}
+          onConfirmReveal={chat.confirmReveal}
+          onDismissReveal={chat.dismissReveal}
+          onRejectReveal={chat.rejectReveal}
         />
       </>
     );
@@ -276,8 +322,13 @@ function renderView({
       timeline={chat.timeline}
       growthProfile={chat.growthProfile}
       growthInsights={chat.growthInsights}
+      revealHint={chat.activeReveal}
+      revealBusy={chat.revealBusy}
       open={true}
       onClose={onCloseMemory}
+      onConfirmReveal={chat.confirmReveal}
+      onDismissReveal={chat.dismissReveal}
+      onRejectReveal={chat.rejectReveal}
     />
   );
 }

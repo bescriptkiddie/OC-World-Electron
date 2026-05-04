@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session } from "electron";
+import { app, BrowserWindow, ipcMain, screen, session } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,6 +20,16 @@ loadLocalEnv({
 });
 
 let quitting = false;
+let mainWindow: BrowserWindow | null = null;
+let floatingOcWindow: BrowserWindow | null = null;
+
+const floatingOcChannels = {
+  show: "floating-oc:show",
+  close: "floating-oc:close",
+  toggle: "floating-oc:toggle",
+  getState: "floating-oc:get-state",
+  focusMain: "floating-oc:focus-main",
+} as const;
 
 function isTrustedRendererOrigin(rawUrl: string | undefined) {
   if (!rawUrl) {
@@ -52,7 +62,36 @@ function configureLocalStaticPermissions() {
   });
 }
 
-function loadRenderer(window: BrowserWindow) {
+function withRendererSurface(rawUrl: string, surface: "main" | "floating-oc") {
+  if (surface === "main") {
+    return rawUrl;
+  }
+
+  const url = new URL(rawUrl);
+  url.searchParams.set("surface", surface);
+  return url.toString();
+}
+
+function loadBuiltRenderer(window: BrowserWindow, surface: "main" | "floating-oc") {
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL || (!app.isPackaged ? "http://127.0.0.1:5173/" : "");
+
+  if (devServerUrl) {
+    window.loadURL(withRendererSurface(devServerUrl, surface));
+    if (surface === "main" || process.env.OC_WORLD_OPEN_DEVTOOLS === "1") {
+      window.webContents.openDevTools({ mode: "detach" });
+    }
+    return;
+  }
+
+  if (surface === "main") {
+    window.loadFile(path.join(__dirname, "../dist/index.html"));
+    return;
+  }
+
+  window.loadFile(path.join(__dirname, "../dist/index.html"), { query: { surface } });
+}
+
+function loadRenderer(window: BrowserWindow, surface: "main" | "floating-oc" = "main") {
   const rendererUrl = process.env.OC_WORLD_RENDERER_URL;
   const rendererFile = process.env.OC_WORLD_RENDERER_FILE;
   const defaultRendererFiles = [
@@ -61,14 +100,14 @@ function loadRenderer(window: BrowserWindow) {
   ];
 
   if (rendererUrl) {
-    window.loadURL(rendererUrl);
+    window.loadURL(withRendererSurface(rendererUrl, surface));
     if (process.env.OC_WORLD_OPEN_DEVTOOLS === "1") {
       window.webContents.openDevTools({ mode: "detach" });
     }
     return;
   }
 
-  if (rendererFile) {
+  if (surface === "main" && rendererFile) {
     window.loadFile(path.resolve(rendererFile));
     if (process.env.OC_WORLD_OPEN_DEVTOOLS === "1") {
       window.webContents.openDevTools({ mode: "detach" });
@@ -76,7 +115,7 @@ function loadRenderer(window: BrowserWindow) {
     return;
   }
 
-  if (process.env.OC_WORLD_USE_VITE_RENDERER !== "1") {
+  if (surface === "main" && process.env.OC_WORLD_USE_STATIC_DEMO === "1") {
     const defaultRendererFile = defaultRendererFiles.find((candidate) => fs.existsSync(candidate));
 
     if (defaultRendererFile) {
@@ -88,13 +127,7 @@ function loadRenderer(window: BrowserWindow) {
     }
   }
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    window.loadURL(process.env.VITE_DEV_SERVER_URL);
-    window.webContents.openDevTools({ mode: "detach" });
-    return;
-  }
-
-  window.loadFile(path.join(__dirname, "../dist/index.html"));
+  loadBuiltRenderer(window, surface);
 }
 
 function createWindow() {
@@ -112,6 +145,114 @@ function createWindow() {
   });
 
   loadRenderer(window);
+  mainWindow = window;
+  window.on("closed", () => {
+    if (mainWindow === window) {
+      mainWindow = null;
+    }
+  });
+}
+
+function getFloatingOcState() {
+  return {
+    open: Boolean(floatingOcWindow && !floatingOcWindow.isDestroyed()),
+  };
+}
+
+function createFloatingOcWindow() {
+  if (floatingOcWindow && !floatingOcWindow.isDestroyed()) {
+    floatingOcWindow.show();
+    floatingOcWindow.moveTop();
+    return floatingOcWindow;
+  }
+
+  const display = screen.getPrimaryDisplay();
+  const workArea = display.workArea;
+  const width = 306;
+  const height = 420;
+  const x = Math.round(workArea.x + workArea.width - width - 28);
+  const y = Math.round(workArea.y + workArea.height - height - 28);
+
+  const window = new BrowserWindow({
+    width,
+    height,
+    x,
+    y,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    hasShadow: false,
+    backgroundColor: "#00000000",
+    acceptFirstMouse: true,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.mjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  window.setAlwaysOnTop(true, "floating");
+  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  window.setContentProtection(false);
+  loadRenderer(window, "floating-oc");
+
+  floatingOcWindow = window;
+  window.on("closed", () => {
+    if (floatingOcWindow === window) {
+      floatingOcWindow = null;
+    }
+  });
+
+  return window;
+}
+
+function closeFloatingOcWindow() {
+  if (!floatingOcWindow || floatingOcWindow.isDestroyed()) {
+    floatingOcWindow = null;
+    return getFloatingOcState();
+  }
+
+  floatingOcWindow.close();
+  floatingOcWindow = null;
+  return getFloatingOcState();
+}
+
+function registerWindowIpcHandlers() {
+  ipcMain.handle(floatingOcChannels.show, () => {
+    createFloatingOcWindow();
+    return getFloatingOcState();
+  });
+  ipcMain.handle(floatingOcChannels.close, () => closeFloatingOcWindow());
+  ipcMain.handle(floatingOcChannels.toggle, () => {
+    if (floatingOcWindow && !floatingOcWindow.isDestroyed()) {
+      return closeFloatingOcWindow();
+    }
+
+    createFloatingOcWindow();
+    return getFloatingOcState();
+  });
+  ipcMain.handle(floatingOcChannels.getState, () => getFloatingOcState());
+  ipcMain.handle(floatingOcChannels.focusMain, () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      createWindow();
+    }
+    mainWindow?.show();
+    mainWindow?.focus();
+    return true;
+  });
+}
+
+function unregisterWindowIpcHandlers() {
+  ipcMain.removeHandler(floatingOcChannels.show);
+  ipcMain.removeHandler(floatingOcChannels.close);
+  ipcMain.removeHandler(floatingOcChannels.toggle);
+  ipcMain.removeHandler(floatingOcChannels.getState);
+  ipcMain.removeHandler(floatingOcChannels.focusMain);
 }
 
 app.whenReady().then(() => {
@@ -124,6 +265,7 @@ app.whenReady().then(() => {
     isPackaged: app.isPackaged,
   });
   registerIpcHandlers();
+  registerWindowIpcHandlers();
   void hermesManager.start();
   createWindow();
 
@@ -141,6 +283,8 @@ app.on("before-quit", (event) => {
 
   quitting = true;
   event.preventDefault();
+  closeFloatingOcWindow();
+  unregisterWindowIpcHandlers();
   unregisterIpcHandlers();
   void hermesManager.stop().finally(() => {
     app.quit();

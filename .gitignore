@@ -13,5 +13,8 @@ release/
 hermes-agent/
 oc-data/avatars/
 oc-data/growth/
+oc-data/memory/
+oc-data/projects/
+oc-data/recall/
 oc-data/memories/oc_conversations/debug-user*_history.json
 oc-data/relationships/debug-user*.json

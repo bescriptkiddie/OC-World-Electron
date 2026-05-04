@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
+import type { OcVisualProfile } from "../types";
 import { IconArrowUp, IconCheck, IconRefresh, IconSparkle } from "./OcWorldIcons";
 import { OcAvatarLarge } from "./OcAvatar";
+import { OC_STATE_INTERACTION_MAP, OcInteractionLoop, resolveOcInteractionMoment } from "./OcInteractionSystem";
+import { OC_DESIGN_DIRECTIONS, OC_VISUAL_STATES, OcSpriteStage, buildOcVisualProfile } from "./OcSpriteStage";
 
 const personalityTags = [
   { id: "傲娇", label: "傲娇" },
@@ -40,7 +43,7 @@ export function CreateView({
   onCancel,
   canCancel = true,
 }: {
-  onSave: (data: { name: string; personality: string; catchphrase: string; relationshipSetup: string; avatarPath?: string }) => void | Promise<void>;
+  onSave: (data: { name: string; personality: string; catchphrase: string; relationshipSetup: string; avatarPath?: string; visualProfile?: OcVisualProfile }) => void | Promise<void>;
   onCancel: () => void;
   canCancel?: boolean;
 }) {
@@ -49,6 +52,7 @@ export function CreateView({
   const [selectedPersonality, setSelectedPersonality] = useState<Set<string>>(new Set());
   const [selectedAppearance, setSelectedAppearance] = useState<Set<string>>(new Set());
   const [selectedTone, setSelectedTone] = useState<string>("");
+  const [selectedDirection, setSelectedDirection] = useState<OcVisualProfile["direction"]>("warm-soft");
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [genError, setGenError] = useState("");
@@ -85,14 +89,30 @@ export function CreateView({
   };
 
   const buildImagePrompt = (): string => {
-    const parts: string[] = [`A cute anime-style avatar portrait of an original character named "${name}"`];
-    if (selectedAppearance.size > 0) parts.push(`race/appearance: ${[...selectedAppearance].join(", ")}`);
+    const parts: string[] = [`A compact Codex digital pet style sprite reference for an original character named "${name}"`];
+    if (selectedAppearance.size > 0) parts.push(`body / species cues: ${[...selectedAppearance].join(", ")}`);
     if (selectedPersonality.size > 0) parts.push(`personality: ${[...selectedPersonality].join(", ")}`);
     if (selectedTone) parts.push(`vibe: ${selectedTone}`);
     if (prompt.trim()) parts.push(prompt.trim());
-    parts.push("simple clean background, bust-up portrait, soft colors, high quality");
+    parts.push("small chibi mascot proportions, chunky readable silhouette, thick dark outline, flat cel shading, transparent-background friendly, no scene, no UI, no text");
     return parts.join(". ");
   };
+
+  const draftVisualProfile = useMemo(
+    () =>
+      buildOcVisualProfile({
+        name: name || "My OC",
+        direction: selectedDirection,
+        concept: [generatePersonality(), selectedAppearance.size ? `外观：${[...selectedAppearance].join("、")}` : ""].filter(Boolean).join("，"),
+        styleNotes: prompt.trim() || "像 Codex pet 一样，以 9 个小动画状态表达陪伴感。",
+      }),
+    [name, prompt, selectedAppearance, selectedDirection, selectedTone, selectedPersonality],
+  );
+  const draftMoment = resolveOcInteractionMoment({
+    relationship: null,
+    signalCount: selectedPersonality.size + selectedAppearance.size + (selectedTone ? 1 : 0) + (prompt.trim() ? 1 : 0),
+    isSending: isGenerating,
+  });
 
   const handleGenerate = async () => {
     setIsGenerating(true);
@@ -125,6 +145,7 @@ export function CreateView({
         catchphrase: generateCatchphrase(),
         relationshipSetup: `${name} 是你在 OCWORLD 的 OC 伙伴`,
         avatarPath: savedAvatarPath || undefined,
+        visualProfile: draftVisualProfile,
       });
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "保存失败");
@@ -142,12 +163,20 @@ export function CreateView({
           <p className="oc-page-copy">先给 TA 一个名字，再把性格、外观和语气一点点写出来。聊天里陪你的，就是这个角色。</p>
           <StepRail step={step} />
           <div className="oc-create-stage__aside-card">
-            <span className="oc-kicker mono">CURRENT PREVIEW</span>
-            <OcAvatarLarge size={132} name={name || "OC"} src={avatarDataUrl || undefined} avatarPath={savedAvatarPath || undefined} />
+            <span className="oc-kicker mono">OC PET PREVIEW</span>
+            <OcSpriteStage
+              character={{ id: "draft", name: name || "OC", personality: generatePersonality(), catchphrase: generateCatchphrase(), relationshipSetup: "draft", avatarLabel: name || "OC", avatarPath: savedAvatarPath || undefined, visualProfile: draftVisualProfile }}
+              visualProfile={draftVisualProfile}
+              size={126}
+              compact
+              controls={false}
+              stateId={draftMoment.visualState}
+            />
             <div className="oc-create-stage__aside-meta">
               <strong className="serif">{name || "未命名"}</strong>
               <span>{generatePersonality()}</span>
             </div>
+            <OcInteractionLoop moment={draftMoment} compact />
           </div>
         </div>
 
@@ -206,6 +235,8 @@ export function CreateView({
                 max={3}
               />
 
+              <DirectionSection selected={selectedDirection} onSelect={setSelectedDirection} />
+
               <TagSection
                 title="种族 / 外观"
                 subtitle="TA 看上去是什么感觉。"
@@ -236,6 +267,8 @@ export function CreateView({
                 />
               </div>
 
+              <VisualStateChecklist profile={draftVisualProfile} />
+
               {genError && <div className="oc-inline-error">{genError}</div>}
             </CreateCard>
           )}
@@ -264,6 +297,15 @@ export function CreateView({
                 ) : (
                   <OcAvatarLarge size={180} name={name} avatarPath={savedAvatarPath || undefined} />
                 )}
+                <OcSpriteStage
+                  character={{ id: "draft", name, personality: generatePersonality(), catchphrase: generateCatchphrase(), relationshipSetup: `${name} 是你在 OCWORLD 的 OC 伙伴`, avatarLabel: name, avatarPath: savedAvatarPath || undefined, visualProfile: draftVisualProfile }}
+                  visualProfile={draftVisualProfile}
+                  title="交互态预览"
+                  subtitle="最终目标是接入透明背景 spritesheet，当前先用同一视觉对象模拟 9 个状态。"
+                  size={156}
+                  stateId={draftMoment.visualState}
+                />
+                <OcInteractionLoop moment={draftMoment} />
                 <div className="oc-preview-copy">
                   <div className="oc-preview-name serif">{name}</div>
                   <div className="oc-preview-personality">{generatePersonality()}</div>
@@ -351,6 +393,58 @@ function TagSection({
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function DirectionSection({
+  selected,
+  onSelect,
+}: {
+  selected: OcVisualProfile["direction"];
+  onSelect: (direction: OcVisualProfile["direction"]) => void;
+}) {
+  return (
+    <div className="oc-field-block">
+      <label className="oc-field-label">视觉方向</label>
+      <p className="oc-field-hint">来自 Open Design 的方向选择思路：先锁定视觉系统，再生成角色。</p>
+      <div className="oc-direction-grid">
+        {OC_DESIGN_DIRECTIONS.map((direction) => (
+          <button
+            key={direction.id}
+            type="button"
+            className={selected === direction.id ? "oc-direction-card is-active" : "oc-direction-card"}
+            onClick={() => onSelect(direction.id)}
+            style={{ "--oc-direction-accent": direction.accent } as CSSProperties}
+          >
+            <span className="oc-direction-card__swatch" />
+            <strong>{direction.label}</strong>
+            <span>{direction.body}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function VisualStateChecklist({ profile }: { profile: OcVisualProfile }) {
+  const states = profile.states.length ? profile.states : OC_VISUAL_STATES;
+
+  return (
+    <div className="oc-field-block">
+      <label className="oc-field-label">动画状态规格</label>
+      <p className="oc-field-hint">按 Codex pet 图集约束组织：单格 192x208，总图 1536x1872。</p>
+      <div className="oc-state-spec-grid">
+        {states.map((state) => (
+          <div key={state.id} className="oc-state-spec-card">
+            <span className="mono">R{state.row + 1}</span>
+            <strong>{state.label}</strong>
+            <small>
+              {state.frames} frames · {state.fps} fps · {OC_STATE_INTERACTION_MAP.find((item) => item.state === state.id)?.behavior ?? "状态反馈"}
+            </small>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -81,6 +81,34 @@ const characterSchema = z.object({
   relationshipSetup: z.string(),
   avatarLabel: z.string(),
   avatarPath: z.string().optional(),
+  visualProfile: z
+    .object({
+      packageName: z.string(),
+      displayName: z.string(),
+      direction: z.enum(["editorial-monocle", "modern-minimal", "warm-soft", "tech-utility", "brutalist-experimental"]),
+      concept: z.string(),
+      styleNotes: z.string(),
+      atlasSpec: z.object({
+        cellWidth: z.number(),
+        cellHeight: z.number(),
+        columns: z.number(),
+        rows: z.number(),
+        width: z.number(),
+        height: z.number(),
+      }),
+      states: z.array(
+        z.object({
+          id: z.enum(["idle", "running-right", "running-left", "waving", "jumping", "failed", "waiting", "running", "review"]),
+          label: z.string(),
+          row: z.number(),
+          frames: z.number(),
+          fps: z.number(),
+          prompt: z.string(),
+        }),
+      ),
+      spritesheetPath: z.string().optional(),
+    })
+    .optional(),
 });
 
 const historySchema = z.object({
