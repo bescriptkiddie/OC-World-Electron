@@ -101,6 +101,7 @@ export function OcSpriteStage({
   compact = false,
   initialState = "idle",
   stateId,
+  animated = true,
 }: {
   character: CharacterConfig | null;
   visualProfile?: OcVisualProfile;
@@ -111,6 +112,7 @@ export function OcSpriteStage({
   compact?: boolean;
   initialState?: OcVisualStateId;
   stateId?: OcVisualStateId;
+  animated?: boolean;
 }) {
   const profile = visualProfile ?? character?.visualProfile ?? buildFallbackProfile(character);
   const [internalStateId, setInternalStateId] = useState<OcVisualStateId>(initialState);
@@ -130,7 +132,7 @@ export function OcSpriteStage({
       return;
     }
 
-    if (!controls || compact) {
+    if (animated && (!controls || compact)) {
       const ambient: OcVisualStateId[] = ["idle", "waving", "review", "waiting"];
       const timer = window.setInterval(() => {
         setInternalStateId((current) => {
@@ -140,7 +142,7 @@ export function OcSpriteStage({
       }, 4200);
       return () => window.clearInterval(timer);
     }
-  }, [compact, controls, stateId]);
+  }, [animated, compact, controls, stateId]);
 
   return (
     <section
@@ -158,19 +160,19 @@ export function OcSpriteStage({
           <h3 className="serif">{title ?? profile.displayName}</h3>
           {subtitle ? <p>{subtitle}</p> : <p>{profile.styleNotes}</p>}
         </div>
-        <span className="oc-sprite-state mono">{state.label}</span>
+        {controls && <span className="oc-sprite-state mono">{state.label}</span>}
       </div>
 
-      <div className="oc-sprite-canvas" data-state={state.id}>
+      <div className="oc-sprite-canvas" data-state={state.id} data-animated={animated ? "true" : "false"}>
         <div className="oc-sprite-grid" aria-hidden />
         {profile.spritesheetPath ? (
-          <AtlasSprite spritesheetPath={profile.spritesheetPath} state={state} />
+          <AtlasSprite spritesheetPath={profile.spritesheetPath} state={state} animated={animated} />
         ) : (
           <FallbackSprite name={character?.name ?? profile.displayName} imageUrl={imageUrl} stateId={state.id} />
         )}
       </div>
 
-      {!compact && (
+      {controls && !compact && (
         <div className="oc-sprite-spec">
           <span>{profile.atlasSpec.cellWidth}x{profile.atlasSpec.cellHeight}</span>
           <span>{profile.atlasSpec.width}x{profile.atlasSpec.height}</span>
@@ -197,18 +199,19 @@ export function OcSpriteStage({
   );
 }
 
-function AtlasSprite({ spritesheetPath, state }: { spritesheetPath: string; state: OcVisualState }) {
+function AtlasSprite({ spritesheetPath, state, animated }: { spritesheetPath: string; state: OcVisualState; animated: boolean }) {
   const [frame, setFrame] = useState(0);
   const frameCount = Math.max(1, state.frames);
 
   useEffect(() => {
     setFrame(0);
+    if (!animated) return;
     if (frameCount <= 1) return;
     const interval = window.setInterval(() => {
       setFrame((current) => (current + 1) % frameCount);
     }, Math.max(16, Math.round(1000 / Math.max(1, state.fps))));
     return () => window.clearInterval(interval);
-  }, [frameCount, state.fps, state.id]);
+  }, [animated, frameCount, state.fps, state.id]);
 
   const xPct = OC_ATLAS_SPEC.columns > 1 ? (frame / (OC_ATLAS_SPEC.columns - 1)) * 100 : 0;
   const yPct = OC_ATLAS_SPEC.rows > 1 ? (state.row / (OC_ATLAS_SPEC.rows - 1)) * 100 : 0;

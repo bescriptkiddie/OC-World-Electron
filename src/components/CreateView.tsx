@@ -1,9 +1,11 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { OcVisualProfile } from "../types";
 import { IconArrowUp, IconCheck, IconRefresh, IconSparkle } from "./OcWorldIcons";
 import { OcAvatarLarge } from "./OcAvatar";
 import { OC_STATE_INTERACTION_MAP, OcInteractionLoop, resolveOcInteractionMoment } from "./OcInteractionSystem";
 import { OC_DESIGN_DIRECTIONS, OC_VISUAL_STATES, OcSpriteStage, buildOcVisualProfile } from "./OcSpriteStage";
+
+const CREATE_DRAFT_KEY = "ocworld:create-draft:v1";
 
 const personalityTags = [
   { id: "傲娇", label: "傲娇" },
@@ -38,6 +40,33 @@ const toneTags = [
 
 type Step = "name" | "customize" | "preview";
 
+type CreateDraftSnapshot = {
+  step: Step;
+  name: string;
+  selectedPersonality: string[];
+  selectedAppearance: string[];
+  selectedTone: string;
+  selectedDirection: OcVisualProfile["direction"];
+  prompt: string;
+};
+
+function readDraftSnapshot(): CreateDraftSnapshot | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(CREATE_DRAFT_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    return JSON.parse(raw) as CreateDraftSnapshot;
+  } catch {
+    return null;
+  }
+}
+
 export function CreateView({
   onSave,
   onCancel,
@@ -47,19 +76,37 @@ export function CreateView({
   onCancel: () => void;
   canCancel?: boolean;
 }) {
-  const [step, setStep] = useState<Step>("name");
-  const [name, setName] = useState("");
-  const [selectedPersonality, setSelectedPersonality] = useState<Set<string>>(new Set());
-  const [selectedAppearance, setSelectedAppearance] = useState<Set<string>>(new Set());
-  const [selectedTone, setSelectedTone] = useState<string>("");
-  const [selectedDirection, setSelectedDirection] = useState<OcVisualProfile["direction"]>("warm-soft");
-  const [prompt, setPrompt] = useState("");
+  const draftSnapshot = useMemo(() => readDraftSnapshot(), []);
+  const [step, setStep] = useState<Step>(draftSnapshot?.step ?? "name");
+  const [name, setName] = useState(draftSnapshot?.name ?? "");
+  const [selectedPersonality, setSelectedPersonality] = useState<Set<string>>(() => new Set(draftSnapshot?.selectedPersonality ?? []));
+  const [selectedAppearance, setSelectedAppearance] = useState<Set<string>>(() => new Set(draftSnapshot?.selectedAppearance ?? []));
+  const [selectedTone, setSelectedTone] = useState<string>(draftSnapshot?.selectedTone ?? "");
+  const [selectedDirection, setSelectedDirection] = useState<OcVisualProfile["direction"]>(draftSnapshot?.selectedDirection ?? "warm-soft");
+  const [prompt, setPrompt] = useState(draftSnapshot?.prompt ?? "");
   const [isGenerating, setIsGenerating] = useState(false);
   const [genError, setGenError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [avatarDataUrl, setAvatarDataUrl] = useState<string>("");
   const [savedAvatarPath, setSavedAvatarPath] = useState<string>("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const snapshot: CreateDraftSnapshot = {
+      step,
+      name,
+      selectedPersonality: [...selectedPersonality],
+      selectedAppearance: [...selectedAppearance],
+      selectedTone,
+      selectedDirection,
+      prompt,
+    };
+    window.localStorage.setItem(CREATE_DRAFT_KEY, JSON.stringify(snapshot));
+  }, [name, prompt, selectedAppearance, selectedDirection, selectedPersonality, selectedTone, step]);
 
   const toggleTag = (set: Set<string>, tag: string) => {
     const next = new Set(set);
@@ -119,7 +166,10 @@ export function CreateView({
     setGenError("");
     try {
       if (!window.ocWorld) {
-        throw new Error("IPC not available");
+        setAvatarDataUrl("");
+        setSavedAvatarPath("");
+        setStep("preview");
+        return;
       }
       const result = await window.ocWorld.imageGen.generate({ prompt: buildImagePrompt() });
       setAvatarDataUrl(`data:${result.mimeType};base64,${result.imageBase64}`);
@@ -147,6 +197,9 @@ export function CreateView({
         avatarPath: savedAvatarPath || undefined,
         visualProfile: draftVisualProfile,
       });
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(CREATE_DRAFT_KEY);
+      }
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "保存失败");
     } finally {
@@ -213,7 +266,7 @@ export function CreateView({
           {step === "customize" && (
             <CreateCard
               title={`塑造 ${name || "TA"}`}
-              body="选标签只是起点，真正决定角色感的是你补进去的细节。"
+              body="从性格、视觉、外观到说话方式，一步步收成一个能陪你聊天的角色。"
               footer={
                 <div className="oc-create-actions">
                   <button type="button" className="oc-pill-button" onClick={() => setStep("name")}>
@@ -226,9 +279,14 @@ export function CreateView({
                 </div>
               }
             >
+              <div className="oc-create-flow-note">
+                <span className="mono">LIVE LINK</span>
+                <p>每一步都会更新左侧预览。你不是在填配置，而是在把这个 OC 的感觉一点点捏出来。</p>
+              </div>
+              {!window.ocWorld && <div className="oc-create-fallback-note">当前仅预览，不会生成正式形象文件。</div>}
               <TagSection
                 title="性格特质"
-                subtitle="选 1 到 3 个，先把性格主轴压出来。"
+                subtitle="先定 TA 怎么回应你。"
                 tags={personalityTags}
                 selected={selectedPersonality}
                 onToggle={(tag) => setSelectedPersonality((prev) => toggleTag(prev, tag))}
@@ -239,7 +297,7 @@ export function CreateView({
 
               <TagSection
                 title="种族 / 外观"
-                subtitle="TA 看上去是什么感觉。"
+                subtitle="再定 TA 给人的第一眼印象。"
                 tags={appearanceTags}
                 selected={selectedAppearance}
                 onToggle={(tag) => setSelectedAppearance((prev) => toggleTag(prev, tag))}
@@ -248,7 +306,7 @@ export function CreateView({
 
               <TagSection
                 title="说话风格"
-                subtitle="决定聊天时最直接的角色感。"
+                subtitle="最后定聊天时最直接的角色感。"
                 tags={toneTags}
                 selected={selectedTone ? new Set([selectedTone]) : new Set()}
                 onToggle={(tag) => setSelectedTone((prev) => (prev === tag ? "" : tag))}
@@ -372,14 +430,20 @@ function TagSection({
   onToggle: (tag: string) => void;
   max: number;
 }) {
+  const limitReached = selected.size >= max;
+
   return (
     <div className="oc-field-block">
       <label className="oc-field-label">{title}</label>
-      <p className="oc-field-hint">{subtitle}</p>
+      <div className="oc-field-hint-row">
+        <p className="oc-field-hint">{subtitle}</p>
+        <span className="oc-field-count mono">{selected.size} / {max}</span>
+      </div>
+      {limitReached && <p className="oc-field-limit">已达上限，取消一个再选</p>}
       <div className="oc-tag-grid">
         {tags.map((tag) => {
           const active = selected.has(tag.id);
-          const disabled = !active && selected.size >= max;
+          const disabled = max > 1 && !active && selected.size >= max;
           return (
             <button
               key={tag.id}
@@ -408,7 +472,7 @@ function DirectionSection({
   return (
     <div className="oc-field-block">
       <label className="oc-field-label">视觉方向</label>
-      <p className="oc-field-hint">来自 Open Design 的方向选择思路：先锁定视觉系统，再生成角色。</p>
+      <p className="oc-field-hint">决定 TA 在界面里的气质，而不是单纯换颜色。</p>
       <div className="oc-direction-grid">
         {OC_DESIGN_DIRECTIONS.map((direction) => (
           <button
@@ -430,22 +494,34 @@ function DirectionSection({
 
 function VisualStateChecklist({ profile }: { profile: OcVisualProfile }) {
   const states = profile.states.length ? profile.states : OC_VISUAL_STATES;
+  const primaryStates = states.slice(0, 3);
 
   return (
-    <div className="oc-field-block">
-      <label className="oc-field-label">动画状态规格</label>
-      <p className="oc-field-hint">按 Codex pet 图集约束组织：单格 192x208，总图 1536x1872。</p>
-      <div className="oc-state-spec-grid">
-        {states.map((state) => (
-          <div key={state.id} className="oc-state-spec-card">
-            <span className="mono">R{state.row + 1}</span>
+    <div className="oc-field-block oc-state-summary-block">
+      <label className="oc-field-label">生成后的动作感</label>
+      <p className="oc-field-hint">不用手动配置，系统会把上面的设定接到这些互动状态里。</p>
+      <div className="oc-state-summary-row">
+        {primaryStates.map((state) => (
+          <div key={state.id} className="oc-state-summary-pill">
             <strong>{state.label}</strong>
-            <small>
-              {state.frames} frames · {state.fps} fps · {OC_STATE_INTERACTION_MAP.find((item) => item.state === state.id)?.behavior ?? "状态反馈"}
-            </small>
+            <small>{OC_STATE_INTERACTION_MAP.find((item) => item.state === state.id)?.behavior ?? "状态反馈"}</small>
           </div>
         ))}
       </div>
+      <details className="oc-state-spec-details">
+        <summary>查看完整状态规格</summary>
+        <div className="oc-state-spec-grid">
+          {states.map((state) => (
+            <div key={state.id} className="oc-state-spec-card">
+              <span className="mono">R{state.row + 1}</span>
+              <strong>{state.label}</strong>
+              <small>
+                {state.frames} frames · {state.fps} fps · {OC_STATE_INTERACTION_MAP.find((item) => item.state === state.id)?.behavior ?? "状态反馈"}
+              </small>
+            </div>
+          ))}
+        </div>
+      </details>
     </div>
   );
 }

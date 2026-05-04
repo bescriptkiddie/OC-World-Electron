@@ -9,20 +9,20 @@ import { OcProfileCard } from "./OcProfileCard";
 import { OcWorkspaceHeader } from "./OcWorkspaceHeader";
 import { RewindView } from "./RewindView";
 import { SettingsView } from "./SettingsView";
-import { SplashScreen } from "./SplashScreen";
-import { type SessionId, bootRows, type ViewId, resolveInitialView, visibleMessages } from "./shared";
+import { type SessionId, type ViewId, resolveInitialView, visibleMessages } from "./shared";
 import type { OcVisualProfile } from "../types";
 
 export function OcWorldApp() {
   const chat = useChat();
   const [view, setView] = useState<ViewId>("oc");
   const [selectedSession, setSelectedSession] = useState<SessionId>("live");
-  const [splash, setSplash] = useState<"visible" | "leaving" | "hidden">("visible");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [initialViewResolved, setInitialViewResolved] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [floatingOcOpen, setFloatingOcOpen] = useState(false);
   const floatingOcAvailable = Boolean(window.ocWorld?.floatingOc);
+  const workspaceView = view === "memory" ? "chat" : view;
+  const headerView = settingsOpen ? "settings" : memoryOpen ? "memory" : workspaceView;
 
   const messages = useMemo(
     () => visibleMessages(chat.history, chat.pendingMessages, chat.isSending, selectedSession),
@@ -37,12 +37,6 @@ export function OcWorldApp() {
     setView(resolveInitialView(chat.character));
     setInitialViewResolved(true);
   }, [chat.character, chat.relationship, initialViewResolved]);
-
-  useEffect(() => {
-    if (memoryOpen) {
-      setView("memory");
-    }
-  }, [memoryOpen]);
 
   useEffect(() => {
     if (!window.ocWorld?.floatingOc) {
@@ -68,10 +62,20 @@ export function OcWorldApp() {
     setSettingsOpen(false);
     if (nextView === "memory") {
       setMemoryOpen(true);
+      if (view === "memory") {
+        setView("chat");
+      }
       return;
     }
     setMemoryOpen(false);
     setView(nextView);
+  };
+
+  const closeMemory = () => {
+    setMemoryOpen(false);
+    if (view === "memory") {
+      setView("chat");
+    }
   };
 
   const sendPrompt = async (text: string) => {
@@ -95,34 +99,37 @@ export function OcWorldApp() {
     setFloatingOcOpen(state.open);
   };
 
-  const dismissSplash = () => {
-    setSplash("leaving");
-    window.setTimeout(() => setSplash("hidden"), 500);
-  };
-
   const handleCreateSave = async (data: { name: string; personality: string; catchphrase: string; relationshipSetup: string; avatarPath?: string; visualProfile?: OcVisualProfile }) => {
+    const nextCharacter = {
+      id: "char-001",
+      name: data.name,
+      personality: data.personality,
+      catchphrase: data.catchphrase,
+      relationshipSetup: data.relationshipSetup,
+      avatarLabel: data.name,
+      avatarPath: data.avatarPath,
+      visualProfile: data.visualProfile,
+    };
+
     if (!window.ocWorld) {
-      throw new Error("IPC not available");
+      chat.applyLocalCharacter(nextCharacter);
+      setInitialViewResolved(true);
+      setSelectedSession("live");
+      setMemoryOpen(false);
+      setView("chat");
+      return;
     }
 
     await window.ocWorld.character.saveCurrent({
       characterId: "char-001",
-      character: {
-        id: "char-001",
-        name: data.name,
-        personality: data.personality,
-        catchphrase: data.catchphrase,
-        relationshipSetup: data.relationshipSetup,
-        avatarLabel: data.name,
-        avatarPath: data.avatarPath,
-        visualProfile: data.visualProfile,
-      },
+      character: nextCharacter,
     });
 
     await chat.refreshState();
     setInitialViewResolved(true);
     setSelectedSession("live");
-    setView("oc");
+    setMemoryOpen(false);
+    setView("chat");
   };
 
   const handleUserNameChange = async (name: string) => {
@@ -158,11 +165,14 @@ export function OcWorldApp() {
 
   const header = (
     <OcWorkspaceHeader
-      current={memoryOpen ? "memory" : view}
+      current={headerView}
       floatingOpen={floatingOcOpen}
       floatingAvailable={floatingOcAvailable}
       onChange={handleViewChange}
-      onOpenSettings={() => setSettingsOpen(true)}
+      onOpenSettings={() => {
+        setMemoryOpen(false);
+        setSettingsOpen(true);
+      }}
       onToggleFloating={toggleFloatingOc}
     />
   );
@@ -181,13 +191,14 @@ export function OcWorldApp() {
       onBack={() => setSettingsOpen(false)}
     />
   ) : renderView({
-    view: memoryOpen ? "chat" : view,
+    view: memoryOpen ? "chat" : workspaceView,
     messages,
     selectedSession,
     chat,
+    pendingCount: chat.pendingMessages.length,
     onSend: sendPrompt,
     onCreateSave: handleCreateSave,
-    onCancelCreate: () => setView("oc"),
+    onCancelCreate: () => setView("chat"),
     canCancelCreate: Boolean(chat.character?.name?.trim()),
     onOpenChat: () => {
       setView("chat");
@@ -196,21 +207,13 @@ export function OcWorldApp() {
     onOpenCreate: () => setView("create"),
     onOpenRewind: () => setView("rewind"),
     onOpenMemory: () => setMemoryOpen(true),
-    onCloseMemory: () => setMemoryOpen(false),
+    onCloseMemory: closeMemory,
     memoryOpen,
     onNewChat: startBlankChat,
   });
 
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", position: "relative", background: "var(--bg-page)" }}>
-      {splash !== "hidden" && (
-        <SplashScreen
-          rows={bootRows(chat.character, chat.relationship, chat.hermesStatus.state)}
-          leaving={splash === "leaving"}
-          onEnter={dismissSplash}
-        />
-      )}
-
       <OcDesktopShell left={leftPanel} header={header}>
         {content}
       </OcDesktopShell>
@@ -223,6 +226,7 @@ function renderView({
   messages,
   selectedSession,
   chat,
+  pendingCount,
   onSend,
   onCreateSave,
   onCancelCreate,
@@ -239,6 +243,7 @@ function renderView({
   messages: ReturnType<typeof visibleMessages>;
   selectedSession: SessionId;
   chat: ReturnType<typeof useChat>;
+  pendingCount: number;
   onSend: (text: string) => Promise<void>;
   onCreateSave: (data: { name: string; personality: string; catchphrase: string; relationshipSetup: string; avatarPath?: string; visualProfile?: OcVisualProfile }) => Promise<void>;
   onCancelCreate: () => void;
@@ -276,6 +281,7 @@ function renderView({
           character={chat.character}
           messages={messages}
           isSending={chat.isSending}
+          pendingCount={pendingCount}
           selectedSession={selectedSession}
           ttsEnabled={chat.ttsEnabled}
           voiceInputState={chat.voiceInputState}

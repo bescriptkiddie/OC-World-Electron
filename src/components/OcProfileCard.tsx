@@ -1,6 +1,6 @@
 import type { CharacterConfig, GrowthInsight, GrowthProfile, Relationship, RevealCandidate } from "../types";
 import type { OcInteractionMoment } from "./OcInteractionSystem";
-import { OcInteractionLoop, resolveOcInteractionMoment } from "./OcInteractionSystem";
+import { resolveOcInteractionMoment } from "./OcInteractionSystem";
 import { OcSpriteStage } from "./OcSpriteStage";
 
 type RevealHint = (RevealCandidate & { text?: string; title?: string }) | null;
@@ -9,20 +9,31 @@ function countActiveSignals(insights: GrowthInsight[]) {
   return insights.filter((item) => item.status !== "archived" && item.status !== "rejected").length;
 }
 
-function companionTitle(revealHint: RevealHint, moment: OcInteractionMoment) {
-  return revealHint ? "Luma 发现了一点东西" : moment.headline;
-}
-
-function companionText(revealHint: RevealHint, profile: GrowthProfile, relationship: Relationship | null, moment: OcInteractionMoment) {
+function companionText(revealHint: RevealHint, profile: GrowthProfile, relationship: Relationship | null, moment: OcInteractionMoment, greeting: string, character: CharacterConfig | null) {
   if (revealHint?.text) {
     return revealHint.text;
   }
 
-  if (profile.goals[0]?.text) {
-    return profile.goals[0].text;
+  if (relationship?.moodBaseline?.trim()) {
+    return relationship.moodBaseline.trim();
   }
 
-  return relationship?.moodBaseline ?? moment.body;
+  if (greeting.trim()) {
+    return greeting.trim();
+  }
+
+  if (character?.catchphrase?.trim()) {
+    return character.catchphrase.trim();
+  }
+
+  return profile.goals[0]?.text ?? moment.body;
+}
+
+function rhythmIndex(moment: OcInteractionMoment) {
+  if (moment.id === "quiet") return 0;
+  if (moment.id === "catch") return 1;
+  if (moment.id === "read") return 2;
+  return 3;
 }
 
 export function OcProfileCard({
@@ -49,61 +60,57 @@ export function OcProfileCard({
   onOpenMemory: () => void;
 }) {
   const title = character?.name?.trim() || "Luma";
-  const summary = greeting.trim() || character?.catchphrase?.trim() || "你只需要开口，剩下的让我慢慢理解。";
   const signalCount = countActiveSignals(growthInsights);
   const moment = resolveOcInteractionMoment({ relationship, signalCount, revealHint });
+  const activeRhythm = rhythmIndex(moment);
+  const rhythm = ["常驻", "接住", "沉淀", "冒泡"];
+  const whisper = companionText(revealHint, growthProfile, relationship, moment, greeting, character);
 
   return (
-    <div className="oc-profile-card oc-invisible-companion">
-      <div className="oc-invisible-companion__titlebar">
-        <span className="oc-kicker mono">quiet growth</span>
-        <span className="oc-badge">{relationship ? "在听" : "初始化中"}</span>
-      </div>
-
-      <div className="oc-invisible-companion__main">
-        <div className="oc-invisible-companion__brand-row">
-          <div className="oc-invisible-companion__brand">
-            <span className="oc-invisible-companion__mark">⌘</span>
-            <span>OC World</span>
-          </div>
-          <span className="oc-badge">{signalCount ? `${signalCount} 个线索` : "正在听"}</span>
-        </div>
-
-        <div className="oc-invisible-companion__avatar-wrap">
+    <div className="oc-profile-card oc-presence-dock">
+      <button type="button" className="oc-presence-dock__being" onClick={onOpenChat} title={`回到和 ${title} 的对话`}>
+        <span className="oc-presence-dock__status" aria-hidden />
+        <span className="oc-presence-dock__sprite">
           <OcSpriteStage
             character={character}
             title={title}
             subtitle={relationship?.moodBaseline ?? "正在学习你的节奏。"}
-            size={148}
+            size={70}
             compact
             controls={false}
             stateId={moment.visualState}
           />
-        </div>
+        </span>
+        <span className="oc-presence-dock__name">{title}</span>
+        <span className="oc-presence-dock__mode">{relationship ? moment.label : "初始化"}</span>
+      </button>
 
-        <section className="oc-invisible-companion__quiet-panel">
-          <div className="oc-invisible-companion__quiet-head">
-            <h2 className="serif">{companionTitle(revealHint, moment)}</h2>
-            <span>{signalCount ? `${signalCount} 个线索` : moment.label}</span>
-          </div>
-          <p>{companionText(revealHint, growthProfile, relationship, moment)}</p>
-          <OcInteractionLoop moment={moment} compact />
-        </section>
-
-        <div className="oc-invisible-companion__quote">“{summary}”</div>
+      <div className="oc-presence-dock__rhythm" aria-label="关系节奏">
+        {rhythm.map((item, index) => (
+          <span key={item} className={index === activeRhythm ? "is-active" : ""} title={item} />
+        ))}
       </div>
 
-      <div className="oc-invisible-companion__actions">
-        <button type="button" className="oc-pill-button is-primary" onClick={onOpenChat}>
-          和 Luma 说话
-        </button>
-        <button type="button" className="oc-pill-button" onClick={onOpenMemory}>
-          看看它发现了什么
-        </button>
-        <button type="button" className={ttsEnabled ? "oc-pill-button is-soft-active" : "oc-pill-button"} onClick={onTtsToggle}>
-          {ttsEnabled ? "语音已开" : "开启语音"}
-        </button>
-      </div>
+      <button
+        type="button"
+        className="oc-presence-dock__soft-button"
+        onClick={onOpenMemory}
+        title={signalCount ? `${signalCount} 条线索` : "打开纸条"}
+        aria-label={signalCount ? `打开 ${signalCount} 条线索` : "打开纸条"}
+      >
+        {signalCount ? String(signalCount) : "纸条"}
+      </button>
+      <button
+        type="button"
+        className={ttsEnabled ? "oc-presence-dock__soft-button is-active" : "oc-presence-dock__soft-button"}
+        onClick={onTtsToggle}
+        title={ttsEnabled ? "声音已开" : "打开声音"}
+        aria-label={ttsEnabled ? "关闭声音" : "打开声音"}
+      >
+        声音
+      </button>
+
+      <p className="oc-presence-dock__whisper">{whisper}</p>
     </div>
   );
 }

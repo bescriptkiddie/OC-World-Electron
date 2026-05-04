@@ -128,9 +128,7 @@ export const iconBtnQuiet: React.CSSProperties = {
 };
 
 export const navItems = [
-  { id: "create" as const, label: "生成我的OC", icon: () => null },
-  { id: "oc" as const, label: "我的OC", icon: () => null },
-  { id: "chat" as const, label: "聊天", icon: () => null },
-  { id: "rewind" as const, label: "回溯", icon: () => null },
-  { id: "memory" as const, label: "记忆", icon: () => null },
+  { id: "chat" as const, label: "对话", icon: () => null },
+  { id: "oc" as const, label: "TA", icon: () => null },
+  { id: "rewind" as const, label: "回看", icon: () => null },
 ];

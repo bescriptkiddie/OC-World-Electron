@@ -15,7 +15,7 @@ export interface OcInteractionMoment {
 export const OC_INTERACTION_MOMENTS: Record<OcInteractionMomentId, OcInteractionMoment> = {
   quiet: {
     id: "quiet",
-    kicker: "QUIET PRESENCE",
+    kicker: "安静常驻",
     label: "安静常驻",
     headline: "我在边上。",
     body: "默认不抢话，只保留一个能被看见的小生命感。",
@@ -24,7 +24,7 @@ export const OC_INTERACTION_MOMENTS: Record<OcInteractionMomentId, OcInteraction
   },
   catch: {
     id: "catch",
-    kicker: "CATCH FIRST",
+    kicker: "先接住",
     label: "先接住",
     headline: "先接住你的状态。",
     body: "先回应当下的情绪和语境，再把判断藏到背后。",
@@ -33,7 +33,7 @@ export const OC_INTERACTION_MOMENTS: Record<OcInteractionMomentId, OcInteraction
   },
   read: {
     id: "read",
-    kicker: "READ SIGNAL",
+    kicker: "读线索",
     label: "在读信号",
     headline: "我在把线索连起来。",
     body: "重复出现的目标、偏好和卡点会沉到记忆层，不在第一时间打扰你。",
@@ -42,7 +42,7 @@ export const OC_INTERACTION_MOMENTS: Record<OcInteractionMomentId, OcInteraction
   },
   nudge: {
     id: "nudge",
-    kicker: "SMALL NUDGE",
+    kicker: "轻轻推一下",
     label: "轻轻推一下",
     headline: "这里可能有一个小发现。",
     body: "只有当线索足够相关，OC 才把发现浮到前台。",
@@ -51,7 +51,7 @@ export const OC_INTERACTION_MOMENTS: Record<OcInteractionMomentId, OcInteraction
   },
   act: {
     id: "act",
-    kicker: "NEXT ACTION",
+    kicker: "下一步",
     label: "给动作",
     headline: "下一步可以很小。",
     body: "不把你变成系统管理员，只给一个能马上执行的动作。",
@@ -60,7 +60,7 @@ export const OC_INTERACTION_MOMENTS: Record<OcInteractionMomentId, OcInteraction
   },
   blocked: {
     id: "blocked",
-    kicker: "NEEDS ATTENTION",
+    kicker: "需要处理",
     label: "需要处理",
     headline: "我卡住了。",
     body: "这里需要回到主窗口处理授权、网络或运行状态。",

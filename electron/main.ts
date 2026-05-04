@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen, session } from "electron";
+import { app, BrowserWindow, ipcMain, screen, session, type IpcMainEvent } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,6 +22,12 @@ loadLocalEnv({
 let quitting = false;
 let mainWindow: BrowserWindow | null = null;
 let floatingOcWindow: BrowserWindow | null = null;
+let floatingOcDragState: {
+  startScreenX: number;
+  startScreenY: number;
+  startWindowX: number;
+  startWindowY: number;
+} | null = null;
 
 const floatingOcChannels = {
   show: "floating-oc:show",
@@ -29,7 +35,15 @@ const floatingOcChannels = {
   toggle: "floating-oc:toggle",
   getState: "floating-oc:get-state",
   focusMain: "floating-oc:focus-main",
+  dragStart: "floating-oc:drag-start",
+  dragMove: "floating-oc:drag-move",
+  dragEnd: "floating-oc:drag-end",
 } as const;
+
+type FloatingOcDragPoint = {
+  screenX: number;
+  screenY: number;
+};
 
 function isTrustedRendererOrigin(rawUrl: string | undefined) {
   if (!rawUrl) {
@@ -159,6 +173,89 @@ function getFloatingOcState() {
   };
 }
 
+function readFloatingOcDragPoint(value: unknown): FloatingOcDragPoint | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const point = value as Partial<FloatingOcDragPoint>;
+  const screenX = point.screenX;
+  const screenY = point.screenY;
+  if (typeof screenX !== "number" || typeof screenY !== "number" || !Number.isFinite(screenX) || !Number.isFinite(screenY)) {
+    return null;
+  }
+
+  return {
+    screenX,
+    screenY,
+  };
+}
+
+function isFloatingOcSender(event: IpcMainEvent) {
+  return Boolean(
+    floatingOcWindow &&
+      !floatingOcWindow.isDestroyed() &&
+      event.sender.id === floatingOcWindow.webContents.id,
+  );
+}
+
+function clampFloatingOcPosition(x: number, y: number) {
+  if (!floatingOcWindow || floatingOcWindow.isDestroyed()) {
+    return { x, y };
+  }
+
+  const bounds = floatingOcWindow.getBounds();
+  const workArea = screen.getDisplayNearestPoint({ x, y }).workArea;
+  return {
+    x: Math.min(Math.max(x, workArea.x), workArea.x + workArea.width - bounds.width),
+    y: Math.min(Math.max(y, workArea.y), workArea.y + workArea.height - bounds.height),
+  };
+}
+
+function handleFloatingOcDragStart(event: IpcMainEvent, rawPoint: unknown) {
+  if (!isFloatingOcSender(event) || !floatingOcWindow || floatingOcWindow.isDestroyed()) {
+    return;
+  }
+
+  const point = readFloatingOcDragPoint(rawPoint);
+  if (!point) {
+    return;
+  }
+
+  const bounds = floatingOcWindow.getBounds();
+  floatingOcDragState = {
+    startScreenX: point.screenX,
+    startScreenY: point.screenY,
+    startWindowX: bounds.x,
+    startWindowY: bounds.y,
+  };
+}
+
+function handleFloatingOcDragMove(event: IpcMainEvent, rawPoint: unknown) {
+  if (!isFloatingOcSender(event) || !floatingOcWindow || floatingOcWindow.isDestroyed() || !floatingOcDragState) {
+    return;
+  }
+
+  const point = readFloatingOcDragPoint(rawPoint);
+  if (!point) {
+    return;
+  }
+
+  const next = clampFloatingOcPosition(
+    Math.round(floatingOcDragState.startWindowX + point.screenX - floatingOcDragState.startScreenX),
+    Math.round(floatingOcDragState.startWindowY + point.screenY - floatingOcDragState.startScreenY),
+  );
+  floatingOcWindow.setPosition(next.x, next.y, false);
+}
+
+function handleFloatingOcDragEnd(event: IpcMainEvent) {
+  if (!isFloatingOcSender(event)) {
+    return;
+  }
+
+  floatingOcDragState = null;
+}
+
 function createFloatingOcWindow() {
   if (floatingOcWindow && !floatingOcWindow.isDestroyed()) {
     floatingOcWindow.show();
@@ -168,8 +265,8 @@ function createFloatingOcWindow() {
 
   const display = screen.getPrimaryDisplay();
   const workArea = display.workArea;
-  const width = 306;
-  const height = 420;
+  const width = 224;
+  const height = 260;
   const x = Math.round(workArea.x + workArea.width - width - 28);
   const y = Math.round(workArea.y + workArea.height - height - 28);
 
@@ -196,6 +293,7 @@ function createFloatingOcWindow() {
     },
   });
 
+  window.setBackgroundColor("#00000000");
   window.setAlwaysOnTop(true, "floating");
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   window.setContentProtection(false);
@@ -214,11 +312,13 @@ function createFloatingOcWindow() {
 function closeFloatingOcWindow() {
   if (!floatingOcWindow || floatingOcWindow.isDestroyed()) {
     floatingOcWindow = null;
+    floatingOcDragState = null;
     return getFloatingOcState();
   }
 
   floatingOcWindow.close();
   floatingOcWindow = null;
+  floatingOcDragState = null;
   return getFloatingOcState();
 }
 
@@ -245,6 +345,9 @@ function registerWindowIpcHandlers() {
     mainWindow?.focus();
     return true;
   });
+  ipcMain.on(floatingOcChannels.dragStart, handleFloatingOcDragStart);
+  ipcMain.on(floatingOcChannels.dragMove, handleFloatingOcDragMove);
+  ipcMain.on(floatingOcChannels.dragEnd, handleFloatingOcDragEnd);
 }
 
 function unregisterWindowIpcHandlers() {
@@ -253,6 +356,9 @@ function unregisterWindowIpcHandlers() {
   ipcMain.removeHandler(floatingOcChannels.toggle);
   ipcMain.removeHandler(floatingOcChannels.getState);
   ipcMain.removeHandler(floatingOcChannels.focusMain);
+  ipcMain.removeListener(floatingOcChannels.dragStart, handleFloatingOcDragStart);
+  ipcMain.removeListener(floatingOcChannels.dragMove, handleFloatingOcDragMove);
+  ipcMain.removeListener(floatingOcChannels.dragEnd, handleFloatingOcDragEnd);
 }
 
 app.whenReady().then(() => {
