@@ -40,7 +40,7 @@ export function SettingsView({
     <div className="oc-page oc-settings-page">
       <section className="oc-settings-hero">
         <div>
-          <p className="oc-kicker mono">SETTINGS</p>
+          <p className="oc-kicker mono">设置</p>
           <h2 className="oc-page-title serif">基础档案</h2>
           <p className="oc-page-copy">聊天页不展示你的个人资料，这里单独收口昵称、偏好和当前角色摘要。</p>
         </div>
@@ -51,7 +51,7 @@ export function SettingsView({
 
       <section className="oc-grid-two">
         <article className="oc-surface-card">
-          <p className="oc-kicker mono">PROFILE</p>
+          <p className="oc-kicker mono">个人档案</p>
           <div className="oc-field-block">
             <label className="oc-field-label">你的名字</label>
             <p className="oc-field-hint">TA 会这样叫你。</p>
@@ -97,7 +97,7 @@ export function SettingsView({
         </article>
 
         <article className="oc-surface-card">
-          <p className="oc-kicker mono">CURRENT OC</p>
+          <p className="oc-kicker mono">当前 OC</p>
           <div className="oc-settings-oc">
             <OcAvatarLarge size={112} name={character?.name} avatarPath={character?.avatarPath} />
             <div className="oc-settings-oc__meta">

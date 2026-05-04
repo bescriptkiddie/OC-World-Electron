@@ -1,0 +1,715 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OC World · Investor Architecture</title>
+    <style>
+      :root {
+        --paper: #f6f1e8;
+        --ink: #172024;
+        --muted: #657170;
+        --line: #d7cbbb;
+        --panel: #fffdf7;
+        --teal: #08756f;
+        --teal-2: #dff0ed;
+        --red: #bf4b2f;
+        --red-2: #f6e0d8;
+        --gold: #a87318;
+        --gold-2: #f4ead1;
+        --green: #4f7a3c;
+        --green-2: #e5efd9;
+        --blue: #386f93;
+        --blue-2: #deedf4;
+        --purple: #695284;
+        --purple-2: #e9e2ef;
+        --dark: #1f2422;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        color: var(--ink);
+        background:
+          linear-gradient(0deg, rgba(255, 253, 247, 0.72), rgba(255, 253, 247, 0.72)),
+          repeating-linear-gradient(90deg, rgba(23, 32, 36, 0.035) 0, rgba(23, 32, 36, 0.035) 1px, transparent 1px, transparent 64px),
+          var(--paper);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        letter-spacing: 0;
+      }
+
+      .page {
+        width: min(1560px, calc(100vw - 40px));
+        margin: 0 auto;
+        padding: 12px 0 28px;
+      }
+
+      .nav {
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+
+      .brand {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .mark {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        place-items: center;
+        border-radius: 8px;
+        background: var(--dark);
+        color: #fffdf7;
+        font-weight: 850;
+      }
+
+      .brand strong {
+        display: block;
+        font-size: 17px;
+        line-height: 1.1;
+      }
+
+      .brand span {
+        display: block;
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 0 11px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 253, 247, 0.8);
+        color: var(--muted);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .chip.good {
+        border-color: rgba(8, 117, 111, 0.25);
+        background: var(--teal-2);
+        color: var(--teal);
+        font-weight: 760;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 430px;
+        gap: 22px;
+        align-items: stretch;
+        margin-bottom: 12px;
+      }
+
+      .headline {
+        display: grid;
+        align-content: center;
+      }
+
+      .eyebrow {
+        color: var(--teal);
+        font-size: 13px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 8px 0 12px;
+        max-width: 880px;
+        font-size: 42px;
+        line-height: 1.04;
+        font-weight: 850;
+      }
+
+      .subhead {
+        max-width: 900px;
+        margin: 0;
+        color: #455150;
+        font-size: 16px;
+        line-height: 1.55;
+      }
+
+      .hero-card {
+        display: grid;
+        grid-template-columns: 72px 1fr;
+        gap: 12px;
+        align-items: center;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+      }
+
+      .hero-card img {
+        width: 72px;
+        height: 72px;
+        object-fit: contain;
+      }
+
+      .hero-card h2 {
+        margin: 0 0 8px;
+        font-size: 19px;
+      }
+
+      .hero-card p {
+        margin: 0;
+        color: #4b5655;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .architecture {
+        position: relative;
+        border: 1px solid #b8aa94;
+        border-radius: 8px;
+        background: rgba(255, 253, 247, 0.96);
+        overflow: hidden;
+        box-shadow: 0 24px 70px rgba(54, 45, 31, 0.08);
+      }
+
+      .section-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 18px;
+        align-items: center;
+        padding: 12px 18px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(250, 246, 236, 0.92);
+      }
+
+      .section-head h2 {
+        margin: 0;
+        font-size: 20px;
+      }
+
+      .section-head p {
+        margin: 5px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .dash {
+        width: 22px;
+        height: 3px;
+        border-radius: 999px;
+        background: var(--teal);
+      }
+
+      .dash.red {
+        background: var(--red);
+      }
+
+      .dash.blue {
+        background: var(--blue);
+      }
+
+      .stage {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 18px;
+        padding: 16px;
+      }
+
+      .pillar {
+        min-height: 390px;
+        position: relative;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+      }
+
+      .pillar::before {
+        content: "";
+        position: absolute;
+        left: 18px;
+        right: 18px;
+        top: 0;
+        height: 5px;
+        border-radius: 0 0 999px 999px;
+        background: var(--accent);
+      }
+
+      .pillar small {
+        display: block;
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 850;
+        text-transform: uppercase;
+      }
+
+      .pillar h3 {
+        margin: 8px 0 8px;
+        font-size: 24px;
+        line-height: 1.12;
+      }
+
+      .pillar .summary {
+        margin: 0 0 12px;
+        color: #475251;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .pillar-list {
+        display: grid;
+        gap: 7px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .pillar-list li {
+        display: grid;
+        grid-template-columns: 10px 1fr;
+        gap: 10px;
+        color: #44504f;
+        font-size: 13px;
+        line-height: 1.42;
+      }
+
+      .pillar-list li::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        margin-top: 6px;
+        border-radius: 999px;
+        background: var(--accent);
+      }
+
+      .mini-stack {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .mini {
+        padding: 9px 10px;
+        border-radius: 8px;
+        background: var(--soft);
+        color: #394443;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
+      .mini b {
+        display: block;
+        margin-bottom: 3px;
+        color: var(--ink);
+      }
+
+      .loop-band {
+        position: relative;
+        padding: 12px 18px 18px;
+        border-top: 1px solid var(--line);
+        background: #faf6ec;
+      }
+
+      .loop-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: baseline;
+        margin-bottom: 10px;
+      }
+
+      .loop-title h2 {
+        margin: 0;
+        font-size: 20px;
+      }
+
+      .loop-title p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .loop {
+        position: relative;
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .step {
+        min-height: 108px;
+        padding: 11px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+      }
+
+      .step span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        border-radius: 999px;
+        background: var(--tone);
+        color: var(--tone-ink);
+        font-size: 12px;
+        font-weight: 850;
+      }
+
+      .step b {
+        display: block;
+        margin: 8px 0 5px;
+        font-size: 14px;
+      }
+
+      .step p {
+        margin: 0;
+        color: #4a5554;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .investor-read {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 14px;
+        margin-top: 16px;
+      }
+
+      .read-card {
+        min-height: 160px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 253, 247, 0.92);
+      }
+
+      .read-card small {
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .read-card h3 {
+        margin: 8px 0;
+        font-size: 19px;
+      }
+
+      .read-card p {
+        margin: 0;
+        color: #465251;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .truth-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        margin-top: 14px;
+      }
+
+      .truth {
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+      }
+
+      .truth h3 {
+        margin: 0 0 10px;
+        font-size: 17px;
+      }
+
+      .truth ul {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .truth li {
+        display: grid;
+        grid-template-columns: 78px 1fr;
+        gap: 10px;
+        color: #45504f;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .truth b {
+        color: var(--teal);
+        font-size: 12px;
+      }
+
+      .footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      @media (max-width: 1080px) {
+        .page {
+          width: min(100vw - 28px, 980px);
+        }
+
+        .nav,
+        .hero,
+        .section-head,
+        .truth-row {
+          grid-template-columns: 1fr;
+        }
+
+        .chips,
+        .legend {
+          justify-content: flex-start;
+        }
+
+        h1 {
+          font-size: 38px;
+        }
+
+        .stage,
+        .loop,
+        .investor-read {
+          grid-template-columns: 1fr;
+        }
+
+        .pillar {
+          min-height: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <nav class="nav" aria-label="document header">
+        <div class="brand">
+          <div class="mark">OC</div>
+          <div>
+            <strong>OC World</strong>
+            <span>Investor Architecture · Human Growth Engine</span>
+          </div>
+        </div>
+        <div class="chips">
+          <span class="chip good">核心：长期成长关系</span>
+          <span class="chip">前台轻，后台深</span>
+          <span class="chip">从个人 OC 到 Agent 世界</span>
+        </div>
+      </nav>
+
+      <section class="hero" aria-label="opening">
+        <div class="headline">
+          <span class="eyebrow">我理解的 OC 架构</span>
+          <h1>先做一个会懂人的 OC，再让成长系统从关系里长出来。</h1>
+          <p class="subhead">
+            OC World 的架构不是“聊天模型 + 功能模块”，而是三层叠加：前台用 OC 建立长期关系，
+            后台把真实生活沉淀成成长认知，未来让这个 OC 进入 Agent 世界协作。
+          </p>
+        </div>
+        <aside class="hero-card">
+          <img src="./oc-avatar-pet.png" alt="OC companion avatar" />
+          <div>
+            <h2>一句话给投资人</h2>
+            <p>OC World 是一个陪人一起成长的人生游戏引擎：它不是替人生活，而是把真实生活里的努力变成可见、可复盘、可持续增长的个人资产。</p>
+          </div>
+        </aside>
+      </section>
+
+      <section class="architecture" aria-label="architecture map">
+        <header class="section-head">
+          <div>
+            <h2>三层架构：关系入口、成长认知、Agent 扩张</h2>
+            <p>这张图刻意不画源码文件，而画投资人真正需要理解的系统骨架。</p>
+          </div>
+          <div class="legend">
+            <span><i class="dash"></i> 已落地的主价值</span>
+            <span><i class="dash red"></i> 数据飞轮</span>
+            <span><i class="dash blue"></i> 未来扩张</span>
+          </div>
+        </header>
+
+        <div class="stage">
+          <article class="pillar" style="--accent: var(--green); --soft: var(--green-2)">
+            <small>Layer 01 · Surface</small>
+            <h3>前台是关系，不是系统</h3>
+            <p class="summary">
+              用户第一眼看到的是一个 OC：会聊天、会回应、会记得、会陪着自己。复杂成长系统不抢前台。
+            </p>
+            <ul class="pillar-list">
+              <li>OC 形象与对话是最高频入口</li>
+              <li>关系阶段让陪伴越来越有连续性</li>
+              <li>语音、形象、情绪让 AI 从工具变成“在场的人”</li>
+              <li>用户不用管理成长系统，只需要真实生活和表达</li>
+            </ul>
+            <div class="mini-stack">
+              <div class="mini"><b>用户感受</b>这个 OC 好像越来越懂我。</div>
+              <div class="mini"><b>商业意义</b>关系入口比效率工具更容易形成长期留存。</div>
+            </div>
+          </article>
+
+          <article class="pillar" style="--accent: var(--red); --soft: var(--red-2)">
+            <small>Layer 02 · Cognition</small>
+            <h3>后台是成长认知层</h3>
+            <p class="summary">
+              每次聊天、复盘、生活信号都会进入后台，被提炼成候选理解、成长证据和下一步练习。
+            </p>
+            <ul class="pillar-list">
+              <li>ContextSnapshot 汇总今天发生了什么</li>
+              <li>记忆蒸馏先形成候选，不直接给用户贴标签</li>
+              <li>Growth Insight 识别目标、优势、卡点和偏好</li>
+              <li>Reveal Policy 只在时机合适时温和浮现</li>
+              <li>用户确认后才进入长期 memory / voice / profile</li>
+            </ul>
+            <div class="mini-stack">
+              <div class="mini"><b>产品原则</b>确认权在用户，解释权不能完全交给系统。</div>
+              <div class="mini"><b>数据资产</b>记录的不是任务，而是成长证据。</div>
+            </div>
+          </article>
+
+          <article class="pillar" style="--accent: var(--blue); --soft: var(--blue-2)">
+            <small>Layer 03 · Expansion</small>
+            <h3>未来是 Agent 世界</h3>
+            <p class="summary">
+              当 OC 足够理解用户，它就不只是陪伴者，而能代表用户进入任务、社交和创造网络。
+            </p>
+            <ul class="pillar-list">
+              <li>Hermes / model gateway 承接更复杂的 Agent 能力</li>
+              <li>个人 OC 可以带着用户偏好、边界和长期目标行动</li>
+              <li>多个 OC 未来可以协作、组队、交换成果</li>
+              <li>Agent 世界不是起点，而是长期关系成熟后的扩张层</li>
+            </ul>
+            <div class="mini-stack">
+              <div class="mini"><b>扩张逻辑</b>先有可信的个人 OC，再有可代理的 Agent。</div>
+              <div class="mini"><b>投资叙事</b>从桌面陪伴入口，走向个人 AI 分身网络。</div>
+            </div>
+          </article>
+        </div>
+
+        <section class="loop-band" aria-label="growth loop">
+          <div class="loop-title">
+            <h2>核心闭环：生活发生以后，OC 把经历翻译成成长</h2>
+            <p>这条闭环是产品价值和数据飞轮的同一条线。</p>
+          </div>
+          <div class="loop">
+            <article class="step" style="--tone: var(--gold-2); --tone-ink: var(--gold)">
+              <span>1</span>
+              <b>生活发生</b>
+              <p>用户对话、App 使用、任务进展、社交记忆进入系统。</p>
+            </article>
+            <article class="step" style="--tone: var(--green-2); --tone-ink: var(--green)">
+              <span>2</span>
+              <b>OC 接住</b>
+              <p>OC 先给即时陪伴和情绪理解，不把用户推入管理面板。</p>
+            </article>
+            <article class="step" style="--tone: var(--teal-2); --tone-ink: var(--teal)">
+              <span>3</span>
+              <b>一起复盘</b>
+              <p>把混乱经历解释成事实、情绪、卡点和下一步。</p>
+            </article>
+            <article class="step" style="--tone: var(--red-2); --tone-ink: var(--red)">
+              <span>4</span>
+              <b>提炼证据</b>
+              <p>后台形成 awareness、growth insight、work item 和项目线索。</p>
+            </article>
+            <article class="step" style="--tone: var(--purple-2); --tone-ink: var(--purple)">
+              <span>5</span>
+              <b>温和浮现</b>
+              <p>当线索稳定，OC 用一句自然的话邀请用户确认或修正。</p>
+            </article>
+            <article class="step" style="--tone: var(--blue-2); --tone-ink: var(--blue)">
+              <span>6</span>
+              <b>回到行动</b>
+              <p>确认后的理解沉淀为长期记忆，并生成更贴身的下一步练习。</p>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <section class="investor-read" aria-label="investor reading">
+        <article class="read-card">
+          <small>Why Now</small>
+          <h3>AI 工具正在变多，但长期关系很稀缺</h3>
+          <p>多数产品只解决“这一刻问答”，OC World 解决“这个人正在变成谁”。关系越久，理解越深，价值越高。</p>
+        </article>
+        <article class="read-card">
+          <small>Moat</small>
+          <h3>私有成长数据是复利资产</h3>
+          <p>聊天、记忆、关系、生活信号、用户确认共同构成个人成长画像。它不是冷数据，而是长期陪伴里逐步校准出来的理解。</p>
+        </article>
+        <article class="read-card">
+          <small>Scale</small>
+          <h3>Agent 世界是后续网络效应</h3>
+          <p>当每个人都有一个足够懂自己的 OC，OC 之间就可以协作、组队、创造，形成从个人陪伴到任务经济的扩张路径。</p>
+        </article>
+      </section>
+
+      <section class="truth-row" aria-label="current truth">
+        <article class="truth">
+          <h3>现在已经成立的部分</h3>
+          <ul>
+            <li><b>产品</b><span>OC 关系入口、隐形成长系统、成长证据和温和浮现的方向已经清楚。</span></li>
+            <li><b>技术</b><span>Electron 桌面壳、聊天主链、ContextSnapshot、记忆蒸馏、统一记忆仓骨架、recall/reveal 已跑通。</span></li>
+            <li><b>体验</b><span>用户第一屏可以只看到 OC 和对话，后台系统慢慢学习，不把成长系统硬摊开。</span></li>
+          </ul>
+        </article>
+        <article class="truth">
+          <h3>下一阶段要补强的部分</h3>
+          <ul>
+            <li><b>治理</b><span>补 session event stream、writeback ledger、drift guardrails，让长期记忆写入可解释、可回滚。</span></li>
+            <li><b>产品</b><span>把成长证据结构化，让每次高质量互动都能长出一张可确认的成长记录。</span></li>
+            <li><b>扩张</b><span>在个人 OC 足够可信之后，再把 Hermes / Agent 世界能力前台化。</span></li>
+          </ul>
+        </article>
+      </section>
+
+      <div class="footer">
+        <span>OC World · Investor architecture map</span>
+        <span>Standalone HTML · demos/oc-architecture-investor.html</span>
+      </div>
+    </main>
+  </body>
+</html>

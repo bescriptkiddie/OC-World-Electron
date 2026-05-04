@@ -79,6 +79,45 @@ export interface CharacterConfig {
   relationshipSetup: string;
   avatarLabel: string;
   avatarPath?: string;
+  visualProfile?: OcVisualProfile;
+}
+
+export type OcVisualStateId =
+  | "idle"
+  | "running-right"
+  | "running-left"
+  | "waving"
+  | "jumping"
+  | "failed"
+  | "waiting"
+  | "running"
+  | "review";
+
+export interface OcVisualState {
+  id: OcVisualStateId;
+  label: string;
+  row: number;
+  frames: number;
+  fps: number;
+  prompt: string;
+}
+
+export interface OcVisualProfile {
+  packageName: string;
+  displayName: string;
+  direction: "editorial-monocle" | "modern-minimal" | "warm-soft" | "tech-utility" | "brutalist-experimental";
+  concept: string;
+  styleNotes: string;
+  atlasSpec: {
+    cellWidth: number;
+    cellHeight: number;
+    columns: number;
+    rows: number;
+    width: number;
+    height: number;
+  };
+  states: OcVisualState[];
+  spritesheetPath?: string;
 }
 
 export interface ChatHistoryEntry {

@@ -38,6 +38,11 @@ import type {
   WorkItem,
 } from "./index";
 
+type FloatingOcDragPoint = {
+  screenX: number;
+  screenY: number;
+};
+
 declare global {
   interface Window {
     ocWorld?: {
@@ -114,6 +119,16 @@ declare global {
       };
       imageGen: {
         generate: (payload: ImageGenPayload) => Promise<ImageGenResult>;
+      };
+      floatingOc: {
+        show: () => Promise<{ open: boolean }>;
+        close: () => Promise<{ open: boolean }>;
+        toggle: () => Promise<{ open: boolean }>;
+        getState: () => Promise<{ open: boolean }>;
+        focusMain: () => Promise<boolean>;
+        startDrag: (point: FloatingOcDragPoint) => void;
+        dragMove: (point: FloatingOcDragPoint) => void;
+        endDrag: () => void;
       };
     };
   }

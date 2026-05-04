@@ -2,6 +2,11 @@ import { contextBridge, ipcRenderer } from "electron";
 
 const hermesStatusChangedChannel = "hermes:status-changed";
 const hermesSessionEventChannel = "hermes:session-event";
+const floatingOcDragChannels = {
+  start: "floating-oc:drag-start",
+  move: "floating-oc:drag-move",
+  end: "floating-oc:drag-end",
+} as const;
 
 contextBridge.exposeInMainWorld("ocWorld", {
   chat: {
@@ -133,5 +138,15 @@ contextBridge.exposeInMainWorld("ocWorld", {
   imageGen: {
     generate: (payload: import("../src/types").ImageGenPayload) =>
       ipcRenderer.invoke("image-gen:generate", payload),
+  },
+  floatingOc: {
+    show: () => ipcRenderer.invoke("floating-oc:show"),
+    close: () => ipcRenderer.invoke("floating-oc:close"),
+    toggle: () => ipcRenderer.invoke("floating-oc:toggle"),
+    getState: () => ipcRenderer.invoke("floating-oc:get-state"),
+    focusMain: () => ipcRenderer.invoke("floating-oc:focus-main"),
+    startDrag: (point: { screenX: number; screenY: number }) => ipcRenderer.send(floatingOcDragChannels.start, point),
+    dragMove: (point: { screenX: number; screenY: number }) => ipcRenderer.send(floatingOcDragChannels.move, point),
+    endDrag: () => ipcRenderer.send(floatingOcDragChannels.end),
   },
 });

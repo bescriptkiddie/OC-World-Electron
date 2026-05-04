@@ -1,5 +1,7 @@
 import type { CharacterConfig, Relationship } from "../types";
 import { IconChat, IconGift, IconRewind, IconTasks } from "./OcWorldIcons";
+import { OcInteractionLoop, resolveOcInteractionMoment } from "./OcInteractionSystem";
+import { OcSpriteStage } from "./OcSpriteStage";
 import { stageLabel } from "./shared";
 
 export function MyOcView({
@@ -19,47 +21,50 @@ export function MyOcView({
   onOpenRewind: () => void;
   onOpenMemory: () => void;
 }) {
+  const moment = resolveOcInteractionMoment({
+    relationship,
+    signalCount: relationship?.keyMoments.length ?? 0,
+  });
+
   return (
-    <div className="oc-page oc-myoc-page">
-      <section className="oc-hero-card">
-        <div>
-          <p className="oc-kicker mono">COMPANION PROFILE</p>
+    <div className="oc-page oc-myoc-page oc-open-room">
+      <section className="oc-open-room__stage">
+        <div className="oc-open-room__copy">
+          <p className="oc-kicker mono">{stageLabel(relationship?.stage)}</p>
           <h2 className="oc-page-title serif">{character?.name?.trim() || "你的 OC 还没完成命名"}</h2>
-          <p className="oc-page-copy">{character?.personality?.trim() || "先去生成页，把 TA 的性格和外观写出来。"}</p>
+          <p className="oc-page-copy">{greeting.trim() || character?.catchphrase?.trim() || "嗯，我在。"}</p>
+          <div className="oc-open-room__actions">
+            <button type="button" className="oc-pill-button is-primary" onClick={onOpenChat}>
+              <IconChat size={15} />
+              继续说
+            </button>
+            <button type="button" className="oc-pill-button oc-pill-button--quiet" onClick={onOpenMemory}>
+              <IconTasks size={15} />
+              线索
+            </button>
+            <button type="button" className="oc-pill-button oc-pill-button--quiet" onClick={onOpenRewind}>
+              <IconRewind size={15} />
+              回看
+            </button>
+            <button type="button" className="oc-pill-button oc-pill-button--quiet" onClick={onOpenCreate}>
+              <IconGift size={15} />
+              重做
+            </button>
+          </div>
         </div>
-        <div className="oc-hero-card__aside">
-          <span className="oc-badge">{stageLabel(relationship?.stage)}</span>
-          <span className="oc-badge">亲密度 {relationship?.intimacy ?? 0}</span>
-        </div>
+        <OcSpriteStage
+          character={character}
+          title={character?.name?.trim() || "未命名 OC"}
+          subtitle={character?.relationshipSetup?.trim() || "先完成角色生成，再让这段关系长出来。"}
+          size={236}
+          stateId={moment.visualState}
+          controls={false}
+        />
       </section>
 
-      <section className="oc-grid-two">
-        <article className="oc-surface-card">
-          <p className="oc-kicker mono">TA 对你说</p>
-          <div className="oc-quote-block serif">“{greeting.trim() || character?.catchphrase?.trim() || "嗯，我在。"}”</div>
-          <p className="oc-page-copy">{character?.relationshipSetup?.trim() || "先完成角色生成，再让这段关系长出来。"}</p>
-        </article>
-
-        <article className="oc-surface-card">
-          <p className="oc-kicker mono">QUICK ACTIONS</p>
-          <div className="oc-action-grid">
-            <ActionCard icon={<IconChat size={16} />} title="进入聊天" body="直接进入对话窗，继续和 TA 相处。" onClick={onOpenChat} />
-            <ActionCard icon={<IconGift size={16} />} title="重新生成" body="回到创建流程，重做人设、外观和语气。" onClick={onOpenCreate} />
-            <ActionCard icon={<IconRewind size={16} />} title="查看回溯" body="看关系是怎么一步步长出来的。" onClick={onOpenRewind} />
-            <ActionCard icon={<IconTasks size={16} />} title="查看记忆" body="翻 TA 记住的关于你的小事。" onClick={onOpenMemory} />
-          </div>
-        </article>
+      <section className="oc-open-room__thread">
+        <OcInteractionLoop moment={moment} />
       </section>
     </div>
-  );
-}
-
-function ActionCard({ icon, title, body, onClick }: { icon: React.ReactNode; title: string; body: string; onClick: () => void }) {
-  return (
-    <button type="button" className="oc-action-card" onClick={onClick}>
-      <span className="oc-action-card__icon">{icon}</span>
-      <span className="oc-action-card__title">{title}</span>
-      <span className="oc-action-card__body">{body}</span>
-    </button>
   );
 }
