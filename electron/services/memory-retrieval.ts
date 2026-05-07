@@ -5,6 +5,7 @@ import {
   loadLongTermMemory,
   loadProjectsState,
 } from "./unified-memory";
+import { isProjectEligible } from "./projects";
 
 export function createEmptyRetrievedMemoryBundle(): RetrievedMemoryBundle {
   return {
@@ -102,6 +103,9 @@ export async function retrieveMemoryBundle(input: {
     listWorkItems(input.userId, input.dataRoot),
     loadProjectsState(input.userId, input.dataRoot),
   ]);
+  const governedWorkItems = workItems.filter(isProjectEligible);
+  const governedProjectIds = new Set(governedWorkItems.map((item) => item.id));
+  const governedProjects = projectsState.projects.filter((project) => project.workItemIds.some((id) => governedProjectIds.has(id)));
 
   const longTermFacts = joinSectionItems([
     ...extractBulletItems(longTermMemory.memoryMarkdown, "Preferences"),
@@ -114,8 +118,8 @@ export async function retrieveMemoryBundle(input: {
     longTermFacts,
     voiceHints,
     systemReminders: longTermMemory.systemRemindersMarkdown.trim(),
-    activeProjects: rankProjects(projectsState.projects, querySignals).slice(0, 4),
-    relevantWorkItems: rankWorkItems(workItems, querySignals).slice(0, 5),
+    activeProjects: rankProjects(governedProjects, querySignals).slice(0, 4),
+    relevantWorkItems: rankWorkItems(governedWorkItems, querySignals).slice(0, 5),
     recentAwarenessHighlights: rankAwareness(awarenessEpisodes, querySignals).slice(0, 5),
   };
 }

@@ -7,6 +7,7 @@ import {
   saveRecallEvents,
   saveRecallSignalStates,
 } from "./unified-memory";
+import { isProjectEligible } from "./projects";
 
 const REQUIRED_REPEAT_COUNT = 3;
 const COOLDOWN_MS = 30 * 60 * 1000;
@@ -104,7 +105,7 @@ async function buildRelatedContextBundle(userId: string, dataRoot?: string) {
       ...extractBulletItems(longTermMemory.memoryMarkdown, "Preferences"),
       ...extractBulletItems(longTermMemory.memoryMarkdown, "Recent"),
     ],
-    workItems,
+    workItems: workItems.filter(isProjectEligible),
   };
 }
 

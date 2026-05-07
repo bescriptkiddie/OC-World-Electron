@@ -130,7 +130,7 @@ describe("memory retrieval", () => {
     });
   });
 
-  it("ranks query-relevant projects, work items and awareness higher", async () => {
+  it("filters weak projects and work items out of retrieved memory bundle", async () => {
     const bundle = await retrieveMemoryBundle({
       userId: "user-001",
       dataRoot: tempDir,
@@ -140,8 +140,8 @@ describe("memory retrieval", () => {
     expect(bundle.longTermFacts).toContain("后端记忆层");
     expect(bundle.voiceHints).toContain("直接一点");
     expect(bundle.systemReminders).toContain("不要编造实时信息");
-    expect(bundle.activeProjects[0]?.title).toBe("后端记忆层收口");
-    expect(bundle.relevantWorkItems[0]?.title).toBe("统一记忆仓");
+    expect(bundle.activeProjects.map((project) => project.title)).toEqual(["后端记忆层收口"]);
+    expect(bundle.relevantWorkItems.map((item) => item.title)).toEqual(["统一记忆仓"]);
     expect(bundle.recentAwarenessHighlights[0]?.title).toBe("目标线索");
   });
 });

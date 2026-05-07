@@ -15,11 +15,11 @@ function toProjectId(title: string) {
   return `project_${normalizeTitle(title).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 }
 
-function isProjectPromotionSignal(signal: string) {
+export function isProjectPromotionSignal(signal: string) {
   return signal.length <= 32 && projectPromotionSignalPattern.test(signal);
 }
 
-function isProjectEligible(item: WorkItem) {
+export function isProjectEligible(item: WorkItem) {
   return item.relatedSignals.some(isProjectPromotionSignal);
 }
 

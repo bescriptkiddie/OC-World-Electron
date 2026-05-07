@@ -17,5 +17,6 @@ describe("progress dashboard contract", () => {
     expect(html).toContain("2026-05-07 17:37:10 CST");
     expect(html).toContain("2026-05-07 18:17:59 CST");
     expect(html).toContain("2026-05-07 18:42:05 CST");
+    expect(html).toContain("2026-05-07 19:04:44 CST");
   });
 });
