@@ -135,7 +135,6 @@ export function createBrowserClient(): { client: OcWorldClient; capabilities: Pl
   const client: OcWorldClient = {
     chat: {
       async sendMessage(payload) {
-        await new Promise((resolve) => window.setTimeout(resolve, 10));
         const result = createBrowserDemoReply(payload.userMessage, relationship);
         const now = Date.now();
         const demoGrowth = createBrowserDemoInsight(payload.userId, payload.userMessage, now);
