@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   appendDriftSignals,
   evaluateRelationshipDriftSignals,
+  evaluateTaskSignalDriftSignals,
   evaluateWritebackDriftSignals,
   listDriftSignals,
 } from "../electron/services/drift-guardrails";
@@ -174,6 +175,40 @@ describe("drift guardrails", () => {
         previousIntimacy: 10,
         nextIntimacy: 14,
         growthEvent: "轻微互动",
+        createdAt: 1,
+      }),
+    ).toEqual([]);
+  });
+
+  it("flags vague task intent as evaluator mismatch", () => {
+    expect(
+      evaluateTaskSignalDriftSignals({
+        userId: "user-001",
+        turnId: "turn-1",
+        userMessage: "我想先处理一下这个",
+        worthy: false,
+        relatedSignals: ["我想先处理一下这个"],
+        createdAt: 1,
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        userId: "user-001",
+        turnId: "turn-1",
+        type: "evaluator_mismatch",
+        severity: "warning",
+        recommendedAction: "ask_user",
+      }),
+    ]);
+  });
+
+  it("skips drift signals when vague intent was never considered task-worthy", () => {
+    expect(
+      evaluateTaskSignalDriftSignals({
+        userId: "user-001",
+        turnId: "turn-1",
+        userMessage: "随便聊聊",
+        worthy: false,
+        relatedSignals: [],
         createdAt: 1,
       }),
     ).toEqual([]);

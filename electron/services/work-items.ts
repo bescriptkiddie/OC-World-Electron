@@ -1,7 +1,7 @@
 import type { ContextSnapshot, GrowthInsight, WorkItem } from "../../src/types";
 import { createWorkItemId, listWorkItems, saveWorkItem } from "./unified-memory";
 
-interface TaskWorthySignal {
+export interface TaskWorthySignal {
   title: string;
   worthy: boolean;
   relatedSignals: string[];
@@ -33,7 +33,19 @@ function isStrongIntentMessage(userMessage: string) {
   return /我想|想先|准备|继续推进|推进|发出来|上线|发布|搭起来|做一个/.test(userMessage);
 }
 
-function inferTitle(userMessage: string, snapshot: ContextSnapshot) {
+const structuredTaskSignalPattern = /memory|backend|mvp|ship|上线|发布/i;
+const realtimeTaskTitlePattern = /mvp|ship|上线|发布/i;
+const realtimeTaskContextPattern = /memory|backend|mvp|ship|上线|发布|发出来/i;
+
+function hasStructuredTaskSignal(signal: string) {
+  return structuredTaskSignalPattern.test(signal);
+}
+
+function shouldUseRealtimeTaskContext(userMessage: string, growthEvent: string | null) {
+  return [userMessage, growthEvent ?? ""].some((signal) => realtimeTaskContextPattern.test(signal));
+}
+
+function inferTitle(userMessage: string, growthEvent: string | null, snapshot: ContextSnapshot) {
   if (/记忆仓|memory/i.test(userMessage)) {
     return "Build memory layer";
   }
@@ -42,7 +54,9 @@ function inferTitle(userMessage: string, snapshot: ContextSnapshot) {
     return "Build backend framework";
   }
 
-  const realtimeTask = snapshot.realtimeContext.tasks.find((task) => /mvp|ship|上线|发布/i.test(task.title));
+  const realtimeTask = shouldUseRealtimeTaskContext(userMessage, growthEvent)
+    ? snapshot.realtimeContext.tasks.find((task) => realtimeTaskTitlePattern.test(task.title))
+    : undefined;
   if (realtimeTask) {
     return realtimeTask.title.trim();
   }
@@ -58,11 +72,15 @@ function extractIntentSignals(userMessage: string) {
   return signals;
 }
 
-function extractRealtimeTaskSignals(snapshot: ContextSnapshot) {
+function extractRealtimeTaskSignals(userMessage: string, growthEvent: string | null, snapshot: ContextSnapshot) {
+  if (!shouldUseRealtimeTaskContext(userMessage, growthEvent)) {
+    return [] as string[];
+  }
+
   return snapshot.realtimeContext.tasks
     .map((task) => task.title.trim())
     .filter(Boolean)
-    .filter((title) => /mvp|ship|上线|发布|推进|demo|聊天|chat/i.test(title));
+    .filter((title) => realtimeTaskTitlePattern.test(title));
 }
 
 export function rankTaskWorthySignals(input: {
@@ -79,19 +97,16 @@ export function rankTaskWorthySignals(input: {
         /后端|backend/i.test(input.userMessage) ? "backend" : null,
         input.growthEvent?.trim() ? input.growthEvent.trim() : null,
         ...extractIntentSignals(input.userMessage),
-        ...extractRealtimeTaskSignals(input.snapshot),
+        ...extractRealtimeTaskSignals(input.userMessage, input.growthEvent, input.snapshot),
       ].filter((value): value is string => Boolean(value)),
     ),
   );
 
-  const worthy =
-    relatedSignals.length > 0 &&
-    (isStrongIntentMessage(input.userMessage) ||
-      relatedSignals.some((signal) => /memory|backend|mvp|ship|上线|发布/i.test(signal)));
+  const worthy = relatedSignals.some(hasStructuredTaskSignal);
 
   return [
     {
-      title: inferTitle(input.userMessage, input.snapshot),
+      title: inferTitle(input.userMessage, input.growthEvent, input.snapshot),
       worthy,
       relatedSignals,
       summary: input.userMessage.trim(),

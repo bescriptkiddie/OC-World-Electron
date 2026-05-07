@@ -145,6 +145,65 @@ describe("growth pipeline", () => {
     );
   });
 
+  it("creates work items from realtime MVP context when the user only expresses release intent", async () => {
+    const result = await runGrowthPipeline({
+      userId: "user-001",
+      userMessage: "我想先把这个发出来",
+      ocResponse: "先把能发版的链路收紧。",
+      growthEvent: null,
+      snapshot: createSnapshot(),
+      dataRoot: tempDir,
+      now: 1713000000800,
+    });
+
+    const [workItems, projects] = await Promise.all([
+      listWorkItems("user-001", tempDir),
+      loadProjectsState("user-001", tempDir),
+    ]);
+
+    expect(result.workItems[0]).toEqual(
+      expect.objectContaining({
+        title: "Ship OC World MVP",
+        relatedSignals: expect.arrayContaining(["Ship OC World MVP"]),
+      }),
+    );
+    expect(workItems[0]?.title).toBe("Ship OC World MVP");
+    expect(projects.projects[0]).toEqual(
+      expect.objectContaining({
+        title: "Ship OC World MVP",
+        workItemIds: [workItems[0]?.id],
+      }),
+    );
+  });
+
+  it("records evaluator mismatch drift signals for vague strong-intent turns", async () => {
+    const result = await runGrowthPipeline({
+      userId: "user-001",
+      userMessage: "我想先处理一下这个",
+      ocResponse: "先说清你要推进哪一块。",
+      growthEvent: null,
+      snapshot: createSnapshot(),
+      dataRoot: tempDir,
+      now: 1713000000900,
+    });
+
+    const [workItems, driftSignals] = await Promise.all([
+      listWorkItems("user-001", tempDir),
+      listDriftSignals({ userId: "user-001" }, tempDir),
+    ]);
+
+    expect(result.workItems).toEqual([]);
+    expect(workItems).toEqual([]);
+    expect(driftSignals).toEqual([
+      expect.objectContaining({
+        userId: "user-001",
+        type: "evaluator_mismatch",
+        severity: "warning",
+        recommendedAction: "ask_user",
+      }),
+    ]);
+  });
+
   it("records writeback proposals during manual distillation", async () => {
     await saveGrowthInsights("user-001", [createGoalInsight("confirmed")], tempDir);
 

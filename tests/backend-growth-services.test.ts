@@ -127,4 +127,27 @@ describe("backend growth services", () => {
       }),
     );
   });
+
+  it("does not promote vague progress-only strong intent messages into work items", () => {
+    const rankedSignals = rankTaskWorthySignals({
+      userId: "user-001",
+      userMessage: "我想继续推进这个",
+      growthEvent: null,
+      snapshot: createSnapshot(),
+      now: 1713000000950,
+    });
+
+    const merged = mergeWorkItems({
+      existing: [],
+      signals: rankedSignals,
+      now: 1713000001000,
+    });
+
+    expect(rankedSignals[0]).toEqual(
+      expect.objectContaining({
+        worthy: false,
+      }),
+    );
+    expect(merged).toEqual([]);
+  });
 });

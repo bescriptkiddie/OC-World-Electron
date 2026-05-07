@@ -42,6 +42,10 @@ async function readAllSignals(filePath: string) {
   return parseDriftSignalList(lines.map((line) => JSON.parse(line))) as DriftSignal[];
 }
 
+function isStrongIntentMessage(userMessage: string) {
+  return /我想|想先|准备|继续推进|推进|发出来|上线|发布|搭起来|做一个/.test(userMessage);
+}
+
 export function evaluateWritebackDriftSignals(input: {
   userId: string;
   turnId: string;
@@ -97,6 +101,33 @@ export function evaluateRelationshipDriftSignals(input: {
       summary: "单轮关系亲密度跳变过大，可能存在情绪过拟合。",
       evidenceEventIds: [],
       recommendedAction: "observe",
+      createdAt: input.createdAt,
+    },
+  ];
+}
+
+export function evaluateTaskSignalDriftSignals(input: {
+  userId: string;
+  turnId: string;
+  userMessage: string;
+  worthy: boolean;
+  relatedSignals: string[];
+  createdAt: number;
+}): DriftSignal[] {
+  if (input.worthy || !isStrongIntentMessage(input.userMessage) || input.relatedSignals.length === 0) {
+    return [];
+  }
+
+  return [
+    {
+      id: `drift_task_${input.turnId}_${input.createdAt}`,
+      userId: input.userId,
+      turnId: input.turnId,
+      type: "evaluator_mismatch",
+      severity: "warning",
+      summary: "检测到强意图表达，但缺少足够具体的目标，暂不创建事项。",
+      evidenceEventIds: [],
+      recommendedAction: "ask_user",
       createdAt: input.createdAt,
     },
   ];
