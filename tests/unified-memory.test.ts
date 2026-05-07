@@ -227,41 +227,77 @@ describe("unified memory repository", () => {
     expect(otherRecall).toEqual([]);
   });
 
-  it("builds a retrieved memory bundle from memory, awareness, work-items and projects", async () => {
+  it("filters weak projects and work items out of the direct retrieved memory bundle", async () => {
     await ensureUnifiedMemoryRepository("user-001", tempDir);
-    await appendConfirmedMemoryNote({
-      userId: "user-001",
-      insightId: "insight-1",
-      title: "做成长伙伴",
-      text: "你反复在朝这个目标靠近。",
-      type: "memory",
-      now: 1_713_000_000_000,
-      dataRoot: tempDir,
-    });
-    await saveWorkItem(
+    await saveProjectsState(
       {
-        id: "work-1",
+        version: 1,
+        generatedAt: 1,
         userId: "user-001",
-        title: "做成长伙伴",
-        description: "推进成长伙伴 demo",
-        status: "pending",
-        source: "distillation",
-        relatedSignals: ["insight-1"],
-        notes: [{ at: 1, text: "目标线索", source: "distillation" }],
-        summary: "推进成长伙伴 demo",
-        createdAt: 1,
-        updatedAt: 1,
+        projects: [
+          {
+            id: "project-1",
+            userId: "user-001",
+            title: "后端记忆层收口",
+            description: "有效项目",
+            workItemIds: ["work-1"],
+            confidence: 0.8,
+            rationale: "memory backend",
+            updatedAt: 2,
+          },
+          {
+            id: "project-2",
+            userId: "user-001",
+            title: "做饭计划",
+            description: "弱项目",
+            workItemIds: ["work-2"],
+            confidence: 0.3,
+            rationale: "kitchen",
+            updatedAt: 3,
+          },
+        ],
       },
       tempDir,
     );
-
-    const [items, bundle] = await Promise.all([
-      listWorkItems("user-001", tempDir),
-      loadRetrievedMemoryBundle("user-001", tempDir),
+    await Promise.all([
+      saveWorkItem(
+        {
+          id: "work-1",
+          userId: "user-001",
+          title: "统一记忆仓",
+          description: "有效事项",
+          status: "pending",
+          source: "distillation",
+          relatedSignals: ["backend", "memory"],
+          notes: [{ at: 1, text: "有效", source: "distillation" }],
+          summary: "有效事项",
+          createdAt: 1,
+          updatedAt: 2,
+        },
+        tempDir,
+      ),
+      saveWorkItem(
+        {
+          id: "work-2",
+          userId: "user-001",
+          title: "买菜",
+          description: "弱事项",
+          status: "pending",
+          source: "distillation",
+          relatedSignals: ["kitchen"],
+          notes: [{ at: 1, text: "弱", source: "distillation" }],
+          summary: "弱事项",
+          createdAt: 1,
+          updatedAt: 3,
+        },
+        tempDir,
+      ),
     ]);
 
-    expect(items).toHaveLength(1);
-    expect(bundle.longTermFacts).toContain("做成长伙伴");
-    expect(bundle.relevantWorkItems[0].title).toBe("做成长伙伴");
+    const bundle = await loadRetrievedMemoryBundle("user-001", tempDir);
+
+    expect(bundle.activeProjects.map((project) => project.title)).toEqual(["后端记忆层收口"]);
+    expect(bundle.relevantWorkItems.map((item) => item.title)).toEqual(["统一记忆仓"]);
   });
 });
+
