@@ -33,6 +33,7 @@ import {
   loadProjectsState,
 } from "./services/unified-memory";
 import { getStage } from "./services/relationship";
+import { getSessionEventBridgeStatus, listSessionEvents, recordSessionEvent } from "./services/session-events";
 import type {
   CharacterConfig,
   AsrAudioPayload,
@@ -159,19 +160,9 @@ async function stopAsrSession(payload: AsrStopPayload) {
   return true;
 }
 
-function createDefaultHermesBridgeStatus(): HermesBridgeStatus {
-  return {
-    connected: false,
-    transport: "none",
-    lastEventAt: null,
-  };
-}
-
-function listDefaultHermesSessionEvents(_query: HermesSessionEventQuery): HermesSessionEvent[] {
-  return [];
-}
-
 function broadcastHermesSessionEvent(event: HermesSessionEvent) {
+  recordSessionEvent(event);
+
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send(ipcChannels.hermesSessionEvent, event);
   }
@@ -471,9 +462,9 @@ export function registerIpcHandlers() {
   });
   ipcMain.handle(ipcChannels.airjellyGetContext, async () => getAirJellyContext());
   ipcMain.handle(ipcChannels.hermesGetStatus, async () => hermesManager.getStatus());
-  ipcMain.handle(ipcChannels.hermesGetBridgeStatus, async () => createDefaultHermesBridgeStatus());
+  ipcMain.handle(ipcChannels.hermesGetBridgeStatus, async () => getSessionEventBridgeStatus());
   ipcMain.handle(ipcChannels.hermesListSessionEvents, async (_event, payload: HermesSessionEventQuery) =>
-    listDefaultHermesSessionEvents(payload),
+    listSessionEvents(payload),
   );
   ipcMain.handle(ipcChannels.imageGenGenerate, async (_event, payload: ImageGenPayload) => generateImage(payload));
 }

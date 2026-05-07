@@ -244,6 +244,38 @@ const recallSignalStateSchema = z.object({
   lastTriggeredAt: z.number().optional(),
 });
 
+const hermesSessionEventQuerySchema = z
+  .object({
+    sessionId: z.string().min(1).optional(),
+    turnId: z.string().min(1).optional(),
+    userId: z.string().min(1).optional(),
+    characterId: z.string().min(1).optional(),
+    limit: z.number().int().positive().optional(),
+  })
+  .superRefine((query, context) => {
+    const hasSessionId = query.sessionId !== undefined;
+    const hasUserId = query.userId !== undefined;
+    const hasCharacterId = query.characterId !== undefined;
+
+    if (hasSessionId && (hasUserId || hasCharacterId)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "sessionId cannot be combined with userId or characterId",
+        path: ["sessionId"],
+      });
+    }
+
+    if (hasUserId === hasCharacterId) {
+      return;
+    }
+
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "userId and characterId must be provided together",
+      path: hasUserId ? ["characterId"] : ["userId"],
+    });
+  });
+
 export const airJellyContextListSchema = airJellyContextSchema;
 export const memorySummaryListSchema = z.array(summarySchema);
 export const relationshipStateSchema = relationshipSchema;
@@ -259,6 +291,15 @@ export const workItemListSchema = z.array(workItemSchema);
 export const projectsStateListSchema = projectsStateSchema;
 export const recallEventListSchema = z.array(recallEventSchema);
 export const recallSignalStateListSchema = z.array(recallSignalStateSchema);
+export const hermesSessionEventQueryStateSchema = hermesSessionEventQuerySchema;
+
+export function safeParseHermesSessionEventQuery(value: unknown) {
+  return hermesSessionEventQueryStateSchema.safeParse(value);
+}
+
+export function parseHermesSessionEventQuery(value: unknown) {
+  return hermesSessionEventQueryStateSchema.parse(value);
+}
 
 export function parseAirJellyContext(value: unknown): AirJellyContext {
   return airJellyContextListSchema.parse(value) as AirJellyContext;

@@ -82,6 +82,37 @@ describe("oc world capabilities facade", () => {
     expect(generateImage).toHaveBeenCalledWith({ prompt: "avatar" }, "char-001", undefined);
   });
 
+  it("passes hermes session event filters through unchanged", async () => {
+    const listHermesSessionEvents = vi.fn().mockResolvedValue([]);
+
+    const capabilities = createOcWorldCapabilities({
+      services: {
+        chat: vi.fn(),
+        generateGreeting: vi.fn(),
+        loadOCHistory: vi.fn(),
+        loadRecentSummaries: vi.fn(),
+        getAirJellyContext: vi.fn(),
+        hermesManager: { getStatus: vi.fn() },
+        listHermesSessionEvents,
+        getTtsStatus: vi.fn(),
+        synthesizeSpeech: vi.fn(),
+        generateImage: vi.fn(),
+      },
+    });
+
+    await capabilities.hermes.listSessionEvents({
+      sessionId: "user-001:char-001",
+      turnId: "turn-123",
+      limit: 2,
+    });
+
+    expect(listHermesSessionEvents).toHaveBeenCalledWith({
+      sessionId: "user-001:char-001",
+      turnId: "turn-123",
+      limit: 2,
+    });
+  });
+
   it("cancels active chat by user and character session key", async () => {
     let release!: () => void;
     let observedSignal!: AbortSignal;
