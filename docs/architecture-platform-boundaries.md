@@ -2,6 +2,8 @@
 
 ## 1. 当前项目的真实形态
 
+可视化架构图：`demos/oc-current-architecture-map.html`
+
 OC World 现在是一个 Electron 桌面应用。
 
 核心运行边界分五层：

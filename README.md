@@ -179,6 +179,7 @@ ANTHROPIC_DEFAULT_HAIKU_MODEL=mimo-v2.5-pro
 
 - `docs/architecture-platform-boundaries.md`
 - `docs/backend-interface.md`
+- `demos/oc-current-architecture-map.html`
 
 ## 常用命令
 
