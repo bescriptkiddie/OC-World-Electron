@@ -1,5 +1,6 @@
 import type { AwarenessEpisode, GrowthInsight } from "../../src/types";
 import { appendAwarenessNote, appendConfirmedMemoryNote } from "./unified-memory";
+import { appendWritebackProposal } from "./writeback-ledger";
 
 type MemoryMergeDecisionStatus = "merged" | "deferred" | "discarded";
 
@@ -70,6 +71,14 @@ function createDecision(input: {
   };
 }
 
+function getDecisionConfidence(insight: GrowthInsight | undefined) {
+  if (!insight) {
+    return 0;
+  }
+
+  return insight.confidence;
+}
+
 export async function mergeAwarenessCandidates(input: {
   episode: AwarenessEpisode;
   insights: GrowthInsight[];
@@ -87,20 +96,29 @@ export async function mergeAwarenessCandidates(input: {
   });
 
   for (const decision of decisions) {
-    if (decision.status !== "merged" || !decision.insightId || decision.target === "none") {
-      continue;
+    const insight = decision.insightId
+      ? input.insights.find((item) => item.id === decision.insightId)
+      : undefined;
+
+    if (decision.status === "merged" && decision.insightId && decision.target !== "none") {
+      await appendConfirmedMemoryNote({
+        userId: input.episode.userId,
+        insightId: decision.insightId,
+        title: insight?.title ?? decision.text,
+        text: decision.text,
+        type: decision.target,
+        now: input.now,
+        dataRoot: input.dataRoot,
+      });
     }
 
-    const insight = input.insights.find((item) => item.id === decision.insightId);
-    await appendConfirmedMemoryNote({
+    await appendWritebackProposal({
       userId: input.episode.userId,
-      insightId: decision.insightId,
-      title: insight?.title ?? decision.text,
-      text: decision.text,
-      type: decision.target,
-      now: input.now,
+      decision,
+      confidence: getDecisionConfidence(insight),
+      createdAt: input.now,
       dataRoot: input.dataRoot,
-    });
+    }).catch(() => null);
   }
 
   await appendAwarenessNote({

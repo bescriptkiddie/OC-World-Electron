@@ -337,6 +337,27 @@ export interface MemoryMergeDecision {
   text: string;
 }
 
+export type WritebackProposalTarget = "memory" | "voice" | "none";
+export type WritebackProposalOperation = "append";
+export type WritebackProposalStatus = "proposed" | "merged" | "deferred" | "discarded";
+
+export interface WritebackProposal {
+  id: string;
+  userId: string;
+  episodeId: string;
+  insightId: string | null;
+  target: WritebackProposalTarget;
+  operation: WritebackProposalOperation;
+  text: string;
+  evidenceEventIds: string[];
+  evidenceSummary: string;
+  confidence: number;
+  status: WritebackProposalStatus;
+  reason: string;
+  requiresUserConfirmation: boolean;
+  createdAt: number;
+}
+
 export interface ManualDistillationResult {
   episode: AwarenessEpisode;
   memoryMergeDecisions: MemoryMergeDecision[];
@@ -344,6 +365,7 @@ export interface ManualDistillationResult {
   projects: ProjectsState;
   recallEvents: RecallEvent[];
 }
+
 
 export interface RetrievedMemoryBundle {
   longTermFacts: string;

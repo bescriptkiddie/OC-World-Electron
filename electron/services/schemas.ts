@@ -244,6 +244,23 @@ const recallSignalStateSchema = z.object({
   lastTriggeredAt: z.number().optional(),
 });
 
+const writebackProposalSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  episodeId: z.string(),
+  insightId: z.string().nullable(),
+  target: z.enum(["memory", "voice", "none"]),
+  operation: z.literal("append"),
+  text: z.string(),
+  evidenceEventIds: z.array(z.string()),
+  evidenceSummary: z.string(),
+  confidence: z.number(),
+  status: z.enum(["proposed", "merged", "deferred", "discarded"]),
+  reason: z.string(),
+  requiresUserConfirmation: z.boolean(),
+  createdAt: z.number(),
+});
+
 const hermesSessionEventQuerySchema = z
   .object({
     sessionId: z.string().min(1).optional(),
@@ -291,7 +308,12 @@ export const workItemListSchema = z.array(workItemSchema);
 export const projectsStateListSchema = projectsStateSchema;
 export const recallEventListSchema = z.array(recallEventSchema);
 export const recallSignalStateListSchema = z.array(recallSignalStateSchema);
+export const writebackProposalListSchema = z.array(writebackProposalSchema);
 export const hermesSessionEventQueryStateSchema = hermesSessionEventQuerySchema;
+
+export function parseWritebackProposalList(value: unknown) {
+  return writebackProposalListSchema.parse(value);
+}
 
 export function safeParseHermesSessionEventQuery(value: unknown) {
   return hermesSessionEventQueryStateSchema.safeParse(value);

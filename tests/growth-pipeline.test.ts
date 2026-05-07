@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runManualDistillationPipeline, runGrowthPipeline } from "../electron/services/growth-pipeline";
 import { saveGrowthInsights } from "../electron/services/memory";
+import { listWritebackProposals } from "../electron/services/writeback-ledger";
 import {
   listAwarenessEpisodes,
   listWorkItems,
@@ -15,7 +16,7 @@ import type { ContextSnapshot, GrowthInsight } from "../src/types";
 
 let tempDir = "";
 
-function createGoalInsight(): GrowthInsight {
+function createGoalInsight(status: GrowthInsight["status"] = "latent"): GrowthInsight {
   return {
     id: "insight-manual-goal",
     userId: "user-001",
@@ -24,7 +25,7 @@ function createGoalInsight(): GrowthInsight {
     text: "用户正在推进完整记忆闭环。",
     evidenceIds: ["evidence-1", "evidence-2"],
     confidence: 0.7,
-    status: "latent",
+    status,
     createdAt: 1,
     updatedAt: 1,
   };
@@ -141,5 +142,29 @@ describe("growth pipeline", () => {
         workItemIds: [workItems[0]?.id],
       }),
     );
+  });
+
+  it("records writeback proposals during manual distillation", async () => {
+    await saveGrowthInsights("user-001", [createGoalInsight("confirmed")], tempDir);
+
+    const result = await runManualDistillationPipeline({
+      userId: "user-001",
+      characterId: "char-001",
+      dataRoot: tempDir,
+      now: 3,
+    });
+    const proposals = await listWritebackProposals("user-001", tempDir);
+
+    expect(result.memoryMergeDecisions[0]).toEqual(expect.objectContaining({ status: "merged", target: "memory" }));
+    expect(proposals).toEqual([
+      expect.objectContaining({
+        userId: "user-001",
+        episodeId: result.episode.id,
+        insightId: "insight-manual-goal",
+        status: "merged",
+        operation: "append",
+        target: "memory",
+      }),
+    ]);
   });
 });

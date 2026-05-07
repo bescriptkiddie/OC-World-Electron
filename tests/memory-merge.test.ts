@@ -1,8 +1,9 @@
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mergeAwarenessCandidates } from "../electron/services/memory-merge";
+import { listWritebackProposals } from "../electron/services/writeback-ledger";
 import { loadLongTermMemory } from "../electron/services/unified-memory";
 import type { AwarenessEpisode, GrowthInsight } from "../src/types";
 
@@ -38,6 +39,10 @@ function createInsight(status: GrowthInsight["status"]): GrowthInsight {
   };
 }
 
+function resolveWritebackProposalPath(dataRoot: string) {
+  return path.join(dataRoot, "oc-data", "writeback-ledger", "proposals.jsonl");
+}
+
 describe("memory merge", () => {
   beforeEach(async () => {
     tempDir = path.join(os.tmpdir(), `oc-memory-merge-${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -57,10 +62,22 @@ describe("memory merge", () => {
       now: 2,
       dataRoot: tempDir,
     });
-    const memory = await loadLongTermMemory("user-001", tempDir);
+    const [memory, proposals] = await Promise.all([
+      loadLongTermMemory("user-001", tempDir),
+      listWritebackProposals("user-001", tempDir),
+    ]);
 
     expect(decisions[0]).toEqual(expect.objectContaining({ status: "deferred", target: "none" }));
     expect(memory.memoryMarkdown).not.toContain("你反复在朝这个目标靠近。");
+    expect(proposals).toEqual([
+      expect.objectContaining({
+        userId: "user-001",
+        episodeId: "awareness-1",
+        insightId: "insight-1",
+        status: "deferred",
+        target: "none",
+      }),
+    ]);
   });
 
   it("merges confirmed candidates into memory.md", async () => {
@@ -76,6 +93,65 @@ describe("memory merge", () => {
     expect(memory.memoryMarkdown).toContain("你反复在朝这个目标靠近。");
   });
 
+  it("records writeback proposals for merge decisions", async () => {
+    await mergeAwarenessCandidates({
+      episode: createEpisode(),
+      insights: [createInsight("confirmed")],
+      now: 2,
+      dataRoot: tempDir,
+    });
+
+    const proposals = await listWritebackProposals("user-001", tempDir);
+
+    expect(proposals).toEqual([
+      expect.objectContaining({
+        userId: "user-001",
+        episodeId: "awareness-1",
+        insightId: "insight-1",
+        target: "memory",
+        operation: "append",
+        status: "merged",
+        text: "你反复在朝这个目标靠近。",
+      }),
+    ]);
+  });
+
+  it("keeps merged memory writes even when ledger append fails", async () => {
+    await mkdir(path.dirname(resolveWritebackProposalPath(tempDir)), { recursive: true });
+    await writeFile(resolveWritebackProposalPath(tempDir), "{", "utf8");
+
+    const decisions = await mergeAwarenessCandidates({
+      episode: createEpisode(),
+      insights: [createInsight("confirmed")],
+      now: 2,
+      dataRoot: tempDir,
+    });
+    const memory = await loadLongTermMemory("user-001", tempDir);
+
+    expect(decisions[0]).toEqual(expect.objectContaining({ status: "merged", target: "memory" }));
+    expect(memory.memoryMarkdown).toContain("你反复在朝这个目标靠近。");
+  });
+
+  it("stores proposals in jsonl format", async () => {
+    await mergeAwarenessCandidates({
+      episode: createEpisode(),
+      insights: [createInsight("confirmed")],
+      now: 2,
+      dataRoot: tempDir,
+    });
+
+    const raw = await readFile(resolveWritebackProposalPath(tempDir), "utf8");
+
+    expect(raw.trim().split("\n")).toHaveLength(1);
+    expect(JSON.parse(raw.trim())).toEqual(
+      expect.objectContaining({
+        userId: "user-001",
+        operation: "append",
+        status: "merged",
+      }),
+    );
+  });
+
   it("discards rejected candidates", async () => {
     const decisions = await mergeAwarenessCandidates({
       episode: createEpisode(),
@@ -83,7 +159,17 @@ describe("memory merge", () => {
       now: 2,
       dataRoot: tempDir,
     });
+    const proposals = await listWritebackProposals("user-001", tempDir);
 
     expect(decisions[0]).toEqual(expect.objectContaining({ status: "discarded", target: "none" }));
+    expect(proposals).toEqual([
+      expect.objectContaining({
+        userId: "user-001",
+        episodeId: "awareness-1",
+        insightId: "insight-1",
+        status: "discarded",
+        target: "none",
+      }),
+    ]);
   });
 });
