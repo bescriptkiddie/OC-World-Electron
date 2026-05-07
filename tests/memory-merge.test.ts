@@ -25,7 +25,7 @@ function createEpisode(): AwarenessEpisode {
   };
 }
 
-function createInsight(status: GrowthInsight["status"]): GrowthInsight {
+function createInsight(status: GrowthInsight["status"], confidence = 0.7): GrowthInsight {
   return {
     id: "insight-1",
     userId: "user-001",
@@ -33,7 +33,7 @@ function createInsight(status: GrowthInsight["status"]): GrowthInsight {
     title: "做成长伙伴",
     text: "你反复在朝这个目标靠近。",
     evidenceIds: ["e-1", "e-2"],
-    confidence: 0.7,
+    confidence,
     status,
     createdAt: 1,
     updatedAt: 1,
@@ -84,7 +84,7 @@ describe("memory merge", () => {
   it("merges confirmed candidates into memory.md", async () => {
     const result = await mergeAwarenessCandidates({
       episode: createEpisode(),
-      insights: [createInsight("confirmed")],
+      insights: [createInsight("confirmed", 0.9)],
       now: 2,
       dataRoot: tempDir,
     });
@@ -97,7 +97,7 @@ describe("memory merge", () => {
   it("records writeback proposals for merge decisions", async () => {
     const result = await mergeAwarenessCandidates({
       episode: createEpisode(),
-      insights: [createInsight("confirmed")],
+      insights: [createInsight("confirmed", 0.9)],
       now: 2,
       dataRoot: tempDir,
     });
@@ -119,13 +119,42 @@ describe("memory merge", () => {
     ]);
   });
 
+  it("defers very low-confidence confirmed memory writes before they land", async () => {
+    const result = await mergeAwarenessCandidates({
+      episode: createEpisode(),
+      insights: [createInsight("confirmed", 0.45)],
+      now: 2,
+      dataRoot: tempDir,
+    });
+    const [memory, proposals] = await Promise.all([
+      loadLongTermMemory("user-001", tempDir),
+      listWritebackProposals("user-001", tempDir),
+    ]);
+
+    expect(result.decisions[0]).toEqual(expect.objectContaining({ status: "deferred", target: "none" }));
+    expect(result.driftSignals).toEqual([
+      expect.objectContaining({
+        type: "memory_pollution",
+        severity: "critical",
+        recommendedAction: "defer_writeback",
+      }),
+    ]);
+    expect(memory.memoryMarkdown).not.toContain("你反复在朝这个目标靠近。");
+    expect(proposals).toEqual([
+      expect.objectContaining({
+        status: "deferred",
+        target: "none",
+      }),
+    ]);
+  });
+
   it("keeps merged memory writes even when ledger append fails", async () => {
     await mkdir(path.dirname(resolveWritebackProposalPath(tempDir)), { recursive: true });
     await writeFile(resolveWritebackProposalPath(tempDir), "{", "utf8");
 
     const result = await mergeAwarenessCandidates({
       episode: createEpisode(),
-      insights: [createInsight("confirmed")],
+      insights: [createInsight("confirmed", 0.9)],
       now: 2,
       dataRoot: tempDir,
     });
@@ -138,7 +167,7 @@ describe("memory merge", () => {
   it("stores proposals in jsonl format", async () => {
     await mergeAwarenessCandidates({
       episode: createEpisode(),
-      insights: [createInsight("confirmed")],
+      insights: [createInsight("confirmed", 0.9)],
       now: 2,
       dataRoot: tempDir,
     });
@@ -176,10 +205,10 @@ describe("memory merge", () => {
     ]);
   });
 
-  it("returns drift signals for low-confidence merged memory writes", async () => {
+  it("returns drift signals for medium-confidence merged memory writes", async () => {
     const result = await mergeAwarenessCandidates({
       episode: createEpisode(),
-      insights: [createInsight("confirmed")],
+      insights: [createInsight("confirmed", 0.7)],
       now: 2,
       dataRoot: tempDir,
     });
@@ -197,7 +226,7 @@ describe("memory merge", () => {
   it("does not persist drift signals during merge-only evaluation", async () => {
     await mergeAwarenessCandidates({
       episode: createEpisode(),
-      insights: [createInsight("confirmed")],
+      insights: [createInsight("confirmed", 0.7)],
       now: 2,
       dataRoot: tempDir,
     });

@@ -80,28 +80,58 @@ function getDecisionConfidence(insight: GrowthInsight | undefined) {
   return insight.confidence;
 }
 
+function applyCriticalDriftDeferral(input: {
+  decision: MemoryMergeDecision;
+  driftSignals: DriftSignal[];
+}): MemoryMergeDecision {
+  const shouldDefer = input.driftSignals.some(
+    (signal) => signal.severity === "critical" && signal.recommendedAction === "defer_writeback",
+  );
+
+  if (!shouldDefer) {
+    return input.decision;
+  }
+
+  return {
+    ...input.decision,
+    status: "deferred",
+    target: "none",
+    reason: "drift guardrail 命中高风险低置信写回，先延后进入长期记忆。",
+  };
+}
+
 export async function mergeAwarenessCandidates(input: {
   episode: AwarenessEpisode;
   insights: GrowthInsight[];
   now: number;
   dataRoot?: string;
 }): Promise<{ decisions: MemoryMergeDecision[]; driftSignals: DriftSignal[] }> {
-  const decisions = input.episode.candidateMemoryUpdates.map((candidate, index) => {
+  const decisions: MemoryMergeDecision[] = [];
+  const driftSignals: DriftSignal[] = [];
+
+  for (const [index, candidate] of input.episode.candidateMemoryUpdates.entries()) {
     const relatedInsightId = input.episode.relatedInsightIds[index] ?? input.episode.relatedInsightIds[0];
     const insight = input.insights.find((item) => item.id === relatedInsightId);
-    return createDecision({
+    const baseDecision = createDecision({
       episode: input.episode,
       insight,
       candidate,
     });
-  });
+    const nextDriftSignals = evaluateWritebackDriftSignals({
+      userId: input.episode.userId,
+      turnId: input.episode.id,
+      decision: baseDecision,
+      confidence: getDecisionConfidence(insight),
+      evidenceEventIds: insight?.evidenceIds ?? [],
+      createdAt: input.now,
+    });
+    const decision = applyCriticalDriftDeferral({
+      decision: baseDecision,
+      driftSignals: nextDriftSignals,
+    });
 
-  const driftSignals: DriftSignal[] = [];
-
-  for (const decision of decisions) {
-    const insight = decision.insightId
-      ? input.insights.find((item) => item.id === decision.insightId)
-      : undefined;
+    driftSignals.push(...nextDriftSignals);
+    decisions.push(decision);
 
     if (decision.status === "merged" && decision.insightId && decision.target !== "none") {
       await appendConfirmedMemoryNote({
@@ -122,17 +152,6 @@ export async function mergeAwarenessCandidates(input: {
       createdAt: input.now,
       dataRoot: input.dataRoot,
     }).catch(() => null);
-
-    driftSignals.push(
-      ...evaluateWritebackDriftSignals({
-        userId: input.episode.userId,
-        turnId: input.episode.id,
-        decision,
-        confidence: getDecisionConfidence(insight),
-        evidenceEventIds: insight?.evidenceIds ?? [],
-        createdAt: input.now,
-      }),
-    );
   }
 
   await appendAwarenessNote({

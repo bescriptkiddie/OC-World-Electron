@@ -4,7 +4,8 @@ import type { DriftSignal, MemoryMergeDecision } from "../../src/types";
 import { resolveOcDataPath } from "../capabilities/storage-paths";
 import { parseDriftSignalList } from "./schemas";
 
-const lowConfidenceWritebackThreshold = 0.8;
+const warningConfidenceThreshold = 0.8;
+const criticalConfidenceThreshold = 0.5;
 
 function resolveDriftSignalsPath(dataRoot?: string) {
   return resolveOcDataPath(dataRoot, "drift", "signals.jsonl");
@@ -48,9 +49,11 @@ export function evaluateWritebackDriftSignals(input: {
   evidenceEventIds: string[];
   createdAt: number;
 }): DriftSignal[] {
-  if (input.decision.status !== "merged" || input.decision.target !== "memory" || input.confidence >= lowConfidenceWritebackThreshold) {
+  if (input.decision.status !== "merged" || input.decision.target !== "memory" || input.confidence >= warningConfidenceThreshold) {
     return [];
   }
+
+  const isCritical = input.confidence < criticalConfidenceThreshold;
 
   return [
     {
@@ -58,10 +61,12 @@ export function evaluateWritebackDriftSignals(input: {
       userId: input.userId,
       turnId: input.turnId,
       type: "memory_pollution",
-      severity: "warning",
-      summary: "低置信度候选仍写入长期记忆，可能造成记忆污染。",
+      severity: isCritical ? "critical" : "warning",
+      summary: isCritical
+        ? "极低置信度候选试图写入长期记忆，已建议延后写回。"
+        : "低置信度候选仍写入长期记忆，可能造成记忆污染。",
       evidenceEventIds: input.evidenceEventIds,
-      recommendedAction: "observe",
+      recommendedAction: isCritical ? "defer_writeback" : "observe",
       createdAt: input.createdAt,
     },
   ];

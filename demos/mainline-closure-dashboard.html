@@ -284,12 +284,12 @@
           <div class="iteration">
             <div class="iteration-card">
               <div class="iteration-label">本轮迭代时间</div>
-              <div class="iteration-value">2026-05-07 16:06:00 CST</div>
+              <div class="iteration-value">2026-05-07 16:15:00 CST</div>
               <ul class="mini-list">
-                <li>drift signal 已从 growth pipeline 接到 JSONL 落盘、IPC、preload、runtime client</li>
-                <li>低置信 merged memory write 会产 memory_pollution warning，供后续 UI 与 guardrail 消费</li>
-                <li>Hermes / writeback / drift contract 回归已补齐，memory-merge 也补了 drift 地板</li>
-                <li>全量回归 145 / 145 通过，build 通过</li>
+                <li>drift guardrail 已开始拦截极低置信 memory write，改成 deferred proposal</li>
+                <li>critical drift signal 会给出 defer_writeback 建议，warning 级仍只观察</li>
+                <li>memory-merge / growth-pipeline / drift tests 已补齐高风险 defer 回归</li>
+                <li>全量回归 148 / 148 通过，build 通过</li>
               </ul>
             </div>
             <div class="iteration-card">
@@ -321,25 +321,25 @@
           <div class="status-grid">
             <div class="status-item">
               <div class="status-title">产品</div>
-              <div class="status-value">writeback mutation 与 drift signal 都已通到治理链路</div>
+              <div class="status-value">writeback mutation、drift signal、critical defer 都已进入治理链</div>
             </div>
             <div class="status-item">
               <div class="status-title">架构</div>
-              <div class="status-value">Hermes event store + writeback bridge + drift signal ledger 已落地</div>
+              <div class="status-value">Hermes event store + writeback bridge + drift signal ledger + defer guard 已落地</div>
             </div>
             <div class="status-item">
               <div class="status-title">代码</div>
-              <div class="status-value">preload / IPC / facade / runtime / pipeline tests 已补齐 drift 回归</div>
+              <div class="status-value">preload / IPC / facade / runtime / pipeline tests 已补齐 drift defer 回归</div>
             </div>
             <div class="status-item">
               <div class="status-title">测试</div>
-              <div class="status-value">全量 145 / 145，build 通过</div>
+              <div class="status-value">全量 148 / 148，build 通过</div>
             </div>
           </div>
           <div class="legend">
-            <span class="pill good">已完成：Hermes session event store、writeback ledger、writeback approve/reject/revert bridge、user-scoped mutation guard、drift signal 落盘与查询回归</span>
-            <span class="pill warn">待处理：drift guardrails 还只是最小规则版，后面要继续接 writeback defer / UI 可解释入口</span>
-            <span class="pill bad">未接：renderer 侧还没有消费 drift signal / writeback / Hermes 的统一治理面板</span>
+            <span class="pill good">已完成：Hermes session event store、writeback ledger、writeback approve/reject/revert bridge、user-scoped mutation guard、drift signal 落盘与 critical defer 回归</span>
+            <span class="pill warn">待处理：defer_writeback 目前只收紧 memory-merge，后面还要继续接 relationship / work-item / UI 批准面板</span>
+            <span class="pill bad">未接：renderer 侧还没有消费 drift defer、writeback 审批、Hermes 事件的统一治理面板</span>
           </div>
         </aside>
       </section>
@@ -464,6 +464,16 @@
             <div>
               <div class="column-tag">Iteration Log</div>
               <h2>本轮迭代记录</h2>
+            </div>
+          </div>
+
+          <div class="entry">
+            <div class="entry-head">
+              <div class="entry-title">把极低置信 memory write 改成 defer_writeback</div>
+              <div class="entry-time">2026-05-07 16:15:00 CST</div>
+            </div>
+            <div class="entry-body">
+              drift guardrail 现在不只是记录 warning；当 merged memory write 的置信度低到 critical 阈值时，会直接把 merge decision 改写成 deferred，阻止这次长期记忆写入，同时把 signal 落成 `defer_writeback` 建议。
             </div>
           </div>
 

@@ -4,9 +4,9 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { appendDriftSignals, evaluateWritebackDriftSignals, listDriftSignals } from "../electron/services/drift-guardrails";
 
-let tempDir = "";
-
 describe("drift guardrails", () => {
+  let tempDir = "";
+
   beforeEach(async () => {
     tempDir = path.join(os.tmpdir(), `oc-drift-${Date.now()}-${Math.random().toString(16).slice(2)}`);
     await mkdir(tempDir, { recursive: true });
@@ -64,7 +64,35 @@ describe("drift guardrails", () => {
     await expect(listDriftSignals({ userId: "user-001", limit: 0 }, tempDir)).resolves.toEqual([]);
   });
 
-  it("creates low-confidence memory pollution signals for merged writebacks", () => {
+  it("marks very low-confidence merged memory writes as critical deferrals", () => {
+    expect(
+      evaluateWritebackDriftSignals({
+        userId: "user-001",
+        turnId: "turn-1",
+        decision: {
+          episodeId: "episode-1",
+          insightId: "insight-1",
+          status: "merged",
+          target: "memory",
+          reason: "confirmed",
+          text: "用户正在推进一个 OC World 架构治理方向。",
+        },
+        confidence: 0.45,
+        evidenceEventIds: ["evidence-1"],
+        createdAt: 1,
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        userId: "user-001",
+        turnId: "turn-1",
+        type: "memory_pollution",
+        severity: "critical",
+        recommendedAction: "defer_writeback",
+      }),
+    ]);
+  });
+
+  it("marks medium-confidence merged memory writes as warnings", () => {
     expect(
       evaluateWritebackDriftSignals({
         userId: "user-001",
@@ -90,7 +118,9 @@ describe("drift guardrails", () => {
         recommendedAction: "observe",
       }),
     ]);
+  });
 
+  it("skips high-confidence merged memory writes", () => {
     expect(
       evaluateWritebackDriftSignals({
         userId: "user-001",
