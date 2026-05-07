@@ -339,7 +339,7 @@ export interface MemoryMergeDecision {
 
 export type WritebackProposalTarget = "memory" | "voice" | "none";
 export type WritebackProposalOperation = "append";
-export type WritebackProposalStatus = "proposed" | "merged" | "deferred" | "discarded";
+export type WritebackProposalStatus = "proposed" | "merged" | "deferred" | "discarded" | "reverted";
 
 export interface WritebackProposal {
   id: string;
@@ -356,6 +356,8 @@ export interface WritebackProposal {
   reason: string;
   requiresUserConfirmation: boolean;
   createdAt: number;
+  updatedAt?: number;
+  feedback?: string;
 }
 
 export interface ManualDistillationResult {
