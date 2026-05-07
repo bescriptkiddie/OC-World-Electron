@@ -173,7 +173,7 @@ ANTHROPIC_DEFAULT_HAIKU_MODEL=mimo-v2.5-pro
 
 ## 平台边界与 iOS 铺路
 
-当前仓库仍然是 Electron 桌面应用，不包含原生 iOS 工程。接下来要做的是把 renderer 对 `window.ocWorld` 的业务直连收口成 runtime client，让 React 业务层和桌面桥接解耦。
+当前仓库仍然是 Electron 桌面应用，不包含原生 iOS 工程。接下来要做的是把主 React renderer 对 `window.ocWorld` 的业务直连收口成 runtime client，让 React 业务层和桌面桥接解耦。
 
 边界说明见：
 
