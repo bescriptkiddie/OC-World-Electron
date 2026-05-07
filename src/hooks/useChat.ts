@@ -118,12 +118,6 @@ export function useChat() {
     }
   }, []);
 
-  const applyLocalCharacter = useCallback((nextCharacter: CharacterConfig) => {
-    setCharacter(nextCharacter);
-    setRelationship((current) => current ?? DEFAULT_RELATIONSHIP);
-    setGreeting(nextCharacter.catchphrase || "我在。");
-    setEmotion("idle");
-  }, []);
 
   const syncPendingMessages = useCallback((messages: PendingChatMessage[]) => {
     pendingMessagesRef.current = messages;
@@ -436,7 +430,6 @@ export function useChat() {
       startVoiceInput,
       stopVoiceInput,
       toggleVoiceInput,
-      applyLocalCharacter,
       setDemoIntimacy,
       confirmReveal,
       dismissReveal,
@@ -472,7 +465,6 @@ export function useChat() {
       startVoiceInput,
       stopVoiceInput,
       toggleVoiceInput,
-      applyLocalCharacter,
       setDemoIntimacy,
       confirmReveal,
       dismissReveal,
