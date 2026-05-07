@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_CHARACTER, DEFAULT_HISTORY, DEFAULT_RELATIONSHIP } from "../../electron/services/demo-fallback";
 import { createAppTTS } from "../lib/tts";
 import { createVoiceInput, type VoiceInputState } from "../lib/voice-input";
+import { useRuntime } from "../runtime/use-runtime";
 import type {
   CharacterConfig,
   ChatHistoryEntry,
@@ -154,6 +155,7 @@ function addConfirmedInsightToProfile(profile: GrowthProfile, insight: GrowthIns
 }
 
 export function useChat() {
+  const { client } = useRuntime();
   const [character, setCharacter] = useState<CharacterConfig | null>(null);
   const [relationship, setRelationship] = useState<Relationship | null>(null);
   const [history, setHistory] = useState<ChatHistoryEntry[]>([]);
@@ -187,31 +189,23 @@ export function useChat() {
   }, []);
 
   const cancelActiveAgentTurn = useCallback(() => {
-    if (!window.ocWorld) {
-      return;
-    }
-
-    void window.ocWorld.chat.cancelActive({
+    void client.chat.cancelActive({
       characterId: defaultCharacterId,
       userId: activeUserId,
     });
-  }, [activeUserId]);
+  }, [activeUserId, client.chat]);
 
   const refreshGrowthState = useCallback(async () => {
-    if (!window.ocWorld) {
-      return;
-    }
-
     const [reveal, insights, profile] = await Promise.all([
-      window.ocWorld.growth.getLatestReveal(activeUserId),
-      window.ocWorld.growth.listInsights(activeUserId),
-      window.ocWorld.growth.getProfile(activeUserId),
+      client.growth.getLatestReveal(activeUserId),
+      client.growth.listInsights(activeUserId),
+      client.growth.getProfile(activeUserId),
     ]);
 
     setActiveReveal(reveal);
     setGrowthInsights(insights);
     setGrowthProfile(profile);
-  }, [activeUserId]);
+  }, [activeUserId, client.growth]);
 
   const interruptActiveTurn = useCallback(() => {
     cancelSpeech();
@@ -245,31 +239,17 @@ export function useChat() {
   }, []);
 
   const boot = useCallback(async () => {
-    if (!window.ocWorld) {
-      setCharacter(readBrowserCharacterFallback());
-      setRelationship(DEFAULT_RELATIONSHIP);
-      setHistory(DEFAULT_HISTORY);
-      setTimeline(createBrowserTimeline());
-      setGreeting("我在。你先说一句真实发生的小事就好。");
-      setEmotion("idle");
-      setHermesStatus(defaultHermesStatus);
-      setActiveReveal(null);
-      setGrowthInsights([]);
-      setGrowthProfile(createEmptyProfile());
-      return;
-    }
-
     const [loadedCharacter, loadedRelationship, loadedHistory, loadedTimeline, loadedGreeting, loadedHermesStatus, loadedReveal, loadedInsights, loadedProfile] =
       await Promise.all([
-        window.ocWorld.character.getCurrent(defaultCharacterId),
-        window.ocWorld.relationship.get(defaultUserId),
-        window.ocWorld.memory.history(defaultUserId),
-        window.ocWorld.timeline.list(defaultUserId),
-        window.ocWorld.chat.getGreeting({ characterId: defaultCharacterId, userId: defaultUserId }),
-        window.ocWorld.hermes.getStatus().catch(() => defaultHermesStatus),
-        window.ocWorld.growth.getLatestReveal(defaultUserId),
-        window.ocWorld.growth.listInsights(defaultUserId),
-        window.ocWorld.growth.getProfile(defaultUserId),
+        client.character.getCurrent(defaultCharacterId),
+        client.relationship.get(defaultUserId),
+        client.memory.history(defaultUserId),
+        client.timeline.list(defaultUserId),
+        client.chat.getGreeting({ characterId: defaultCharacterId, userId: defaultUserId }),
+        client.hermes.getStatus().catch(() => defaultHermesStatus),
+        client.growth.getLatestReveal(defaultUserId),
+        client.growth.listInsights(defaultUserId),
+        client.growth.getProfile(defaultUserId),
       ]);
 
     setCharacter(loadedCharacter);
@@ -282,7 +262,7 @@ export function useChat() {
     setActiveReveal(loadedReveal);
     setGrowthInsights(loadedInsights);
     setGrowthProfile(loadedProfile);
-  }, []);
+  }, [client]);
 
   useEffect(() => {
     void boot();
@@ -300,40 +280,32 @@ export function useChat() {
   }, []);
 
   useEffect(() => {
-    if (!window.ocWorld) {
-      return;
-    }
-
-    return window.ocWorld.hermes.onStatusChanged((status) => {
+    return client.hermes.onStatusChanged((status) => {
       setHermesStatus(status);
     });
-  }, []);
+  }, [client.hermes]);
 
   useEffect(() => {
-    if (!window.ocWorld) {
-      return;
-    }
-
     const userId = activeUserId;
     setActiveRecallHint(null);
-    const unsubscribe = window.ocWorld.recall.onHint((hint) => {
+    const unsubscribe = client.recall.onHint((hint) => {
       if (hint.userId === userId) {
         setActiveRecallHint(hint);
       }
     });
-    void window.ocWorld.recall.startPolling({
+    void client.recall.startPolling({
       userId,
       characterId: defaultCharacterId,
     });
 
     return () => {
       unsubscribe();
-      void window.ocWorld?.recall.stopPolling({
+      void client.recall.stopPolling({
         userId,
         characterId: defaultCharacterId,
       });
     };
-  }, [activeUserId]);
+  }, [activeUserId, client.recall]);
 
   const submitPendingTurn = useCallback(async () => {
     if (submitTimerRef.current) {
@@ -341,7 +313,7 @@ export function useChat() {
       submitTimerRef.current = null;
     }
 
-    if (!window.ocWorld || !pendingMessagesRef.current.length) {
+    if (!pendingMessagesRef.current.length) {
       return null;
     }
 
@@ -354,7 +326,7 @@ export function useChat() {
     setEmotion("thinking");
 
     try {
-      const result = (await window.ocWorld.chat.sendMessage({
+      const result = (await client.chat.sendMessage({
         characterId: defaultCharacterId,
         userId: activeUserId,
         userMessage: turnMessages.map((message) => message.content).join("\n"),
@@ -389,7 +361,7 @@ export function useChat() {
             }
           : current,
       );
-      setTimeline(await window.ocWorld.timeline.list(activeUserId));
+      setTimeline(await client.timeline.list(activeUserId));
       await refreshGrowthState();
 
       if (ttsEnabledRef.current) {
@@ -409,7 +381,7 @@ export function useChat() {
         setIsSending(false);
       }
     }
-  }, [activeUserId, refreshGrowthState, syncPendingMessages]);
+  }, [activeUserId, client, refreshGrowthState, syncPendingMessages]);
 
   const scheduleSubmit = useCallback(() => {
     if (submitTimerRef.current) {
@@ -437,54 +409,6 @@ export function useChat() {
     };
     syncPendingMessages([...pendingMessagesRef.current, nextMessage]);
 
-    if (!window.ocWorld) {
-      isSendingRef.current = true;
-      setIsSending(true);
-      setEmotion("thinking");
-
-      await new Promise((resolve) => window.setTimeout(resolve, 780));
-
-      const nextRelationship = relationship ?? DEFAULT_RELATIONSHIP;
-      const result = createBrowserDemoReply(content, nextRelationship);
-      const now = Date.now();
-      const demoGrowth = createBrowserDemoInsight(activeUserId, content, now);
-      const nextEntry: ChatHistoryEntry = {
-        timestamp: now,
-        userMessage: content,
-        ocResponse: result.text,
-        emotion: result.emotion,
-      };
-
-      syncPendingMessages(pendingMessagesRef.current.filter((message) => message.id !== nextMessage.id));
-      setHistory((current) => [...current, nextEntry]);
-      setEmotion(result.emotion);
-      setRelationship({
-        ...nextRelationship,
-        intimacy: result.intimacy,
-        stage: result.stage,
-        lastInteraction: now,
-      });
-      setTimeline((current) => [
-        ...current,
-        {
-          date: new Date(now).toISOString(),
-          event: content,
-          impact: 2,
-          intimacyAfter: result.intimacy,
-        },
-      ]);
-      setGrowthInsights((current) => [demoGrowth.insight, ...current.filter((item) => item.id !== demoGrowth.insight.id)].slice(0, 6));
-      setActiveReveal(demoGrowth.reveal);
-
-      if (ttsEnabledRef.current) {
-        ttsRef.current.speak(result.text);
-      }
-
-      isSendingRef.current = false;
-      setIsSending(false);
-      return result;
-    }
-
     if (isSendingRef.current) {
       activeRequestIdRef.current = null;
       cancelActiveAgentTurn();
@@ -493,7 +417,7 @@ export function useChat() {
     scheduleSubmit();
 
     return null;
-  }, [activeUserId, cancelActiveAgentTurn, cancelSpeech, relationship, scheduleSubmit, syncPendingMessages]);
+  }, [cancelActiveAgentTurn, cancelSpeech, scheduleSubmit, syncPendingMessages]);
 
   const stopVoiceInput = useCallback(async () => {
     await voiceInputRef.current.stop();
@@ -548,86 +472,38 @@ export function useChat() {
   }, [startVoiceInput, stopVoiceInput, voiceInputState]);
 
   const setDemoIntimacy = useCallback(async (intimacy: number) => {
-    if (!window.ocWorld) {
-      return;
-    }
-
-    const nextRelationship = await window.ocWorld.relationship.setIntimacyForDemo({
+    const nextRelationship = await client.relationship.setIntimacyForDemo({
       userId: activeUserId,
       intimacy,
     });
 
     setRelationship(nextRelationship);
-  }, [activeUserId]);
+  }, [activeUserId, client.relationship]);
 
   const confirmReveal = useCallback(async (insightId: string) => {
-    if (!window.ocWorld) {
-      const now = Date.now();
-      const targetInsight = growthInsights.find((item) => item.id === insightId);
-      setGrowthInsights((current) =>
-        current.map((insight) =>
-          insight.id === insightId
-            ? {
-                ...insight,
-                status: "confirmed" as const,
-                updatedAt: now,
-              }
-            : insight,
-        ),
-      );
-      if (targetInsight) {
-        setGrowthProfile((current) => addConfirmedInsightToProfile(current, { ...targetInsight, status: "confirmed", updatedAt: now }, now));
-      }
-      setActiveReveal((current) => current?.insightId === insightId ? null : current);
-      return;
-    }
-
     setRevealBusy(true);
     try {
-      await window.ocWorld.growth.confirmInsight({ userId: activeUserId, insightId });
+      await client.growth.confirmInsight({ userId: activeUserId, insightId });
       await refreshGrowthState();
     } finally {
       setRevealBusy(false);
     }
-  }, [activeUserId, growthInsights, refreshGrowthState]);
+  }, [activeUserId, client.growth, refreshGrowthState]);
 
   const dismissReveal = useCallback(async (candidateId: string) => {
-    if (!window.ocWorld) {
-      setActiveReveal((current) => current?.id === candidateId ? null : current);
-      return;
-    }
-
     setRevealBusy(true);
     try {
-      await window.ocWorld.growth.dismissReveal({ userId: activeUserId, candidateId });
+      await client.growth.dismissReveal({ userId: activeUserId, candidateId });
       await refreshGrowthState();
     } finally {
       setRevealBusy(false);
     }
-  }, [activeUserId, refreshGrowthState]);
+  }, [activeUserId, client.growth, refreshGrowthState]);
 
   const rejectReveal = useCallback(async (insightId: string) => {
-    if (!window.ocWorld) {
-      const now = Date.now();
-      setGrowthInsights((current) =>
-        current.map((insight) =>
-          insight.id === insightId
-            ? {
-                ...insight,
-                status: "rejected" as const,
-                userFeedback: "这个理解不对",
-                updatedAt: now,
-              }
-            : insight,
-        ),
-      );
-      setActiveReveal((current) => current?.insightId === insightId ? null : current);
-      return;
-    }
-
     setRevealBusy(true);
     try {
-      await window.ocWorld.growth.rejectInsight({
+      await client.growth.rejectInsight({
         userId: activeUserId,
         insightId,
         feedback: "这个理解不对",
@@ -636,7 +512,7 @@ export function useChat() {
     } finally {
       setRevealBusy(false);
     }
-  }, [activeUserId, refreshGrowthState]);
+  }, [activeUserId, client.growth, refreshGrowthState]);
 
   const dismissRecallHint = useCallback(() => {
     setActiveRecallHint(null);

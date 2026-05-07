@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useRuntime } from "../runtime/use-runtime";
 import type { OcVisualProfile } from "../types";
 import { IconArrowUp, IconCheck, IconRefresh, IconSparkle } from "./OcWorldIcons";
 import { OcAvatarLarge } from "./OcAvatar";
@@ -76,6 +77,7 @@ export function CreateView({
   onCancel: () => void;
   canCancel?: boolean;
 }) {
+  const { capabilities } = useRuntime();
   const draftSnapshot = useMemo(() => readDraftSnapshot(), []);
   const [step, setStep] = useState<Step>(draftSnapshot?.step ?? "name");
   const [name, setName] = useState(draftSnapshot?.name ?? "");
@@ -165,13 +167,13 @@ export function CreateView({
     setIsGenerating(true);
     setGenError("");
     try {
-      if (!window.ocWorld) {
+      if (!capabilities.imageGen) {
         setAvatarDataUrl("");
         setSavedAvatarPath("");
         setStep("preview");
         return;
       }
-      const result = await window.ocWorld.imageGen.generate({ prompt: buildImagePrompt() });
+      const result = await capabilities.imageGen.generate({ prompt: buildImagePrompt() });
       setAvatarDataUrl(`data:${result.mimeType};base64,${result.imageBase64}`);
       if (result.savedPath) {
         setSavedAvatarPath(result.savedPath);
@@ -283,7 +285,7 @@ export function CreateView({
                 <span className="mono">LIVE LINK</span>
                 <p>每一步都会更新左侧预览。你不是在填配置，而是在把这个 OC 的感觉一点点捏出来。</p>
               </div>
-              {!window.ocWorld && <div className="oc-create-fallback-note">当前仅预览，不会生成正式形象文件。</div>}
+              {!capabilities.imageGen && <div className="oc-create-fallback-note">当前仅预览，不会生成正式形象文件。</div>}
               <TagSection
                 title="性格特质"
                 subtitle="先定 TA 怎么回应你。"

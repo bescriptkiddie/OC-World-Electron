@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useRuntime } from "../runtime/use-runtime";
 import { useChat } from "../hooks/useChat";
 import { ChatView } from "./ChatView";
 import { CreateView } from "./CreateView";
@@ -13,6 +14,7 @@ import { type SessionId, type ViewId, resolveInitialView, visibleMessages } from
 import type { OcVisualProfile } from "../types";
 
 export function OcWorldApp() {
+  const { client, capabilities } = useRuntime();
   const chat = useChat();
   const [view, setView] = useState<ViewId>("oc");
   const [selectedSession, setSelectedSession] = useState<SessionId>("live");
@@ -20,7 +22,7 @@ export function OcWorldApp() {
   const [initialViewResolved, setInitialViewResolved] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [floatingOcOpen, setFloatingOcOpen] = useState(false);
-  const floatingOcAvailable = Boolean(window.ocWorld?.floatingOc);
+  const floatingOcAvailable = Boolean(capabilities.floatingOc);
   const workspaceView = view === "memory" ? "chat" : view;
   const headerView = settingsOpen ? "settings" : memoryOpen ? "memory" : workspaceView;
 
@@ -39,12 +41,12 @@ export function OcWorldApp() {
   }, [chat.character, chat.relationship, initialViewResolved]);
 
   useEffect(() => {
-    if (!window.ocWorld?.floatingOc) {
+    if (!capabilities.floatingOc) {
       return;
     }
 
     let cancelled = false;
-    window.ocWorld.floatingOc.getState().then((state) => {
+    capabilities.floatingOc.getState().then((state) => {
       if (!cancelled) {
         setFloatingOcOpen(state.open);
       }
@@ -56,7 +58,7 @@ export function OcWorldApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [capabilities.floatingOc]);
 
   const handleViewChange = (nextView: ViewId) => {
     setSettingsOpen(false);
@@ -91,11 +93,11 @@ export function OcWorldApp() {
   };
 
   const toggleFloatingOc = async () => {
-    if (!window.ocWorld?.floatingOc) {
+    if (!capabilities.floatingOc) {
       return;
     }
 
-    const state = await window.ocWorld.floatingOc.toggle();
+    const state = await capabilities.floatingOc.toggle();
     setFloatingOcOpen(state.open);
   };
 
@@ -111,16 +113,7 @@ export function OcWorldApp() {
       visualProfile: data.visualProfile,
     };
 
-    if (!window.ocWorld) {
-      chat.applyLocalCharacter(nextCharacter);
-      setInitialViewResolved(true);
-      setSelectedSession("live");
-      setMemoryOpen(false);
-      setView("chat");
-      return;
-    }
-
-    await window.ocWorld.character.saveCurrent({
+    await client.character.saveCurrent({
       characterId: "char-001",
       character: nextCharacter,
     });
@@ -133,11 +126,11 @@ export function OcWorldApp() {
   };
 
   const handleUserNameChange = async (name: string) => {
-    if (!window.ocWorld || !chat.relationship) {
+    if (!chat.relationship) {
       throw new Error("Relationship not available");
     }
 
-    await window.ocWorld.relationship.save({
+    await client.relationship.save({
       userId: chat.relationship.userId,
       relationship: { ...chat.relationship, userName: name },
     });

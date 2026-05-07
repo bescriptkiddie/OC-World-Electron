@@ -238,6 +238,12 @@ export interface LongTermMemory {
   updatedAt: number;
 }
 
+export interface VoiceMemory {
+  userId: string;
+  voiceMarkdown: string;
+  updatedAt: number;
+}
+
 export type AwarenessSource = "chat" | "airjelly" | "manual";
 
 export interface AwarenessEpisode {
