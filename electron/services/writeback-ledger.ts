@@ -4,6 +4,14 @@ import type { MemoryMergeDecision, WritebackProposal, WritebackProposalStatus } 
 import { resolveOcDataPath } from "../capabilities/storage-paths";
 import { parseWritebackProposalList } from "./schemas";
 
+const allowedWritebackTransitions: Record<WritebackProposalStatus, readonly WritebackProposalStatus[]> = {
+  proposed: ["merged", "discarded"],
+  deferred: ["merged", "discarded"],
+  merged: ["reverted"],
+  discarded: [],
+  reverted: [],
+};
+
 function resolveWritebackProposalPath(dataRoot?: string) {
   return resolveOcDataPath(dataRoot, "writeback-ledger", "proposals.jsonl");
 }
@@ -14,6 +22,10 @@ async function ensureParentDir(filePath: string) {
 
 function createEvidenceSummary(decision: MemoryMergeDecision) {
   return `${decision.status} ${decision.target}：${decision.reason}`;
+}
+
+function requiresUserConfirmation(status: WritebackProposalStatus) {
+  return status === "proposed" || status === "deferred";
 }
 
 function toProposal(input: {
@@ -35,7 +47,7 @@ function toProposal(input: {
     confidence: input.confidence,
     status: input.decision.status,
     reason: input.decision.reason,
-    requiresUserConfirmation: input.decision.status !== "merged",
+    requiresUserConfirmation: requiresUserConfirmation(input.decision.status),
     createdAt: input.createdAt,
   };
 }
@@ -79,16 +91,20 @@ function updateProposalStatus(
   now: number,
   feedback?: string,
 ): WritebackProposal {
+  const { feedback: _feedback, ...rest } = proposal;
+
   return {
-    ...proposal,
+    ...rest,
     status,
     reason,
     updatedAt: now,
-    ...(feedback ? { feedback } : {}),
+    requiresUserConfirmation: requiresUserConfirmation(status),
+    ...(feedback !== undefined ? { feedback } : {}),
   };
 }
 
 async function mutateProposal(input: {
+  userId: string;
   proposalId: string;
   dataRoot?: string;
   nextStatus: WritebackProposalStatus;
@@ -97,19 +113,23 @@ async function mutateProposal(input: {
 }) {
   const filePath = resolveWritebackProposalPath(input.dataRoot);
   const proposals = await readAllProposals(filePath);
-  const target = proposals.find((proposal) => proposal.id === input.proposalId);
+  const target = proposals.find((proposal) => proposal.id === input.proposalId && proposal.userId === input.userId);
 
   if (!target) {
     throw new Error(`Writeback proposal not found: ${input.proposalId}`);
   }
 
+  if (!allowedWritebackTransitions[target.status].includes(input.nextStatus)) {
+    throw new Error(`Writeback proposal cannot transition from ${target.status} to ${input.nextStatus}`);
+  }
+
   const now = Date.now();
   const nextProposals = proposals.map((proposal) =>
-    proposal.id === input.proposalId
+    proposal.id === input.proposalId && proposal.userId === input.userId
       ? updateProposalStatus(proposal, input.nextStatus, input.reason, now, input.feedback)
       : proposal,
   );
-  const nextProposal = nextProposals.find((proposal) => proposal.id === input.proposalId)!;
+  const nextProposal = nextProposals.find((proposal) => proposal.id === input.proposalId && proposal.userId === input.userId)!;
 
   await writeAllProposals(filePath, nextProposals);
   return nextProposal;
@@ -136,8 +156,9 @@ export async function listWritebackProposals(userId: string, dataRoot?: string) 
   return proposals.filter((proposal) => proposal.userId === userId);
 }
 
-export async function approveWritebackProposal(input: { proposalId: string; dataRoot?: string }) {
+export async function approveWritebackProposal(input: { userId: string; proposalId: string; dataRoot?: string }) {
   return mutateProposal({
+    userId: input.userId,
     proposalId: input.proposalId,
     dataRoot: input.dataRoot,
     nextStatus: "merged",
@@ -145,8 +166,9 @@ export async function approveWritebackProposal(input: { proposalId: string; data
   });
 }
 
-export async function rejectWritebackProposal(input: { proposalId: string; feedback?: string; dataRoot?: string }) {
+export async function rejectWritebackProposal(input: { userId: string; proposalId: string; feedback?: string; dataRoot?: string }) {
   return mutateProposal({
+    userId: input.userId,
     proposalId: input.proposalId,
     dataRoot: input.dataRoot,
     nextStatus: "discarded",
@@ -155,8 +177,9 @@ export async function rejectWritebackProposal(input: { proposalId: string; feedb
   });
 }
 
-export async function revertWritebackProposal(input: { proposalId: string; dataRoot?: string }) {
+export async function revertWritebackProposal(input: { userId: string; proposalId: string; dataRoot?: string }) {
   return mutateProposal({
+    userId: input.userId,
     proposalId: input.proposalId,
     dataRoot: input.dataRoot,
     nextStatus: "reverted",

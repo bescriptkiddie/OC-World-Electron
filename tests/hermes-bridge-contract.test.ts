@@ -7,7 +7,7 @@ afterEach(() => {
 });
 
 describe("hermes bridge contract", () => {
-  it("exposes writeback list call from preload", async () => {
+  it("exposes writeback calls from preload", async () => {
     const exposeInMainWorld = vi.fn();
     const ipcRenderer = {
       invoke: vi.fn(),
@@ -24,12 +24,25 @@ describe("hermes bridge contract", () => {
     await import("../electron/preload");
 
     const api = exposeInMainWorld.mock.calls[0]?.[1];
-    const query = { userId: "user-001" };
+    const listQuery = { userId: "user-001" };
+    const approvePayload = { userId: "user-001", proposalId: "wb-1" };
+    const rejectPayload = { userId: "user-001", proposalId: "wb-1", feedback: "not stable enough" };
+    const revertPayload = { userId: "user-001", proposalId: "wb-1" };
 
     expect(api.writeback.list).toBeTypeOf("function");
+    expect(api.writeback.approve).toBeTypeOf("function");
+    expect(api.writeback.reject).toBeTypeOf("function");
+    expect(api.writeback.revert).toBeTypeOf("function");
 
-    api.writeback.list(query);
-    expect(ipcRenderer.invoke).toHaveBeenCalledWith("writeback:list", query);
+    api.writeback.list(listQuery);
+    api.writeback.approve(approvePayload);
+    api.writeback.reject(rejectPayload);
+    api.writeback.revert(revertPayload);
+
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith("writeback:list", listQuery);
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith("writeback:approve", approvePayload);
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith("writeback:reject", rejectPayload);
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith("writeback:revert", revertPayload);
   });
 
   it("exposes hermes bridge calls and session event subscription from preload", async () => {
@@ -80,7 +93,7 @@ describe("hermes bridge contract", () => {
     expect(ipcRenderer.removeListener).toHaveBeenCalledWith("hermes:session-event", listener);
   });
 
-  it("registers hermes bridge IPC handlers with stub responses", async () => {
+  it("registers hermes and writeback IPC handlers with stub responses", async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>();
     const ipcMain = {
       handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
@@ -103,10 +116,7 @@ describe("hermes bridge contract", () => {
     });
     const onStatusChanged = vi.fn().mockReturnValue(vi.fn());
 
-    vi.doMock("electron", () => ({
-      BrowserWindow,
-      ipcMain,
-    }));
+    vi.doMock("electron", () => ({ BrowserWindow, ipcMain }));
     vi.doMock("../electron/services/chat-engine", () => ({ chat: vi.fn(), generateGreeting: vi.fn() }));
     vi.doMock("../electron/services/airjelly", () => ({ getAirJellyContext: vi.fn() }));
     vi.doMock("../electron/services/growth-pipeline", () => ({ runManualDistillationPipeline: vi.fn() }));
@@ -158,6 +168,16 @@ describe("hermes bridge contract", () => {
       loadLongTermMemory: vi.fn(),
       loadProjectsState: vi.fn(),
     }));
+    const approveWritebackProposal = vi.fn(async (payload) => ({ id: payload.proposalId, status: "merged" }));
+    const rejectWritebackProposal = vi.fn(async (payload) => ({ id: payload.proposalId, status: "discarded", feedback: payload.feedback }));
+    const revertWritebackProposal = vi.fn(async (payload) => ({ id: payload.proposalId, status: "reverted" }));
+
+    vi.doMock("../electron/services/writeback-ledger", () => ({
+      listWritebackProposals: vi.fn(async () => []),
+      approveWritebackProposal,
+      rejectWritebackProposal,
+      revertWritebackProposal,
+    }));
     vi.doMock("../electron/services/relationship", () => ({ getStage: vi.fn() }));
 
     const { registerIpcHandlers, unregisterIpcHandlers } = await import("../electron/ipc");
@@ -167,6 +187,9 @@ describe("hermes bridge contract", () => {
     expect(handlers.has("hermes:get-bridge-status")).toBe(true);
     expect(handlers.has("hermes:list-session-events")).toBe(true);
     expect(handlers.has("writeback:list")).toBe(true);
+    expect(handlers.has("writeback:approve")).toBe(true);
+    expect(handlers.has("writeback:reject")).toBe(true);
+    expect(handlers.has("writeback:revert")).toBe(true);
 
     await expect(handlers.get("hermes:get-bridge-status")?.({})).resolves.toEqual({
       connected: false,
@@ -185,12 +208,27 @@ describe("hermes bridge contract", () => {
     await expect(handlers.get("hermes:list-session-events")?.({}, { limit: 0 })).resolves.toEqual([]);
     await expect(handlers.get("hermes:list-session-events")?.({}, { limit: -1 })).resolves.toEqual([]);
     await expect(handlers.get("writeback:list")?.({}, { userId: "user-001" })).resolves.toEqual([]);
+    await expect(handlers.get("writeback:approve")?.({}, { userId: "user-001", proposalId: "wb-1" })).resolves.toEqual(
+      expect.objectContaining({ id: "wb-1", status: "merged" }),
+    );
+    await expect(
+      handlers.get("writeback:reject")?.({}, { userId: "user-001", proposalId: "wb-1", feedback: "not stable enough" }),
+    ).resolves.toEqual(expect.objectContaining({ id: "wb-1", status: "discarded" }));
+    await expect(handlers.get("writeback:revert")?.({}, { userId: "user-001", proposalId: "wb-1" })).resolves.toEqual(
+      expect.objectContaining({ id: "wb-1", status: "reverted" }),
+    );
+    expect(approveWritebackProposal).toHaveBeenCalledWith({ userId: "user-001", proposalId: "wb-1" });
+    expect(rejectWritebackProposal).toHaveBeenCalledWith({ userId: "user-001", proposalId: "wb-1", feedback: "not stable enough" });
+    expect(revertWritebackProposal).toHaveBeenCalledWith({ userId: "user-001", proposalId: "wb-1" });
 
     unregisterIpcHandlers();
 
     expect(ipcMain.removeHandler).toHaveBeenCalledWith("hermes:get-bridge-status");
     expect(ipcMain.removeHandler).toHaveBeenCalledWith("hermes:list-session-events");
     expect(ipcMain.removeHandler).toHaveBeenCalledWith("writeback:list");
+    expect(ipcMain.removeHandler).toHaveBeenCalledWith("writeback:approve");
+    expect(ipcMain.removeHandler).toHaveBeenCalledWith("writeback:reject");
+    expect(ipcMain.removeHandler).toHaveBeenCalledWith("writeback:revert");
   });
 
   it("emits hermes session events during chat turns", async () => {
@@ -274,6 +312,12 @@ describe("hermes bridge contract", () => {
       listWorkItems: vi.fn(),
       loadLongTermMemory: vi.fn(),
       loadProjectsState: vi.fn(),
+    }));
+    vi.doMock("../electron/services/writeback-ledger", () => ({
+      listWritebackProposals: vi.fn(async () => []),
+      approveWritebackProposal: vi.fn(),
+      rejectWritebackProposal: vi.fn(),
+      revertWritebackProposal: vi.fn(),
     }));
     vi.doMock("../electron/services/relationship", () => ({ getStage: vi.fn() }));
 
@@ -396,6 +440,12 @@ describe("hermes bridge contract", () => {
       loadLongTermMemory: vi.fn(),
       loadProjectsState: vi.fn(),
     }));
+    vi.doMock("../electron/services/writeback-ledger", () => ({
+      listWritebackProposals: vi.fn(async () => []),
+      approveWritebackProposal: vi.fn(),
+      rejectWritebackProposal: vi.fn(),
+      revertWritebackProposal: vi.fn(),
+    }));
     vi.doMock("../electron/services/relationship", () => ({ getStage: vi.fn() }));
 
     const { registerIpcHandlers, unregisterIpcHandlers } = await import("../electron/ipc");
@@ -501,6 +551,12 @@ describe("hermes bridge contract", () => {
       listWorkItems: vi.fn(),
       loadLongTermMemory: vi.fn(),
       loadProjectsState: vi.fn(),
+    }));
+    vi.doMock("../electron/services/writeback-ledger", () => ({
+      listWritebackProposals: vi.fn(async () => []),
+      approveWritebackProposal: vi.fn(),
+      rejectWritebackProposal: vi.fn(),
+      revertWritebackProposal: vi.fn(),
     }));
     vi.doMock("../electron/services/relationship", () => ({ getStage: vi.fn() }));
 

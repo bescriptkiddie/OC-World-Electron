@@ -284,12 +284,12 @@
           <div class="iteration">
             <div class="iteration-card">
               <div class="iteration-label">本轮迭代时间</div>
-              <div class="iteration-value">2026-05-04 01:20:01 CST</div>
+              <div class="iteration-value">2026-05-07 15:31:00 CST</div>
               <ul class="mini-list">
-                <li>Hermes status IPC 恢复，bridge / reveal 断口补齐</li>
-                <li>主线候选分支全量回归 97 / 97 通过</li>
-                <li>进度看板改成固定三栏 + 追加时间线 contract</li>
-                <li>准备把收口结果并回 main</li>
+                <li>writeback mutation 现在要求 userId，跨用户 proposal 不能再直接改</li>
+                <li>proposal 状态迁移已收紧，merged / discarded / reverted 不再伪装成 pending</li>
+                <li>facade 缺失 mutation service 时改成明确报错，不再吐 undefined</li>
+                <li>全量回归 139 / 139 通过，build 通过</li>
               </ul>
             </div>
             <div class="iteration-card">
@@ -321,25 +321,25 @@
           <div class="status-grid">
             <div class="status-item">
               <div class="status-title">产品</div>
-              <div class="status-value">提示更像“轻提醒”，事项也更少脏数据</div>
+              <div class="status-value">writeback mutation 已通到 bridge、runtime，并带 user-scoped 保护</div>
             </div>
             <div class="status-item">
               <div class="status-title">架构</div>
-              <div class="status-value">snapshot / retrieval / recall / task 聚合边界更清楚</div>
+              <div class="status-value">Hermes event store + writeback mutation bridge + transition guardrails 已落地</div>
             </div>
             <div class="status-item">
               <div class="status-title">代码</div>
-              <div class="status-value">retrieval、recall、work-item、project 已继续收口</div>
+              <div class="status-value">preload / IPC / facade / runtime tests 已补齐 mutation 与 hardening 回归</div>
             </div>
             <div class="status-item">
               <div class="status-title">测试</div>
-              <div class="status-value">growth quality 定向 16 / 16 通过</div>
+              <div class="status-value">全量 139 / 139，build 通过</div>
             </div>
           </div>
           <div class="legend">
-            <span class="pill good">已完成：bridge 壳、snapshot 缓存失效、recall 刷新、memory retrieval 拆出、hint 上下文增强、task/project 质量收紧</span>
-            <span class="pill warn">待处理：user-scoped 持久化收口</span>
-            <span class="pill bad">未接：真实 Hermes 事件流</span>
+            <span class="pill good">已完成：Hermes session event store、writeback ledger、writeback approve/reject/revert bridge、user-scoped mutation guard、runtime/facade/contract 回归</span>
+            <span class="pill warn">待处理：writeback 真正落到 UI 可操作入口，drift guardrails 和 recall / awareness 串联继续往前推</span>
+            <span class="pill bad">未接：renderer 侧还没有消费真实 writeback / Hermes 治理入口</span>
           </div>
         </aside>
       </section>
@@ -469,11 +469,21 @@
 
           <div class="entry">
             <div class="entry-head">
-              <div class="entry-title">补齐 Hermes error 事件和 recall 读取成本控制</div>
-              <div class="entry-time">2026-05-04 01:52:50 CST</div>
+              <div class="entry-title">收紧 writeback mutation 的用户边界和状态语义</div>
+              <div class="entry-time">2026-05-07 15:31:00 CST</div>
             </div>
             <div class="entry-body">
-              聊天失败时现在也会补发 `error` 和 `turn_end`，前端不会留下悬空回合；同时 recall 只在本轮真的命中候选信号时才批量读取长期记忆和事项，避免按 signal 重复打磁盘。
+              writeback mutation 现在必须带 `userId`，ledger 只允许修改当前用户自己的 proposal；同时状态迁移只允许 `proposed/deferred → merged/discarded`、`merged → reverted`，并且 mutation 完成后会清掉 `requiresUserConfirmation`。facade 缺少 mutation service 时也改成直接报错。
+            </div>
+          </div>
+
+          <div class="entry">
+            <div class="entry-head">
+              <div class="entry-title">补齐 writeback mutation bridge 并修复 reverted 读取断点</div>
+              <div class="entry-time">2026-05-07 15:12:00 CST</div>
+            </div>
+            <div class="entry-body">
+              `approve / reject / revert` 已从 ledger service 接到 preload、IPC、facade、runtime client；同时补回 Hermes contract 回归，并把 `reverted` 纳入 schema，避免 revert 后下次读取 proposal ledger 直接 parse 失败。
             </div>
           </div>
 

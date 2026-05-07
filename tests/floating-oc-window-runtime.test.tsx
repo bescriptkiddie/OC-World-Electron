@@ -21,7 +21,7 @@ function createClient(): OcWorldClient {
     },
     memory: { summaries: vi.fn(), history: vi.fn(), getLongTerm: vi.fn(), getVoice: vi.fn(), runDistill: vi.fn() },
     awareness: { list: vi.fn() },
-    writeback: { list: vi.fn() },
+    writeback: { list: vi.fn(), approve: vi.fn(), reject: vi.fn(), revert: vi.fn() },
     workItems: { list: vi.fn() },
     projects: { list: vi.fn() },
     recall: { listRecent: vi.fn(), evaluateNow: vi.fn(), startPolling: vi.fn(), stopPolling: vi.fn(), onHint: vi.fn(() => () => {}) },

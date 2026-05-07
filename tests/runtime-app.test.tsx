@@ -38,6 +38,9 @@ function createClient(): OcWorldClient {
     },
     writeback: {
       list: vi.fn(async () => []),
+      approve: vi.fn(),
+      reject: vi.fn(),
+      revert: vi.fn(),
     },
     workItems: {
       list: vi.fn(async () => []),

@@ -53,6 +53,9 @@ export function createElectronClient(): { client: OcWorldClient; capabilities: P
     },
     writeback: {
       list: (payload) => requireOcWorld().writeback.list(payload),
+      approve: (payload) => requireOcWorld().writeback.approve(payload),
+      reject: (payload) => requireOcWorld().writeback.reject(payload),
+      revert: (payload) => requireOcWorld().writeback.revert(payload),
     },
     workItems: {
       list: (userId) => requireOcWorld().workItems.list(userId),

@@ -105,6 +105,63 @@ describe("oc world capabilities facade", () => {
     expect(listWritebackProposals).toHaveBeenCalledWith("user-001", undefined);
   });
 
+  it("passes writeback mutation payloads through unchanged", async () => {
+    const approveWritebackProposal = vi.fn().mockResolvedValue({ id: "wb-1", status: "merged" });
+    const rejectWritebackProposal = vi.fn().mockResolvedValue({ id: "wb-1", status: "discarded" });
+    const revertWritebackProposal = vi.fn().mockResolvedValue({ id: "wb-1", status: "reverted" });
+
+    const capabilities = createOcWorldCapabilities({
+      services: {
+        chat: vi.fn(),
+        generateGreeting: vi.fn(),
+        loadOCHistory: vi.fn(),
+        loadRecentSummaries: vi.fn(),
+        getAirJellyContext: vi.fn(),
+        approveWritebackProposal,
+        rejectWritebackProposal,
+        revertWritebackProposal,
+        hermesManager: { getStatus: vi.fn() },
+        getTtsStatus: vi.fn(),
+        synthesizeSpeech: vi.fn(),
+        generateImage: vi.fn(),
+      },
+    });
+
+    await capabilities.writeback.approve({ userId: "user-001", proposalId: "wb-1" });
+    await capabilities.writeback.reject({ userId: "user-001", proposalId: "wb-1", feedback: "not stable enough" });
+    await capabilities.writeback.revert({ userId: "user-001", proposalId: "wb-1" });
+
+    expect(approveWritebackProposal).toHaveBeenCalledWith({ userId: "user-001", proposalId: "wb-1", dataRoot: undefined });
+    expect(rejectWritebackProposal).toHaveBeenCalledWith({ userId: "user-001", proposalId: "wb-1", feedback: "not stable enough", dataRoot: undefined });
+    expect(revertWritebackProposal).toHaveBeenCalledWith({ userId: "user-001", proposalId: "wb-1", dataRoot: undefined });
+  });
+
+  it("fails fast when writeback mutation services are unavailable", async () => {
+    const capabilities = createOcWorldCapabilities({
+      services: {
+        chat: vi.fn(),
+        generateGreeting: vi.fn(),
+        loadOCHistory: vi.fn(),
+        loadRecentSummaries: vi.fn(),
+        getAirJellyContext: vi.fn(),
+        hermesManager: { getStatus: vi.fn() },
+        getTtsStatus: vi.fn(),
+        synthesizeSpeech: vi.fn(),
+        generateImage: vi.fn(),
+      },
+    });
+
+    await expect(capabilities.writeback.approve({ userId: "user-001", proposalId: "wb-1" })).rejects.toThrow(
+      "Writeback approval is unavailable in this runtime",
+    );
+    await expect(capabilities.writeback.reject({ userId: "user-001", proposalId: "wb-1" })).rejects.toThrow(
+      "Writeback rejection is unavailable in this runtime",
+    );
+    await expect(capabilities.writeback.revert({ userId: "user-001", proposalId: "wb-1" })).rejects.toThrow(
+      "Writeback revert is unavailable in this runtime",
+    );
+  });
+
   it("passes hermes session event filters through unchanged", async () => {
     const listHermesSessionEvents = vi.fn().mockResolvedValue([]);
 

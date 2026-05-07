@@ -76,6 +76,9 @@ contextBridge.exposeInMainWorld("ocWorld", {
   },
   writeback: {
     list: (payload: { userId: string }) => ipcRenderer.invoke("writeback:list", payload),
+    approve: (payload: { userId: string; proposalId: string }) => ipcRenderer.invoke("writeback:approve", payload),
+    reject: (payload: { userId: string; proposalId: string; feedback?: string }) => ipcRenderer.invoke("writeback:reject", payload),
+    revert: (payload: { userId: string; proposalId: string }) => ipcRenderer.invoke("writeback:revert", payload),
   },
   workItems: {
     list: (userId: string) => ipcRenderer.invoke("work-items:list", userId),

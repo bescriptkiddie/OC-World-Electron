@@ -40,7 +40,7 @@ describe("writeback ledger", () => {
     }
   });
 
-  it("approves a deferred proposal", async () => {
+  it("approves a deferred proposal and clears confirmation state", async () => {
     const proposal = await appendWritebackProposal({
       userId: "user-001",
       decision: createDecision("deferred"),
@@ -50,11 +50,19 @@ describe("writeback ledger", () => {
     });
 
     const approved = await approveWritebackProposal({
+      userId: "user-001",
       proposalId: proposal.id,
       dataRoot: tempDir,
     });
 
-    expect(approved).toEqual(expect.objectContaining({ id: proposal.id, status: "merged" }));
+    expect(approved).toEqual(
+      expect.objectContaining({
+        id: proposal.id,
+        status: "merged",
+        reason: "approved",
+        requiresUserConfirmation: false,
+      }),
+    );
   });
 
   it("rejects a deferred proposal with feedback", async () => {
@@ -67,15 +75,24 @@ describe("writeback ledger", () => {
     });
 
     const rejected = await rejectWritebackProposal({
+      userId: "user-001",
       proposalId: proposal.id,
       feedback: "not stable enough",
       dataRoot: tempDir,
     });
 
-    expect(rejected).toEqual(expect.objectContaining({ id: proposal.id, status: "discarded", reason: "not stable enough" }));
+    expect(rejected).toEqual(
+      expect.objectContaining({
+        id: proposal.id,
+        status: "discarded",
+        reason: "not stable enough",
+        feedback: "not stable enough",
+        requiresUserConfirmation: false,
+      }),
+    );
   });
 
-  it("reverts a merged proposal", async () => {
+  it("reverts a merged proposal and keeps it readable", async () => {
     const proposal = await appendWritebackProposal({
       userId: "user-001",
       decision: createDecision("merged"),
@@ -85,11 +102,62 @@ describe("writeback ledger", () => {
     });
 
     const reverted = await revertWritebackProposal({
+      userId: "user-001",
       proposalId: proposal.id,
       dataRoot: tempDir,
     });
+    const proposals = await listWritebackProposals("user-001", tempDir);
 
-    expect(reverted).toEqual(expect.objectContaining({ id: proposal.id, status: "reverted" }));
+    expect(reverted).toEqual(
+      expect.objectContaining({
+        id: proposal.id,
+        status: "reverted",
+        requiresUserConfirmation: false,
+      }),
+    );
+    expect(proposals).toEqual([
+      expect.objectContaining({ id: proposal.id, status: "reverted", updatedAt: expect.any(Number) }),
+    ]);
+  });
+
+  it("rejects cross-user mutations", async () => {
+    const proposal = await appendWritebackProposal({
+      userId: "user-001",
+      decision: createDecision("deferred"),
+      confidence: 0.7,
+      createdAt: 1,
+      dataRoot: tempDir,
+    });
+
+    await expect(
+      approveWritebackProposal({
+        userId: "user-002",
+        proposalId: proposal.id,
+        dataRoot: tempDir,
+      }),
+    ).rejects.toThrow(`Writeback proposal not found: ${proposal.id}`);
+
+    await expect(listWritebackProposals("user-001", tempDir)).resolves.toEqual([
+      expect.objectContaining({ id: proposal.id, status: "deferred", requiresUserConfirmation: true }),
+    ]);
+  });
+
+  it("rejects invalid status transitions", async () => {
+    const proposal = await appendWritebackProposal({
+      userId: "user-001",
+      decision: createDecision("merged"),
+      confidence: 0.7,
+      createdAt: 1,
+      dataRoot: tempDir,
+    });
+
+    await expect(
+      approveWritebackProposal({
+        userId: "user-001",
+        proposalId: proposal.id,
+        dataRoot: tempDir,
+      }),
+    ).rejects.toThrow("Writeback proposal cannot transition from merged to merged");
   });
 
   it("persists status transitions back to jsonl", async () => {
@@ -101,7 +169,7 @@ describe("writeback ledger", () => {
       dataRoot: tempDir,
     });
 
-    await approveWritebackProposal({ proposalId: proposal.id, dataRoot: tempDir });
+    await approveWritebackProposal({ userId: "user-001", proposalId: proposal.id, dataRoot: tempDir });
     const proposals = await listWritebackProposals("user-001", tempDir);
     const raw = await readFile(resolveWritebackProposalPath(tempDir), "utf8");
 

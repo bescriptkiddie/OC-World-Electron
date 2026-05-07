@@ -32,7 +32,13 @@ import {
   loadLongTermMemory,
   loadProjectsState,
 } from "./services/unified-memory";
-import { listWritebackProposals } from "./services/writeback-ledger";
+import {
+  approveWritebackProposal,
+  listWritebackProposals,
+  rejectWritebackProposal,
+  revertWritebackProposal,
+} from "./services/writeback-ledger";
+
 import { getStage } from "./services/relationship";
 import { getSessionEventBridgeStatus, listSessionEvents, recordSessionEvent } from "./services/session-events";
 import type {
@@ -78,6 +84,9 @@ const ipcChannels = {
   memoryRunDistill: "memory:run-distill",
   awarenessList: "awareness:list",
   writebackList: "writeback:list",
+  writebackApprove: "writeback:approve",
+  writebackReject: "writeback:reject",
+  writebackRevert: "writeback:revert",
   workItemsList: "work-items:list",
   projectsList: "projects:list",
   recallListRecent: "recall:list-recent",
@@ -363,6 +372,18 @@ export function registerIpcHandlers() {
     listAwarenessEpisodes(payload.userId, payload.limit ?? 20),
   );
   ipcMain.handle(ipcChannels.writebackList, async (_event, payload: { userId: string }) => listWritebackProposals(payload.userId));
+  ipcMain.handle(
+    ipcChannels.writebackApprove,
+    async (_event, payload: { userId: string; proposalId: string }) => approveWritebackProposal(payload),
+  );
+  ipcMain.handle(
+    ipcChannels.writebackReject,
+    async (_event, payload: { userId: string; proposalId: string; feedback?: string }) => rejectWritebackProposal(payload),
+  );
+  ipcMain.handle(
+    ipcChannels.writebackRevert,
+    async (_event, payload: { userId: string; proposalId: string }) => revertWritebackProposal(payload),
+  );
   ipcMain.handle(ipcChannels.workItemsList, async (_event, userId: string) => listWorkItems(userId));
   ipcMain.handle(ipcChannels.projectsList, async (_event, userId: string) => loadProjectsState(userId));
   ipcMain.handle(ipcChannels.recallListRecent, async (_event, payload: { userId: string; limit?: number }) =>
@@ -514,6 +535,9 @@ export function unregisterIpcHandlers() {
   ipcMain.removeHandler(ipcChannels.memoryRunDistill);
   ipcMain.removeHandler(ipcChannels.awarenessList);
   ipcMain.removeHandler(ipcChannels.writebackList);
+  ipcMain.removeHandler(ipcChannels.writebackApprove);
+  ipcMain.removeHandler(ipcChannels.writebackReject);
+  ipcMain.removeHandler(ipcChannels.writebackRevert);
   ipcMain.removeHandler(ipcChannels.workItemsList);
   ipcMain.removeHandler(ipcChannels.projectsList);
   ipcMain.removeHandler(ipcChannels.recallListRecent);

@@ -79,6 +79,9 @@ export interface OcWorldClient {
   };
   writeback: {
     list(payload: { userId: string }): Promise<import("../types").WritebackProposal[]>;
+    approve(payload: { userId: string; proposalId: string }): Promise<import("../types").WritebackProposal>;
+    reject(payload: { userId: string; proposalId: string; feedback?: string }): Promise<import("../types").WritebackProposal>;
+    revert(payload: { userId: string; proposalId: string }): Promise<import("../types").WritebackProposal>;
   };
   workItems: {
     list(userId: string): Promise<WorkItem[]>;

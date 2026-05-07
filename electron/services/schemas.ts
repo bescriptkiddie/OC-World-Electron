@@ -255,10 +255,12 @@ const writebackProposalSchema = z.object({
   evidenceEventIds: z.array(z.string()),
   evidenceSummary: z.string(),
   confidence: z.number(),
-  status: z.enum(["proposed", "merged", "deferred", "discarded"]),
+  status: z.enum(["proposed", "merged", "deferred", "discarded", "reverted"]),
   reason: z.string(),
   requiresUserConfirmation: z.boolean(),
   createdAt: z.number(),
+  updatedAt: z.number().optional(),
+  feedback: z.string().optional(),
 });
 
 const hermesSessionEventQuerySchema = z

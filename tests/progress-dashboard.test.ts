@@ -7,8 +7,9 @@ describe("progress dashboard contract", () => {
     const html = await readFile(path.join(process.cwd(), "demos", "mainline-closure-dashboard.html"), "utf8");
 
     expect(html).toContain("产品 → 架构 → 代码");
-    expect(html).toContain("迭代时间");
+    expect(html).toContain("本轮迭代时间");
     expect(html).toContain("时间线只追加，不改写旧条目");
     expect(html).toContain("2026-05-04 01:20:01 CST");
+    expect(html).toContain("2026-05-07 15:31:00 CST");
   });
 });

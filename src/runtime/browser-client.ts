@@ -240,6 +240,15 @@ export function createBrowserClient(): { client: OcWorldClient; capabilities: Pl
       async list() {
         return [];
       },
+      async approve() {
+        throw new Error("Writeback approval is unavailable in browser mode");
+      },
+      async reject() {
+        throw new Error("Writeback rejection is unavailable in browser mode");
+      },
+      async revert() {
+        throw new Error("Writeback revert is unavailable in browser mode");
+      },
     },
     workItems: {
       async list() {
