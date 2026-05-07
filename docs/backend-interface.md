@@ -1,6 +1,8 @@
 # OC World Backend Interface
 
-面向外部前端与 Agent 的接入文档。本文档基于当前代码实现整理，真实接口入口来自 Electron 主进程和 preload 暴露的 `window.ocWorld` 对象。
+面向外部前端与 Agent 的接入文档。本文档描述的是 **业务能力契约**，当前默认由 Electron 主进程和 preload 暴露的 `window.ocWorld` 实现，但后续也可以被其他 runtime adapter 复用。
+
+配套边界说明见：`docs/architecture-platform-boundaries.md`。
 
 ## 1. 接入边界
 
@@ -13,7 +15,7 @@ window.ocWorld
 因此外部前端有两种接入方式：
 
 1. 推荐方式：把外部前端作为 OC World Electron 窗口中的 renderer 加载，直接调用 `window.ocWorld.*`。
-2. 浏览器独立运行方式：当前仓库还没有 HTTP 网关。若对方前端必须在普通浏览器里独立访问，需要先由我们补一个 REST/WebSocket Gateway，再按 Gateway 文档接入。
+2. 浏览器独立运行方式：当前仓库还没有 HTTP 网关。若对方前端必须在普通浏览器里独立访问，需要先由我们补一个 REST/WebSocket Gateway，或提供非 Electron 的 runtime adapter，再按对应接入文档对接。
 
 不要让外部前端直接调用大模型、TTS、ASR、Marswave、AirJelly 等第三方服务。API key 保留在 OC World 后端 `.env` 中，前端只调用本文档中的本地桥接接口。
 
@@ -65,6 +67,7 @@ console.log(result.text, result.emotion, result.intimacy, result.stage);
 - 推荐默认角色 ID：`char-001`。
 - 方法抛错时，前端应 `try/catch` 并展示可恢复状态。
 - 当前 preload 只在 Electron renderer 中存在，普通浏览器页面直接打开不会有 `window.ocWorld`。
+- 未来若接 iOS Web、React Native 或 Swift 客户端，应复用本文档中的能力命名与 payload 结构，不要继续把 Electron transport 细节扩散到业务层。
 
 ## 3. 能力总览
 
