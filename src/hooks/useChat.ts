@@ -155,7 +155,7 @@ function addConfirmedInsightToProfile(profile: GrowthProfile, insight: GrowthIns
 }
 
 export function useChat() {
-  const { client } = useRuntime();
+  const { client, capabilities } = useRuntime();
   const [character, setCharacter] = useState<CharacterConfig | null>(null);
   const [relationship, setRelationship] = useState<Relationship | null>(null);
   const [history, setHistory] = useState<ChatHistoryEntry[]>([]);
@@ -179,8 +179,8 @@ export function useChat() {
   const activeRequestIdRef = useRef<string | null>(null);
   const isSendingRef = useRef(false);
   const ttsEnabledRef = useRef(false);
-  const ttsRef = useRef(createAppTTS());
-  const voiceInputRef = useRef(createVoiceInput());
+  const ttsRef = useRef(createAppTTS(undefined, capabilities.tts));
+  const voiceInputRef = useRef(createVoiceInput(undefined, capabilities.asr));
   const lastFinalVoiceTextRef = useRef("");
   const activeUserId = relationship?.userId ?? growthProfile.userId ?? defaultUserId;
 

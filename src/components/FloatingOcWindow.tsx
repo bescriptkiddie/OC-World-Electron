@@ -1,5 +1,6 @@
 import { useRuntime } from "../runtime/use-runtime";
-import { useEffect, useRef, useState, type PointerEvent } from "react";import type { CharacterConfig, OcVisualStateId, Relationship } from "../types";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
+import type { CharacterConfig, OcVisualStateId, Relationship } from "../types";
 import { IconChat, IconClose, IconRewind } from "./OcWorldIcons";
 import { OC_INTERACTION_MOMENTS, buildOcMomentLine, type OcInteractionMomentId } from "./OcInteractionSystem";
 import { OcSpriteStage } from "./OcSpriteStage";

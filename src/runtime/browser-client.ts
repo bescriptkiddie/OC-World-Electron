@@ -94,6 +94,43 @@ function createBrowserDemoInsight(userId: string, userMessage: string, now: numb
   };
 }
 
+function addConfirmedInsightToProfile(profile: GrowthProfile, insight: GrowthInsight, now: number): GrowthProfile {
+  const item = {
+    id: insight.id,
+    title: insight.title,
+    text: insight.text,
+    evidenceIds: insight.evidenceIds,
+    confidence: insight.confidence,
+    confirmedAt: now,
+  };
+  const withoutExisting = <T extends { id: string }>(items: T[]) => items.filter((current) => current.id !== insight.id);
+
+  if (insight.type === "goal") {
+    return { ...profile, updatedAt: now, goals: [item, ...withoutExisting(profile.goals)] };
+  }
+
+  if (insight.type === "strength") {
+    return { ...profile, updatedAt: now, strengths: [item, ...withoutExisting(profile.strengths)] };
+  }
+
+  if (insight.type === "preference") {
+    return { ...profile, updatedAt: now, preferences: [item, ...withoutExisting(profile.preferences)] };
+  }
+
+  if (insight.type === "open_question") {
+    return { ...profile, updatedAt: now, openQuestions: [item, ...withoutExisting(profile.openQuestions)] };
+  }
+
+  return { ...profile, updatedAt: now };
+}
+
+function createDismissedReveal(current: NonNullable<ReturnType<typeof createBrowserDemoInsight>["reveal"]>, status: "confirmed" | "dismissed") {
+  return {
+    ...current,
+    status,
+  };
+}
+
 export function createBrowserClient(): { client: OcWorldClient; capabilities: PlatformCapabilities } {
   let character = readBrowserCharacterFallback();
   let relationship = DEFAULT_RELATIONSHIP;
@@ -249,14 +286,36 @@ export function createBrowserClient(): { client: OcWorldClient; capabilities: Pl
       async getProfile() {
         return growthProfile;
       },
-      async confirmInsight() {
+      async confirmInsight(payload) {
+        const now = Date.now();
+        const insight = growthInsights.find((item) => item.id === payload.insightId);
+        if (!insight) {
+          return activeReveal;
+        }
+
+        growthInsights = growthInsights.map((item) =>
+          item.id === payload.insightId
+            ? { ...item, status: "confirmed" as const, updatedAt: now }
+            : item,
+        );
+        growthProfile = addConfirmedInsightToProfile(growthProfile, { ...insight, status: "confirmed", updatedAt: now }, now);
+        activeReveal = activeReveal?.insightId === payload.insightId ? null : activeReveal;
         return activeReveal;
       },
-      async dismissReveal() {
-        activeReveal = null;
-        return null;
+      async dismissReveal(payload) {
+        if (activeReveal?.id === payload.candidateId) {
+          activeReveal = null;
+        }
+        return activeReveal;
       },
-      async rejectInsight() {
+      async rejectInsight(payload) {
+        const now = Date.now();
+        growthInsights = growthInsights.map((item) =>
+          item.id === payload.insightId
+            ? { ...item, status: "rejected" as const, userFeedback: payload.feedback, updatedAt: now }
+            : item,
+        );
+        activeReveal = activeReveal?.insightId === payload.insightId ? null : activeReveal;
         return activeReveal;
       },
     },
@@ -291,3 +350,4 @@ export function createBrowserClient(): { client: OcWorldClient; capabilities: Pl
     },
   };
 }
+
