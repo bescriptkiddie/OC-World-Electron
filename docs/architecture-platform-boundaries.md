@@ -106,15 +106,13 @@ OC World 现在是一个 Electron 桌面应用。
 - `electron/ipc.ts`
 - `src/components/FloatingOcWindow.tsx`
 
-### 4.2 当前散落在 renderer 的 Electron 直连点
+### 4.2 当前仍然直接依赖 Electron bridge 的位置
 
-这些文件里仍然直接调用 `window.ocWorld`，是本轮必须收口的主要位置：
+本轮已经把主 React renderer 的核心直连点收口到 runtime adapter，当前剩余的直接 bridge 使用主要是：
 
-- `src/hooks/useChat.ts`
-- `src/components/OcWorldApp.tsx`
-- `src/components/CreateView.tsx`
-- `src/components/FloatingOcWindow.tsx`
-- `demos/oc-invisible-growth-v1.html`
+- `src/main.tsx`：只在启动时做一次环境选择，决定走 `createElectronClient()` 还是 `createBrowserClient()`
+- `src/runtime/electron-client.ts`：这是故意保留的 Electron adapter 封装层
+- `demos/oc-invisible-growth-v1.html`：独立 demo 仍然直接依赖 preload bridge
 
 ## 5. 这次 iOS 铺路要完成什么
 
@@ -200,8 +198,8 @@ OC World 现在是一个 Electron 桌面应用。
 ## 9. 当前已知风险
 
 - `src/hooks/useChat.ts` 既管聊天，又管 growth、recall、Hermes、语音，是当前最重的耦合点
-- `src/lib/voice-input.ts` 直接依赖 `window.ocWorld.asr`，未来移动端差异最大
-- `src/lib/tts.ts` 同时处理浏览器语音和远端语音，平台边界需要先收紧
+- `src/lib/voice-input.ts` 现在已经支持通过 capability 注入 ASR，但移动端音频采集、权限与回放策略仍然是下一阶段风险点
+- `src/lib/tts.ts` 现在已经支持通过 capability 注入远端 TTS，但不同宿主里的音频策略差异仍需单独处理
 - `demos/oc-invisible-growth-v1.html` 仍然直接依赖 preload bridge，本轮先不扩散修改范围
 
 ## 10. 本轮不做的事
