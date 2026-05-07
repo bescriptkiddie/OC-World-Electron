@@ -37,6 +37,7 @@ function createClient(chatResult: ChatResult): OcWorldClient {
     },
     memory: { summaries: vi.fn(async () => []), history: vi.fn(async () => []), getLongTerm: vi.fn(), getVoice: vi.fn(), runDistill: vi.fn() },
     awareness: { list: vi.fn(async () => []) },
+    writeback: { list: vi.fn(async () => []) },
     workItems: { list: vi.fn(async () => []) },
     projects: { list: vi.fn(async () => ({ version: 1 as const, generatedAt: Date.now(), userId: "user-001", projects: [] })) },
     recall: { listRecent: vi.fn(async () => []), evaluateNow: vi.fn(async () => []), startPolling: vi.fn(async () => true), stopPolling: vi.fn(async () => true), onHint: vi.fn(() => () => {}) },

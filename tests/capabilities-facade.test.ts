@@ -82,6 +82,29 @@ describe("oc world capabilities facade", () => {
     expect(generateImage).toHaveBeenCalledWith({ prompt: "avatar" }, "char-001", undefined);
   });
 
+  it("passes writeback list payload through unchanged", async () => {
+    const listWritebackProposals = vi.fn().mockResolvedValue([]);
+
+    const capabilities = createOcWorldCapabilities({
+      services: {
+        chat: vi.fn(),
+        generateGreeting: vi.fn(),
+        loadOCHistory: vi.fn(),
+        loadRecentSummaries: vi.fn(),
+        getAirJellyContext: vi.fn(),
+        listWritebackProposals,
+        hermesManager: { getStatus: vi.fn() },
+        getTtsStatus: vi.fn(),
+        synthesizeSpeech: vi.fn(),
+        generateImage: vi.fn(),
+      },
+    });
+
+    await capabilities.writeback.list({ userId: "user-001" });
+
+    expect(listWritebackProposals).toHaveBeenCalledWith("user-001", undefined);
+  });
+
   it("passes hermes session event filters through unchanged", async () => {
     const listHermesSessionEvents = vi.fn().mockResolvedValue([]);
 

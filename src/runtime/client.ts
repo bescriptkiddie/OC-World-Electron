@@ -77,6 +77,9 @@ export interface OcWorldClient {
   awareness: {
     list(payload: { userId: string; limit?: number }): Promise<AwarenessEpisode[]>;
   };
+  writeback: {
+    list(payload: { userId: string }): Promise<import("../types").WritebackProposal[]>;
+  };
   workItems: {
     list(userId: string): Promise<WorkItem[]>;
   };

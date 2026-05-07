@@ -24,6 +24,7 @@ interface CapabilityServices {
   loadOCHistory: (userId: string, limit: number, dataRoot?: string) => Promise<ChatHistoryEntry[]>;
   loadRecentSummaries: (userId: string, weeks: number, dataRoot?: string) => Promise<MemorySummary[]>;
   getAirJellyContext: (dataRoot?: string) => Promise<AirJellyContext>;
+  listWritebackProposals?: (userId: string, dataRoot?: string) => Promise<import("../../src/types").WritebackProposal[]>;
   hermesManager: { getStatus: () => HermesRuntimeStatus };
   getHermesBridgeStatus?: () => Promise<HermesBridgeStatus>;
   listHermesSessionEvents?: (query: HermesSessionEventQuery) => Promise<HermesSessionEvent[]>;
@@ -101,6 +102,11 @@ export function createOcWorldCapabilities(options: CreateOcWorldCapabilitiesOpti
     airjelly: {
       getContext() {
         return services.getAirJellyContext(context.dataRoot);
+      },
+    },
+    writeback: {
+      list(payload: { userId: string }) {
+        return services.listWritebackProposals?.(payload.userId, context.dataRoot) ?? [];
       },
     },
     hermes: {

@@ -51,6 +51,9 @@ export function createElectronClient(): { client: OcWorldClient; capabilities: P
     awareness: {
       list: (payload) => requireOcWorld().awareness.list(payload),
     },
+    writeback: {
+      list: (payload) => requireOcWorld().writeback.list(payload),
+    },
     workItems: {
       list: (userId) => requireOcWorld().workItems.list(userId),
     },

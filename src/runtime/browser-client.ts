@@ -236,6 +236,11 @@ export function createBrowserClient(): { client: OcWorldClient; capabilities: Pl
         return [];
       },
     },
+    writeback: {
+      async list() {
+        return [];
+      },
+    },
     workItems: {
       async list() {
         return [];

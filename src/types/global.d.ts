@@ -86,6 +86,9 @@ declare global {
       awareness: {
         list: (payload: { userId: string; limit?: number }) => Promise<AwarenessEpisode[]>;
       };
+      writeback: {
+        list: (payload: { userId: string }) => Promise<import("./index").WritebackProposal[]>;
+      };
       workItems: {
         list: (userId: string) => Promise<WorkItem[]>;
       };

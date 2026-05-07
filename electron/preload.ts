@@ -74,6 +74,9 @@ contextBridge.exposeInMainWorld("ocWorld", {
   awareness: {
     list: (payload: { userId: string; limit?: number }) => ipcRenderer.invoke("awareness:list", payload),
   },
+  writeback: {
+    list: (payload: { userId: string }) => ipcRenderer.invoke("writeback:list", payload),
+  },
   workItems: {
     list: (userId: string) => ipcRenderer.invoke("work-items:list", userId),
   },

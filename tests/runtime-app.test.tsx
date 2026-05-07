@@ -36,6 +36,9 @@ function createClient(): OcWorldClient {
     awareness: {
       list: vi.fn(async () => []),
     },
+    writeback: {
+      list: vi.fn(async () => []),
+    },
     workItems: {
       list: vi.fn(async () => []),
     },

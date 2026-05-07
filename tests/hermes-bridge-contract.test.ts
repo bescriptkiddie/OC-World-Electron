@@ -7,6 +7,31 @@ afterEach(() => {
 });
 
 describe("hermes bridge contract", () => {
+  it("exposes writeback list call from preload", async () => {
+    const exposeInMainWorld = vi.fn();
+    const ipcRenderer = {
+      invoke: vi.fn(),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+      send: vi.fn(),
+    };
+
+    vi.doMock("electron", () => ({
+      contextBridge: { exposeInMainWorld },
+      ipcRenderer,
+    }));
+
+    await import("../electron/preload");
+
+    const api = exposeInMainWorld.mock.calls[0]?.[1];
+    const query = { userId: "user-001" };
+
+    expect(api.writeback.list).toBeTypeOf("function");
+
+    api.writeback.list(query);
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith("writeback:list", query);
+  });
+
   it("exposes hermes bridge calls and session event subscription from preload", async () => {
     const exposeInMainWorld = vi.fn();
     const ipcRenderer = {
@@ -141,6 +166,7 @@ describe("hermes bridge contract", () => {
 
     expect(handlers.has("hermes:get-bridge-status")).toBe(true);
     expect(handlers.has("hermes:list-session-events")).toBe(true);
+    expect(handlers.has("writeback:list")).toBe(true);
 
     await expect(handlers.get("hermes:get-bridge-status")?.({})).resolves.toEqual({
       connected: false,
@@ -158,11 +184,13 @@ describe("hermes bridge contract", () => {
     ).resolves.toEqual([]);
     await expect(handlers.get("hermes:list-session-events")?.({}, { limit: 0 })).resolves.toEqual([]);
     await expect(handlers.get("hermes:list-session-events")?.({}, { limit: -1 })).resolves.toEqual([]);
+    await expect(handlers.get("writeback:list")?.({}, { userId: "user-001" })).resolves.toEqual([]);
 
     unregisterIpcHandlers();
 
     expect(ipcMain.removeHandler).toHaveBeenCalledWith("hermes:get-bridge-status");
     expect(ipcMain.removeHandler).toHaveBeenCalledWith("hermes:list-session-events");
+    expect(ipcMain.removeHandler).toHaveBeenCalledWith("writeback:list");
   });
 
   it("emits hermes session events during chat turns", async () => {

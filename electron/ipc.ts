@@ -32,6 +32,7 @@ import {
   loadLongTermMemory,
   loadProjectsState,
 } from "./services/unified-memory";
+import { listWritebackProposals } from "./services/writeback-ledger";
 import { getStage } from "./services/relationship";
 import { getSessionEventBridgeStatus, listSessionEvents, recordSessionEvent } from "./services/session-events";
 import type {
@@ -76,6 +77,7 @@ const ipcChannels = {
   memoryGetVoice: "memory:get-voice",
   memoryRunDistill: "memory:run-distill",
   awarenessList: "awareness:list",
+  writebackList: "writeback:list",
   workItemsList: "work-items:list",
   projectsList: "projects:list",
   recallListRecent: "recall:list-recent",
@@ -360,6 +362,7 @@ export function registerIpcHandlers() {
   ipcMain.handle(ipcChannels.awarenessList, async (_event, payload: { userId: string; limit?: number }) =>
     listAwarenessEpisodes(payload.userId, payload.limit ?? 20),
   );
+  ipcMain.handle(ipcChannels.writebackList, async (_event, payload: { userId: string }) => listWritebackProposals(payload.userId));
   ipcMain.handle(ipcChannels.workItemsList, async (_event, userId: string) => listWorkItems(userId));
   ipcMain.handle(ipcChannels.projectsList, async (_event, userId: string) => loadProjectsState(userId));
   ipcMain.handle(ipcChannels.recallListRecent, async (_event, payload: { userId: string; limit?: number }) =>
@@ -510,6 +513,7 @@ export function unregisterIpcHandlers() {
   ipcMain.removeHandler(ipcChannels.memoryGetVoice);
   ipcMain.removeHandler(ipcChannels.memoryRunDistill);
   ipcMain.removeHandler(ipcChannels.awarenessList);
+  ipcMain.removeHandler(ipcChannels.writebackList);
   ipcMain.removeHandler(ipcChannels.workItemsList);
   ipcMain.removeHandler(ipcChannels.projectsList);
   ipcMain.removeHandler(ipcChannels.recallListRecent);
