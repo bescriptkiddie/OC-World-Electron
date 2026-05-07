@@ -2,7 +2,12 @@ import { mkdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { appendDriftSignals, evaluateWritebackDriftSignals, listDriftSignals } from "../electron/services/drift-guardrails";
+import {
+  appendDriftSignals,
+  evaluateRelationshipDriftSignals,
+  evaluateWritebackDriftSignals,
+  listDriftSignals,
+} from "../electron/services/drift-guardrails";
 
 describe("drift guardrails", () => {
   let tempDir = "";
@@ -135,6 +140,40 @@ describe("drift guardrails", () => {
         },
         confidence: 0.9,
         evidenceEventIds: ["evidence-1"],
+        createdAt: 1,
+      }),
+    ).toEqual([]);
+  });
+
+  it("flags large relationship jumps as overfit warnings", () => {
+    expect(
+      evaluateRelationshipDriftSignals({
+        userId: "user-001",
+        turnId: "turn-1",
+        previousIntimacy: 10,
+        nextIntimacy: 19,
+        growthEvent: "她第一次公开夸你做出来了",
+        createdAt: 1,
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        userId: "user-001",
+        turnId: "turn-1",
+        type: "relationship_overfit",
+        severity: "warning",
+        recommendedAction: "observe",
+      }),
+    ]);
+  });
+
+  it("skips small relationship changes", () => {
+    expect(
+      evaluateRelationshipDriftSignals({
+        userId: "user-001",
+        turnId: "turn-1",
+        previousIntimacy: 10,
+        nextIntimacy: 14,
+        growthEvent: "轻微互动",
         createdAt: 1,
       }),
     ).toEqual([]);

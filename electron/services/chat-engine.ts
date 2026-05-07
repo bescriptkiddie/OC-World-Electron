@@ -1,5 +1,6 @@
 import type { ChatResponse, ChatResult, ChatSendPayload } from "../../src/types";
 import { buildContextSnapshot, clearContextSnapshotCache } from "./context-snapshot";
+import { appendDriftSignals, evaluateRelationshipDriftSignals } from "./drift-guardrails";
 import { getMemoryFeatureFlags } from "./feature-flags";
 import { buildConfirmedProfileSummary } from "./growth-profile";
 import { runGrowthPipeline } from "./growth-pipeline";
@@ -93,6 +94,14 @@ export async function chat(payload: ChatSendPayload, options: ChatOptions = {}):
 
   const intimacyDelta = calculateIntimacyDelta(combinedUserMessage, snapshot.relationshipState.intimacy);
   const nextRelationship = updateRelationshipState(snapshot.relationshipState, intimacyDelta, response.growthEvent);
+  const relationshipDriftSignals = evaluateRelationshipDriftSignals({
+    userId: payload.userId,
+    turnId: llmOptions.sessionId,
+    previousIntimacy: snapshot.relationshipState.intimacy,
+    nextIntimacy: nextRelationship.intimacy,
+    growthEvent: response.growthEvent,
+    createdAt: Date.now(),
+  });
 
   await Promise.all([
     saveRelationship(payload.userId, nextRelationship, dataRoot),
@@ -106,6 +115,7 @@ export async function chat(payload: ChatSendPayload, options: ChatOptions = {}):
       },
       dataRoot,
     ),
+    appendDriftSignals(relationshipDriftSignals, dataRoot),
   ]);
   clearContextSnapshotCache();
 

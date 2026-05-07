@@ -6,6 +6,7 @@ import { parseDriftSignalList } from "./schemas";
 
 const warningConfidenceThreshold = 0.8;
 const criticalConfidenceThreshold = 0.5;
+const relationshipOverfitDeltaThreshold = 8;
 
 function resolveDriftSignalsPath(dataRoot?: string) {
   return resolveOcDataPath(dataRoot, "drift", "signals.jsonl");
@@ -67,6 +68,35 @@ export function evaluateWritebackDriftSignals(input: {
         : "低置信度候选仍写入长期记忆，可能造成记忆污染。",
       evidenceEventIds: input.evidenceEventIds,
       recommendedAction: isCritical ? "defer_writeback" : "observe",
+      createdAt: input.createdAt,
+    },
+  ];
+}
+
+export function evaluateRelationshipDriftSignals(input: {
+  userId: string;
+  turnId: string;
+  previousIntimacy: number;
+  nextIntimacy: number;
+  growthEvent: string | null;
+  createdAt: number;
+}): DriftSignal[] {
+  const intimacyDelta = input.nextIntimacy - input.previousIntimacy;
+
+  if (intimacyDelta < relationshipOverfitDeltaThreshold) {
+    return [];
+  }
+
+  return [
+    {
+      id: `drift_relationship_${input.turnId}_${input.createdAt}`,
+      userId: input.userId,
+      turnId: input.turnId,
+      type: "relationship_overfit",
+      severity: "warning",
+      summary: "单轮关系亲密度跳变过大，可能存在情绪过拟合。",
+      evidenceEventIds: [],
+      recommendedAction: "observe",
       createdAt: input.createdAt,
     },
   ];

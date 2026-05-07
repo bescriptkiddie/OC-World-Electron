@@ -189,6 +189,106 @@ describe("chat engine", () => {
     expect(result.source).toBe("mock");
   });
 
+  it("records relationship overfit drift signals for large intimacy jumps", async () => {
+    vi.resetModules();
+
+    const clearContextSnapshotCache = vi.fn();
+    const buildContextSnapshot = vi.fn().mockResolvedValue({
+      realtimeContext: { source: "mock", events: [], tasks: [], appUsage: [] },
+      growthProfile: { userId: "user-001", updatedAt: 0, goals: [], strengths: [], preferences: [], openQuestions: [] },
+      conversationState: { recentChat: [] },
+      relationshipState: {
+        userId: "user-001",
+        userName: "Pika",
+        intimacy: 10,
+        stage: "stranger",
+        preferences: { topics: [], avoid: [], communicationStyle: "direct" },
+        keyMoments: [],
+        lastInteraction: 0,
+        moodBaseline: "steady",
+      },
+      socialMemory: [],
+      recentChat: [],
+      relationship: {
+        userId: "user-001",
+        userName: "Pika",
+        intimacy: 10,
+        stage: "stranger",
+        preferences: { topics: [], avoid: [], communicationStyle: "direct" },
+        keyMoments: [],
+        lastInteraction: 0,
+        moodBaseline: "steady",
+      },
+      character: {
+        id: "char-001",
+        name: "小橘",
+        personality: "敏锐直接",
+        catchphrase: "哼。",
+        relationshipSetup: "陪你一起推进项目",
+        avatarLabel: "橘发少女",
+      },
+      wxMemories: [],
+      airjellyCtx: { source: "mock", events: [], tasks: [], appUsage: [] },
+      builtAt: 1,
+      latentInsights: [],
+      characterState: {
+        id: "char-001",
+        name: "小橘",
+        personality: "敏锐直接",
+        catchphrase: "哼。",
+        relationshipSetup: "陪你一起推进项目",
+        avatarLabel: "橘发少女",
+      },
+    });
+    const updateRelationshipState = vi.fn().mockReturnValue({
+      userId: "user-001",
+      userName: "Pika",
+      intimacy: 19,
+      stage: "friend",
+      preferences: { topics: [], avoid: [], communicationStyle: "direct" },
+      keyMoments: [
+        {
+          date: new Date().toISOString(),
+          event: "她第一次公开夸你做出来了",
+          impact: 9,
+        },
+      ],
+      lastInteraction: Date.now(),
+      moodBaseline: "steady",
+    });
+
+    vi.doMock("../electron/services/context-snapshot", async () => {
+      const actual = await vi.importActual<typeof import("../electron/services/context-snapshot")>("../electron/services/context-snapshot");
+      return {
+        ...actual,
+        buildContextSnapshot,
+        clearContextSnapshotCache,
+      };
+    });
+    vi.doMock("../electron/services/relationship", async () => {
+      const actual = await vi.importActual<typeof import("../electron/services/relationship")>("../electron/services/relationship");
+      return {
+        ...actual,
+        updateRelationshipState,
+      };
+    });
+
+    const { chat: reloadedChat } = await import("../electron/services/chat-engine");
+
+    await reloadedChat({
+      characterId: "char-001",
+      userId: "user-001",
+      userMessage: "谢谢你一直盯着我，我今天真的特别开心，终于做出来了，而且我也想把更多真实的事告诉你。",
+    });
+
+    const signalsPath = path.join(tempDir, "oc-data", "drift", "signals.jsonl");
+    await waitForFile(signalsPath);
+    const signals = await readFile(signalsPath, "utf8");
+
+    expect(signals).toContain("relationship_overfit");
+    expect(signals).toContain("observe");
+  });
+
   it("clears cached snapshots after relationship and history writes", async () => {
     vi.resetModules();
 
@@ -242,7 +342,17 @@ describe("chat engine", () => {
     });
     const runGrowthPipeline = vi.fn().mockResolvedValue(undefined);
     const appendOCHistory = vi.fn().mockResolvedValue(undefined);
-    const saveRelationship = vi.fn().mockResolvedValue(undefined);
+    const saveRelationship = vi.fn().mockImplementation(async (_userId, relationship) => relationship);
+    const updateRelationshipState = vi.fn().mockReturnValue({
+      userId: "user-001",
+      userName: "Pika",
+      intimacy: 11,
+      stage: "friend",
+      preferences: { topics: [], avoid: [], communicationStyle: "direct" },
+      keyMoments: [],
+      lastInteraction: Date.now(),
+      moodBaseline: "steady",
+    });
 
     vi.doMock("../electron/services/context-snapshot", async () => {
       const actual = await vi.importActual<typeof import("../electron/services/context-snapshot")>("../electron/services/context-snapshot");
@@ -265,6 +375,13 @@ describe("chat engine", () => {
         ...actual,
         appendOCHistory,
         saveRelationship,
+      };
+    });
+    vi.doMock("../electron/services/relationship", async () => {
+      const actual = await vi.importActual<typeof import("../electron/services/relationship")>("../electron/services/relationship");
+      return {
+        ...actual,
+        updateRelationshipState,
       };
     });
 

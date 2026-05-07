@@ -284,12 +284,12 @@
           <div class="iteration">
             <div class="iteration-card">
               <div class="iteration-label">本轮迭代时间</div>
-              <div class="iteration-value">2026-05-07 16:15:00 CST</div>
+              <div class="iteration-value">2026-05-07 16:42:00 CST</div>
               <ul class="mini-list">
-                <li>drift guardrail 已开始拦截极低置信 memory write，改成 deferred proposal</li>
-                <li>critical drift signal 会给出 defer_writeback 建议，warning 级仍只观察</li>
-                <li>memory-merge / growth-pipeline / drift tests 已补齐高风险 defer 回归</li>
-                <li>全量回归 148 / 148 通过，build 通过</li>
+                <li>relationship_overfit 已接入 chat 主链，单轮亲密度异常跳变会落 drift signal</li>
+                <li>memory 污染 defer 与 relationship 过拟合 warning 已形成两类基础 guardrail</li>
+                <li>chat-engine / drift tests 已补齐 relationship 写回治理回归</li>
+                <li>全量回归 151 / 151 通过，build 通过</li>
               </ul>
             </div>
             <div class="iteration-card">
@@ -321,25 +321,25 @@
           <div class="status-grid">
             <div class="status-item">
               <div class="status-title">产品</div>
-              <div class="status-value">writeback mutation、drift signal、critical defer 都已进入治理链</div>
+              <div class="status-value">memory 与 relationship 都开始挂上基础 drift guardrail</div>
             </div>
             <div class="status-item">
               <div class="status-title">架构</div>
-              <div class="status-value">Hermes event store + writeback bridge + drift signal ledger + defer guard 已落地</div>
+              <div class="status-value">Hermes event store + writeback bridge + drift ledger + memory/relationship guard 已落地</div>
             </div>
             <div class="status-item">
               <div class="status-title">代码</div>
-              <div class="status-value">preload / IPC / facade / runtime / pipeline tests 已补齐 drift defer 回归</div>
+              <div class="status-value">chat / pipeline / preload / IPC / runtime tests 已补齐双 guardrail 回归</div>
             </div>
             <div class="status-item">
               <div class="status-title">测试</div>
-              <div class="status-value">全量 148 / 148，build 通过</div>
+              <div class="status-value">全量 151 / 151，build 通过</div>
             </div>
           </div>
           <div class="legend">
-            <span class="pill good">已完成：Hermes session event store、writeback ledger、writeback approve/reject/revert bridge、user-scoped mutation guard、drift signal 落盘与 critical defer 回归</span>
-            <span class="pill warn">待处理：defer_writeback 目前只收紧 memory-merge，后面还要继续接 relationship / work-item / UI 批准面板</span>
-            <span class="pill bad">未接：renderer 侧还没有消费 drift defer、writeback 审批、Hermes 事件的统一治理面板</span>
+            <span class="pill good">已完成：Hermes session event store、writeback ledger、writeback approve/reject/revert bridge、user-scoped mutation guard、memory defer 与 relationship overfit guardrail</span>
+            <span class="pill warn">待处理：relationship 目前只发 warning，不会拦截；work-item / project 也还没接同级 guardrail</span>
+            <span class="pill bad">未接：renderer 侧还没有消费 relationship drift、memory defer、writeback 审批的统一治理面板</span>
           </div>
         </aside>
       </section>
@@ -464,6 +464,16 @@
             <div>
               <div class="column-tag">Iteration Log</div>
               <h2>本轮迭代记录</h2>
+            </div>
+          </div>
+
+          <div class="entry">
+            <div class="entry-head">
+              <div class="entry-title">给关系写回补上 relationship_overfit 漂移信号</div>
+              <div class="entry-time">2026-05-07 16:42:00 CST</div>
+            </div>
+            <div class="entry-body">
+              chat 主链在保存 relationship 前会检查单轮亲密度跳变；当 intimacy delta 过大时，会把这次关系写回记成 `relationship_overfit` warning，并落到 drift ledger，给后面的 explainability 和更强 guardrail 留入口。
             </div>
           </div>
 
