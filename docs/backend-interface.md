@@ -3,6 +3,7 @@
 面向外部前端与 Agent 的接入文档。本文档描述的是 **业务能力契约**，当前默认由 Electron 主进程和 preload 暴露的 `window.ocWorld` 实现，但后续也可以被其他 runtime adapter 复用。
 
 配套边界说明见：`docs/architecture-platform-boundaries.md`。
+可视化架构图见：`demos/oc-current-architecture-map.html`。
 
 ## 1. 接入边界
 
