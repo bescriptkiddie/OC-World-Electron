@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type PointerEvent } from "react";
-import type { CharacterConfig, OcVisualStateId, Relationship } from "../types";
+import { useRuntime } from "../runtime/use-runtime";
+import { useEffect, useRef, useState, type PointerEvent } from "react";import type { CharacterConfig, OcVisualStateId, Relationship } from "../types";
 import { IconChat, IconClose, IconRewind } from "./OcWorldIcons";
 import { OC_INTERACTION_MOMENTS, buildOcMomentLine, type OcInteractionMomentId } from "./OcInteractionSystem";
 import { OcSpriteStage } from "./OcSpriteStage";
@@ -32,6 +32,7 @@ function getInteractionKicker(interaction: FloatingPetInteraction) {
 }
 
 export function FloatingOcWindow() {
+  const { client, capabilities } = useRuntime();
   const [character, setCharacter] = useState<CharacterConfig | null>(null);
   const [relationship, setRelationship] = useState<Relationship | null>(null);
   const [error, setError] = useState("");
@@ -63,15 +64,15 @@ export function FloatingOcWindow() {
     }
 
     async function loadState() {
-      if (!window.ocWorld) {
-        setError("Electron IPC unavailable");
+      if (!capabilities.floatingOc) {
+        setError("Floating OC capability unavailable");
         return;
       }
 
       try {
         const [nextCharacter, nextRelationship] = await Promise.all([
-          window.ocWorld.character.getCurrent(CHARACTER_ID),
-          window.ocWorld.relationship.get(USER_ID),
+          client.character.getCurrent(CHARACTER_ID),
+          client.relationship.get(USER_ID),
         ]);
         if (!cancelled) {
           const previousSnapshot = snapshotRef.current;
@@ -117,8 +118,8 @@ export function FloatingOcWindow() {
     if (releaseInteractionRef.current) {
       window.clearTimeout(releaseInteractionRef.current);
     }
-    window.ocWorld?.floatingOc.endDrag();
-  }, []);
+    capabilities.floatingOc?.endDrag();
+  }, [capabilities.floatingOc]);
 
   const title = character?.name?.trim() || "Luma";
   const moment = error
@@ -193,7 +194,7 @@ export function FloatingOcWindow() {
     clearReleaseInteraction();
     setDragDirection("none");
     setPetInteraction("grabbed");
-    window.ocWorld?.floatingOc.startDrag({ screenX: event.screenX, screenY: event.screenY });
+    capabilities.floatingOc?.startDrag({ screenX: event.screenX, screenY: event.screenY });
   }
 
   function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
@@ -213,7 +214,7 @@ export function FloatingOcWindow() {
       if (Math.abs(dx) > 1) {
         setDragDirection(dx < 0 ? "left" : "right");
       }
-      window.ocWorld?.floatingOc.dragMove({ screenX: event.screenX, screenY: event.screenY });
+      capabilities.floatingOc?.dragMove({ screenX: event.screenX, screenY: event.screenY });
     }
   }
 
@@ -227,7 +228,7 @@ export function FloatingOcWindow() {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     activePointerRef.current = null;
-    window.ocWorld?.floatingOc.endDrag();
+    capabilities.floatingOc?.endDrag();
     settleInteraction(activePointer.moved ? "released" : "hovered");
   }
 
@@ -266,13 +267,13 @@ export function FloatingOcWindow() {
         </div>
 
         <div className="oc-floating-pet__actions">
-          <button type="button" onClick={() => window.ocWorld?.floatingOc.focusMain()} title="回到聊天" aria-label="回到聊天">
+          <button type="button" onClick={() => capabilities.floatingOc?.focusMain()} title="回到聊天" aria-label="回到聊天">
             <IconChat size={14} />
           </button>
-          <button type="button" onClick={() => window.ocWorld?.floatingOc.focusMain()} title="记忆" aria-label="记忆">
+          <button type="button" onClick={() => capabilities.floatingOc?.focusMain()} title="记忆" aria-label="记忆">
             <IconRewind size={14} />
           </button>
-          <button type="button" onClick={() => window.ocWorld?.floatingOc.close()} title="关闭" aria-label="关闭悬浮 OC">
+          <button type="button" onClick={() => capabilities.floatingOc?.close()} title="关闭" aria-label="关闭悬浮 OC">
             <IconClose size={14} />
           </button>
         </div>

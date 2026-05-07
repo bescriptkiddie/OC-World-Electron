@@ -1,9 +1,37 @@
 // @vitest-environment jsdom
+import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CreateView } from "../src/components/CreateView";
+import { RuntimeProvider } from "../src/runtime/context";
+import type { OcWorldClient } from "../src/runtime/client";
 
 const CREATE_DRAFT_KEY = "ocworld:create-draft:v1";
+
+function createClient(): OcWorldClient {
+  return {
+    chat: { sendMessage: vi.fn(), cancelActive: vi.fn(), getGreeting: vi.fn() },
+    character: { getCurrent: vi.fn(), saveCurrent: vi.fn() },
+    timeline: { list: vi.fn() },
+    relationship: { get: vi.fn(), save: vi.fn(), setIntimacyForDemo: vi.fn() },
+    memory: { summaries: vi.fn(), history: vi.fn(), getLongTerm: vi.fn(), getVoice: vi.fn(), runDistill: vi.fn() },
+    awareness: { list: vi.fn() },
+    workItems: { list: vi.fn() },
+    projects: { list: vi.fn() },
+    recall: { listRecent: vi.fn(), evaluateNow: vi.fn(), startPolling: vi.fn(), stopPolling: vi.fn(), onHint: vi.fn(() => () => {}) },
+    growth: { getLatestReveal: vi.fn(), listInsights: vi.fn(), getProfile: vi.fn(), confirmInsight: vi.fn(), dismissReveal: vi.fn(), rejectInsight: vi.fn() },
+    airjelly: { getContext: vi.fn() },
+    hermes: { getStatus: vi.fn(), getBridgeStatus: vi.fn(), listSessionEvents: vi.fn(), onStatusChanged: vi.fn(() => () => {}), onSessionEvent: vi.fn(() => () => {}) },
+  };
+}
+
+function renderCreateView() {
+  return render(
+    <RuntimeProvider value={{ client: createClient(), capabilities: {} }}>
+      <CreateView onSave={vi.fn()} onCancel={vi.fn()} canCancel />
+    </RuntimeProvider>,
+  );
+}
 
 describe("CreateView flow", () => {
   beforeEach(() => {
@@ -15,8 +43,7 @@ describe("CreateView flow", () => {
   });
 
   it("persists and restores draft progress", async () => {
-    const onSave = vi.fn();
-    const { unmount } = render(<CreateView onSave={onSave} onCancel={vi.fn()} canCancel />);
+    const { unmount } = renderCreateView();
 
     fireEvent.change(screen.getByPlaceholderText("比如：Mori / 阿澄 / 小满"), {
       target: { value: "小橘" },
@@ -28,7 +55,7 @@ describe("CreateView flow", () => {
     });
 
     unmount();
-    render(<CreateView onSave={onSave} onCancel={vi.fn()} canCancel />);
+    renderCreateView();
 
     expect(screen.getByText("塑造 小橘")).toBeTruthy();
     expect(screen.getByDisplayValue("会安静陪我。")).toBeTruthy();
@@ -36,7 +63,7 @@ describe("CreateView flow", () => {
   });
 
   it("shows count and limit feedback for multi-select tags", () => {
-    render(<CreateView onSave={vi.fn()} onCancel={vi.fn()} canCancel />);
+    renderCreateView();
 
     fireEvent.change(screen.getByPlaceholderText("比如：Mori / 阿澄 / 小满"), {
       target: { value: "小橘" },
@@ -52,7 +79,7 @@ describe("CreateView flow", () => {
   });
 
   it("shows explicit fallback copy before preview-only generation", async () => {
-    render(<CreateView onSave={vi.fn()} onCancel={vi.fn()} canCancel />);
+    renderCreateView();
 
     fireEvent.change(screen.getByPlaceholderText("比如：Mori / 阿澄 / 小满"), {
       target: { value: "小橘" },

@@ -14,6 +14,14 @@ interface VoiceInputController {
   stop(): Promise<void>;
 }
 
+interface AsrCapability {
+  start(payload: { sessionId: string; userId?: string; language?: string }): Promise<unknown>;
+  sendAudio(payload: { sessionId: string; audio: ArrayBuffer }): void;
+  stop(payload: { sessionId: string }): Promise<boolean>;
+  onTranscript(callback: (event: AsrTranscriptEvent) => void): () => void;
+  onError(callback: (event: { sessionId: string; message: string }) => void): () => void;
+}
+
 const targetSampleRate = 16_000;
 
 function getAudioContext(win: Window) {
@@ -57,7 +65,10 @@ function floatTo16BitPcm(input: Float32Array) {
   return output;
 }
 
-export function createVoiceInput(win: Window | undefined = typeof window === "undefined" ? undefined : window): VoiceInputController {
+export function createVoiceInput(
+  win: Window | undefined = typeof window === "undefined" ? undefined : window,
+  asr = win?.ocWorld?.asr,
+): VoiceInputController {
   let sessionId: string | null = null;
   let stream: MediaStream | null = null;
   let audioContext: AudioContext | null = null;
@@ -89,14 +100,14 @@ export function createVoiceInput(win: Window | undefined = typeof window === "un
       }) | undefined;
 
       return Boolean(
-        win?.ocWorld?.asr &&
-          typeof win.navigator?.mediaDevices?.getUserMedia === "function" &&
+        asr &&
+          typeof win?.navigator?.mediaDevices?.getUserMedia === "function" &&
           (audioWindow?.AudioContext || audioWindow?.webkitAudioContext),
       );
     },
 
     async start(options) {
-      if (!win || !this.isSupported()) {
+      if (!win || !this.isSupported() || !asr) {
         throw new Error("Voice input is not supported");
       }
 
@@ -104,18 +115,18 @@ export function createVoiceInput(win: Window | undefined = typeof window === "un
 
       const currentSessionId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
       sessionId = currentSessionId;
-      detachTranscript = win.ocWorld?.asr.onTranscript((event) => {
+      detachTranscript = asr.onTranscript((event) => {
         if (event.sessionId === currentSessionId) {
           options.onTranscript(event);
         }
-      }) ?? null;
-      detachError = win.ocWorld?.asr.onError((event) => {
+      });
+      detachError = asr.onError((event) => {
         if (event.sessionId === currentSessionId) {
           options.onError(new Error(event.message));
         }
-      }) ?? null;
+      });
 
-      await win.ocWorld?.asr.start({
+      await asr.start({
         sessionId: currentSessionId,
         userId: options.userId,
         language: "zh-CN",
@@ -147,7 +158,7 @@ export function createVoiceInput(win: Window | undefined = typeof window === "un
           const channel = event.inputBuffer.getChannelData(0);
           const resampled = resampleTo16k(channel, audioContext?.sampleRate ?? targetSampleRate);
           const audio = floatTo16BitPcm(resampled);
-          win.ocWorld?.asr.sendAudio({ sessionId: activeSessionId, audio });
+          asr.sendAudio({ sessionId: activeSessionId, audio });
         };
         source.connect(processor);
         processor.connect(audioContext.destination);
@@ -165,8 +176,8 @@ export function createVoiceInput(win: Window | undefined = typeof window === "un
       sessionId = null;
       await cleanupAudio();
 
-      if (currentSessionId) {
-        await win?.ocWorld?.asr.stop({ sessionId: currentSessionId });
+      if (currentSessionId && asr) {
+        await asr.stop({ sessionId: currentSessionId });
       }
 
       detachTranscript?.();

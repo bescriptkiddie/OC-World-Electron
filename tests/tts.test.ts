@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAppTTS, createBrowserTTS, splitSpeechText } from "../src/lib/tts";
 
@@ -102,7 +103,7 @@ describe("browser TTS", () => {
     expect(synth.cancel).toHaveBeenCalled();
   });
 
-  it("uses Electron StepFun TTS when available", async () => {
+  it("uses injected remote TTS capability when provided", async () => {
     vi.stubGlobal("Audio", FakeAudio);
 
     const synthesize = vi.fn(async () => ({
@@ -114,20 +115,21 @@ describe("browser TTS", () => {
       durationMs: null,
     }));
     const cancelActive = vi.fn(async () => false);
-    const tts = createAppTTS({
-      ocWorld: {
-        tts: {
-          synthesize,
-          cancelActive,
-          getStatus: vi.fn(),
+    const tts = createAppTTS(
+      {
+        ocWorld: undefined,
+        speechSynthesis: {
+          getVoices: vi.fn(() => []),
+          cancel: vi.fn(),
+          speak: vi.fn(),
         },
+      } as unknown as Window,
+      {
+        synthesize,
+        cancelActive,
+        getStatus: vi.fn(),
       },
-      speechSynthesis: {
-        getVoices: vi.fn(() => []),
-        cancel: vi.fn(),
-        speak: vi.fn(),
-      },
-    } as unknown as Window);
+    );
 
     tts.speak("你好");
 
