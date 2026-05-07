@@ -87,7 +87,6 @@ export function createElectronClient(): { client: OcWorldClient; capabilities: P
   return {
     client,
     capabilities: {
-      client,
       tts: client.tts,
       asr: client.asr,
       imageGen: {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DEFAULT_CHARACTER, DEFAULT_HISTORY, DEFAULT_RELATIONSHIP } from "../../electron/services/demo-fallback";
+import { DEFAULT_RELATIONSHIP } from "../../electron/services/demo-fallback";
 import { createAppTTS } from "../lib/tts";
 import { createVoiceInput, type VoiceInputState } from "../lib/voice-input";
 import { useRuntime } from "../runtime/use-runtime";
@@ -20,7 +20,6 @@ import type {
 
 const defaultCharacterId = "char-001";
 const defaultUserId = "user-001";
-const browserCharacterStorageKey = "oc-world.browser.character";
 
 type RevealHint = (RevealCandidate & { text?: string; title?: string }) | null;
 
@@ -37,25 +36,6 @@ function isAbortError(error: unknown) {
   return error instanceof Error && error.name === "AbortError";
 }
 
-function readBrowserCharacterFallback(): CharacterConfig {
-  try {
-    const value = window.localStorage.getItem(browserCharacterStorageKey);
-    if (!value) return DEFAULT_CHARACTER;
-    const parsed = JSON.parse(value) as CharacterConfig;
-    return { ...DEFAULT_CHARACTER, ...parsed, id: defaultCharacterId };
-  } catch {
-    return DEFAULT_CHARACTER;
-  }
-}
-
-function writeBrowserCharacterFallback(character: CharacterConfig) {
-  try {
-    window.localStorage.setItem(browserCharacterStorageKey, JSON.stringify(character));
-  } catch {
-    // Local storage is only a browser demo fallback; Electron persists through IPC.
-  }
-}
-
 function createEmptyProfile(): GrowthProfile {
   return {
     userId: defaultUserId,
@@ -65,93 +45,6 @@ function createEmptyProfile(): GrowthProfile {
     preferences: [],
     openQuestions: [],
   };
-}
-
-function createBrowserTimeline(): TimelineItem[] {
-  return DEFAULT_RELATIONSHIP.keyMoments.map((moment, index) => ({
-    ...moment,
-    intimacyAfter: Math.min(100, DEFAULT_RELATIONSHIP.intimacy + index * 4),
-  }));
-}
-
-function createBrowserDemoReply(userMessage: string, nextRelationship: Relationship): ChatResult {
-  const lead = userMessage.length > 28 ? "我先抓最重要的一点：" : "我听到了。";
-  const normalizedMessage = userMessage.replace(/[。！？!?.,，；;]+$/u, "");
-  return {
-    text: `${lead} ${normalizedMessage}。先不用把它讲完整，我会把这句话放在旁边，等它和后面的经历慢慢连起来。`,
-    emotion: "thinking",
-    growthEvent: "browser-demo",
-    intimacy: Math.min(100, nextRelationship.intimacy + 1),
-    stage: nextRelationship.stage,
-    source: "mock",
-  };
-}
-
-function createBrowserDemoInsight(userId: string, userMessage: string, now: number): {
-  insight: GrowthInsight;
-  reveal: RevealHint;
-} {
-  const text = /交互|点击|对齐|实现|完成|demo|MVP/i.test(userMessage)
-    ? "你在意的不是页面看起来像聊天，而是每一次点击都能让用户感觉到 OC 正在接住、理解、沉淀和回应。"
-    : "你更需要的是一个能先接住真实经历、再慢慢形成判断的 OC，而不是一个只会立刻给结论的工具。";
-  const insightId = `demo-insight-${now}`;
-
-  return {
-    insight: {
-      id: insightId,
-      userId,
-      type: "goal",
-      title: "正在形成的目标",
-      text,
-      evidenceIds: [`demo-evidence-${now}`],
-      confidence: 0.72,
-      status: "suggested",
-      createdAt: now,
-      updatedAt: now,
-      lastSuggestedAt: now,
-    },
-    reveal: {
-      id: `demo-reveal-${now}`,
-      userId,
-      insightId,
-      reason: "browser demo interaction",
-      priority: 1,
-      status: "pending",
-      createdAt: now,
-      title: "这句话背后的线索",
-      text: `我抓到一条线索：${text}`,
-    },
-  };
-}
-
-function addConfirmedInsightToProfile(profile: GrowthProfile, insight: GrowthInsight, now: number): GrowthProfile {
-  const item = {
-    id: insight.id,
-    title: insight.title,
-    text: insight.text,
-    evidenceIds: insight.evidenceIds,
-    confidence: insight.confidence,
-    confirmedAt: now,
-  };
-  const withoutExisting = <T extends { id: string }>(items: T[]) => items.filter((current) => current.id !== insight.id);
-
-  if (insight.type === "goal") {
-    return { ...profile, updatedAt: now, goals: [item, ...withoutExisting(profile.goals)] };
-  }
-
-  if (insight.type === "strength") {
-    return { ...profile, updatedAt: now, strengths: [item, ...withoutExisting(profile.strengths)] };
-  }
-
-  if (insight.type === "preference") {
-    return { ...profile, updatedAt: now, preferences: [item, ...withoutExisting(profile.preferences)] };
-  }
-
-  if (insight.type === "open_question") {
-    return { ...profile, updatedAt: now, openQuestions: [item, ...withoutExisting(profile.openQuestions)] };
-  }
-
-  return { ...profile, updatedAt: now };
 }
 
 export function useChat() {
@@ -230,7 +123,6 @@ export function useChat() {
     setRelationship((current) => current ?? DEFAULT_RELATIONSHIP);
     setGreeting(nextCharacter.catchphrase || "我在。");
     setEmotion("idle");
-    writeBrowserCharacterFallback(nextCharacter);
   }, []);
 
   const syncPendingMessages = useCallback((messages: PendingChatMessage[]) => {

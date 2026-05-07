@@ -61,9 +61,9 @@ function createBrowserDemoInsight(userId: string, userMessage: string, now: numb
   insight: GrowthInsight;
   reveal: (import("../types").RevealCandidate & { text?: string; title?: string }) | null;
 } {
-  const text = /交互|点击|对齐|实现|完成|demo|MVP/i.test(userMessage)
-    ? "你在意的不是页面看起来像聊天，而是每一次点击都能让用户感觉到 OC 正在接住、理解、沉淀和回应。"
-    : "你更需要的是一个能先接住真实经历、再慢慢形成判断的 OC，而不是一个只会立刻给结论的工具。";
+  const text = /交互|点击|实现|完成|demo|MVP/i.test(userMessage)
+    ? "你在意的不是页面看起来像聊天，而是每一次点击都要让用户感觉到 OC 在回应、理解并继续推进。"
+    : "你更需要的是一个能先听懂真实经历、再慢慢形成判断的 OC，而不是一个只会立刻给结论的工具。";
   const insightId = `demo-insight-${now}`;
 
   return {
@@ -122,13 +122,6 @@ function addConfirmedInsightToProfile(profile: GrowthProfile, insight: GrowthIns
   }
 
   return { ...profile, updatedAt: now };
-}
-
-function createDismissedReveal(current: NonNullable<ReturnType<typeof createBrowserDemoInsight>["reveal"]>, status: "confirmed" | "dismissed") {
-  return {
-    ...current,
-    status,
-  };
 }
 
 export function createBrowserClient(): { client: OcWorldClient; capabilities: PlatformCapabilities } {
@@ -345,9 +338,7 @@ export function createBrowserClient(): { client: OcWorldClient; capabilities: Pl
 
   return {
     client,
-    capabilities: {
-      client,
-    },
+    capabilities: {},
   };
 }
 

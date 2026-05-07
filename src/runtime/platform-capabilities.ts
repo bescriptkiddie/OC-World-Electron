@@ -12,7 +12,6 @@ export interface FloatingOcCapability {
 }
 
 export interface PlatformCapabilities {
-  client?: OcWorldClient;
   tts?: OcWorldClient["tts"];
   asr?: OcWorldClient["asr"];
   imageGen?: {
