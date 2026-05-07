@@ -284,11 +284,11 @@
           <div class="iteration">
             <div class="iteration-card">
               <div class="iteration-label">本轮迭代时间</div>
-              <div class="iteration-value">2026-05-07 18:17:59 CST</div>
+              <div class="iteration-value">2026-05-07 18:42:05 CST</div>
               <ul class="mini-list">
-                <li>补齐 task-noise reviewer 回归：模糊推进语句不会提成事项</li>
-                <li>保留 realtime MVP release intent 正向事项路径，并避免把 Ship 信号串进 backend 事项</li>
-                <li>growth / backend tests 已补 reviewer 指向的两条边界回归</li>
+                <li>单条 deferred insight work-item 不再立刻抬成 project</li>
+                <li>strong-intent 与 realtime MVP release path 仍保留 project 聚合</li>
+                <li>chat / growth / backend tests 已补 project gate 与异步空项目回归</li>
                 <li>全量回归 158 / 158 通过，build 通过</li>
               </ul>
             </div>
@@ -321,7 +321,7 @@
           <div class="status-grid">
             <div class="status-item">
               <div class="status-title">产品</div>
-              <div class="status-value">memory / relationship / task noise 三类基础 drift guardrail 已开始拦脏写回与脏事项</div>
+              <div class="status-value">memory / relationship / task noise / project promotion 四类基础治理已开始拦脏写回与脏聚合</div>
             </div>
             <div class="status-item">
               <div class="status-title">架构</div>
@@ -337,7 +337,7 @@
             </div>
           </div>
           <div class="legend">
-            <span class="pill good">已完成：Hermes session event store、writeback ledger、writeback approve/reject/revert bridge、user-scoped mutation guard、memory defer、relationship overfit、task-noise evaluator mismatch guardrail</span>
+            <span class="pill good">已完成：Hermes session event store、writeback ledger、writeback approve/reject/revert bridge、user-scoped mutation guard、memory defer、relationship overfit、task-noise evaluator mismatch、project promotion gate</span>
             <span class="pill warn">待处理：relationship 目前只发 warning，不会拦截；project 聚合还没接同级 drift guardrail</span>
             <span class="pill bad">未接：renderer 侧还没有消费 relationship drift、memory defer、writeback 审批的统一治理面板</span>
           </div>
@@ -361,6 +361,7 @@
               <li>prompt 开始基于当前语境提取相关记忆、相关项目、相关事项，不再把整包 retrieval 直接挂在 snapshot 上。</li>
               <li>recall hint 现在会顺带带出相关记忆和相关事项，更像可用的轻提醒。</li>
               <li>task / project 的生成开始更克制，不再只要沾上关键词就粗暴落项目。</li>
+              <li>单条 deferred insight 不再立刻被抬成 project，只有更明确的推进信号才会继续聚合。</li>
               <li>vague strong-intent 不再直接生成事项，而会转成一条可解释的 `evaluator_mismatch` drift signal。</li>
               <li>Hermes 在主线里只暴露 bridge 契约，没有伪装成“已经全接通工具 runtime”。</li>
             </ul>
@@ -396,6 +397,7 @@
               <li><strong>Recall</strong>：手动评估站到“读新快照”这一边，提示文本也开始接 long-term memory / work-item 上下文。</li>
               <li><strong>Memory Retrieval</strong>：从 snapshot 中拆出，变成按 querySignals 取相关内容的独立层。</li>
               <li><strong>Work / Project 聚合</strong>：开始从“粗关键词触发”收成“强意图 + 规范化标题聚合”，并给模糊强意图补上 drift 解释层。</li>
+              <li><strong>Project Gate</strong>：单条 deferred insight work-item 不再直接抬升成 project，避免把低置信记忆候选绕道写成长期推进面。</li>
             </ul>
           </div>
 
@@ -432,7 +434,7 @@
               <li>`electron/services/recall.ts`：recall 文本开始拼接相关记忆和相关事项。</li>
               <li>`electron/services/work-items.ts`：强意图过滤、任务信号收紧、标题归一化合并，并屏蔽 vague task 被默认实时任务误提权；同时避免把 realtime MVP 信号串进 backend 事项。</li>
               <li>`electron/services/growth-pipeline.ts`：task signal 会先过 drift guardrail，模糊强意图改写成 `evaluator_mismatch` 并落盘。</li>
-              <li>`electron/services/projects.ts`：按规范化标题聚合项目，减少重复 project。</li>
+              <li>`electron/services/projects.ts`：只让更明确的推进信号进入项目聚合，单条 deferred insight 不再直接抬升为 project。</li>
             </ul>
           </div>
 
@@ -468,6 +470,16 @@
             <div>
               <div class="column-tag">Iteration Log</div>
               <h2>本轮迭代记录</h2>
+            </div>
+          </div>
+
+          <div class="entry">
+            <div class="entry-head">
+              <div class="entry-title">给 project 聚合补上 deferred insight 闸门</div>
+              <div class="entry-time">2026-05-07 18:42:05 CST</div>
+            </div>
+            <div class="entry-body">
+              现在单条 deferred insight 产生的 work-item 不会立刻被抬成 project；只有更明确的推进信号才继续进入项目层。同时补了 chat-engine 的异步空项目回归，防止 fire-and-forget pipeline 把旧空文件误判成未落盘。
             </div>
           </div>
 

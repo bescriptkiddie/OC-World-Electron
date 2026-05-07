@@ -33,11 +33,11 @@ async function waitForFile(filePath: string, retries = 20) {
   throw new Error(`Timed out waiting for ${filePath}`);
 }
 
-async function waitForProject(projectsPath: string, retries = 20) {
+async function waitForProjectsFile(projectsPath: string, retries = 20) {
   for (let index = 0; index < retries; index += 1) {
     try {
       const projects = await readJson<{ projects: Array<{ title: string }> }>(projectsPath);
-      if (projects.projects[0]?.title) {
+      if (Array.isArray(projects.projects)) {
         return projects;
       }
     } catch {
@@ -165,14 +165,15 @@ describe("chat engine", () => {
     const evidence = await readJson<Array<{ text: string }>>(evidencePath);
     const awarenessFiles = await import("node:fs/promises").then((fs) => fs.readdir(awarenessDir));
     const workItemFiles = await import("node:fs/promises").then((fs) => fs.readdir(workItemsDir));
-    const projects = await waitForProject(projectsPath);
+    const projects = await waitForProjectsFile(projectsPath);
 
     expect(insights[0]?.title).toBe("做一个会慢慢理解人的成长伙伴");
     expect(evidence.length).toBeGreaterThan(0);
     expect(awarenessFiles.length).toBeGreaterThan(0);
     expect(workItemFiles.length).toBeGreaterThan(0);
-    expect(projects.projects[0]?.title).toContain("做一个会慢慢理解人的成长伙伴");
+    expect(projects.projects).toEqual([]);
   });
+
 
   it("keeps chat working when growth distillation fails", async () => {
     vi.spyOn(distillationModule, "distillGrowthTurn").mockImplementation(() => {

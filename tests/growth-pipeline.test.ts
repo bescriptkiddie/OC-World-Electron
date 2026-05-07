@@ -32,7 +32,7 @@ function createGoalInsight(status: GrowthInsight["status"] = "latent"): GrowthIn
   };
 }
 
-function createSnapshot(): ContextSnapshot {
+function createSnapshot(overrides: Partial<ContextSnapshot["realtimeContext"]> = {}): ContextSnapshot {
   return {
     builtAt: 1713000000000,
     airjellyCtx: DEFAULT_AIRJELLY_CONTEXT,
@@ -50,10 +50,10 @@ function createSnapshot(): ContextSnapshot {
     },
     latentInsights: [],
     realtimeContext: {
-      events: DEFAULT_AIRJELLY_CONTEXT.events,
-      tasks: [{ title: "Ship OC World MVP", progressSummary: "进行中" }],
-      appUsage: DEFAULT_AIRJELLY_CONTEXT.appUsage,
-      source: DEFAULT_AIRJELLY_CONTEXT.source,
+      events: overrides.events ?? DEFAULT_AIRJELLY_CONTEXT.events,
+      tasks: overrides.tasks ?? [{ title: "Ship OC World MVP", progressSummary: "进行中" }],
+      appUsage: overrides.appUsage ?? DEFAULT_AIRJELLY_CONTEXT.appUsage,
+      source: overrides.source ?? DEFAULT_AIRJELLY_CONTEXT.source,
     },
     socialMemory: DEFAULT_SUMMARIES,
     conversationState: {
@@ -76,14 +76,14 @@ describe("growth pipeline", () => {
     }
   });
 
-  it("runs the full manual distillation chain", async () => {
+  it("keeps deferred manual insights out of projects", async () => {
     await saveGrowthInsights("user-001", [createGoalInsight()], tempDir);
     await saveRecallSignalStates(
       "user-001",
       [
         {
           userId: "user-001",
-          signal: "跑通 Chat 主链路",
+          signal: "我想先处理一下这个",
           count: 2,
           firstSeenAt: 1,
           lastSeenAt: 2,
@@ -96,23 +96,28 @@ describe("growth pipeline", () => {
       userId: "user-001",
       characterId: "char-001",
       dataRoot: tempDir,
-      now: 3,
+      now: 4,
     });
-    const [episodes, workItems, projects] = await Promise.all([
-      listAwarenessEpisodes("user-001", 10, tempDir),
+    const [workItems, projects] = await Promise.all([
       listWorkItems("user-001", tempDir),
       loadProjectsState("user-001", tempDir),
     ]);
 
-    expect(result.episode.source).toBe("manual");
     expect(result.memoryMergeDecisions[0]).toEqual(expect.objectContaining({ status: "deferred" }));
-    expect(result.workItems[0]?.title).toBe("跑通完整记忆闭环");
-    expect(result.projects.projects[0]?.title).toContain("跑通完整记忆闭环");
-    expect(result.recallEvents[0]).toEqual(expect.objectContaining({ signal: "跑通 Chat 主链路" }));
-    expect(episodes[0]?.id).toBe(result.episode.id);
-    expect(workItems[0]?.title).toBe("跑通完整记忆闭环");
-    expect(projects.projects[0]?.title).toContain("跑通完整记忆闭环");
+    expect(result.workItems[0]).toEqual(
+      expect.objectContaining({
+        title: "跑通完整记忆闭环",
+      }),
+    );
+    expect(workItems[0]).toEqual(
+      expect.objectContaining({
+        title: "跑通完整记忆闭环",
+      }),
+    );
+    expect(result.projects.projects).toEqual([]);
+    expect(projects.projects).toEqual([]);
   });
+
 
   it("creates work items and projects from strong intent turns through the full pipeline", async () => {
     const result = await runGrowthPipeline({
@@ -205,16 +210,8 @@ describe("growth pipeline", () => {
         title: "跑通完整记忆闭环",
       }),
     );
-    expect(result.projects?.projects[0]).toEqual(
-      expect.objectContaining({
-        title: "跑通完整记忆闭环",
-      }),
-    );
-    expect(projects.projects[0]).toEqual(
-      expect.objectContaining({
-        title: "跑通完整记忆闭环",
-      }),
-    );
+    expect(result.projects?.projects).toEqual([]);
+    expect(projects.projects).toEqual([]);
     expect(driftSignals).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

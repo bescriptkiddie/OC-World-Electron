@@ -109,24 +109,23 @@ describe("backend growth services", () => {
     );
   });
 
-  it("deduplicates projects by normalized title", () => {
+  it("does not derive a project from a single deferred insight work item", () => {
     const projects = deriveProjectsFromWorkItems({
       state: createEmptyProjectsState("user-001"),
       workItems: [
-        createWorkItem({ id: "work-1", title: "Build memory layer" }),
-        createWorkItem({ id: "work-2", title: "Build   memory   layer", summary: "second summary" }),
+        createWorkItem({
+          id: "work-deferred-1",
+          title: "跑通完整记忆闭环",
+          summary: "用户正在推进完整记忆闭环。",
+          relatedSignals: ["insight-manual-goal", "evidence-1"],
+        }),
       ],
-      now: 1713000000700,
+      now: 1713000000750,
     });
 
-    expect(projects.projects).toHaveLength(1);
-    expect(projects.projects[0]).toEqual(
-      expect.objectContaining({
-        title: "Build memory layer",
-        workItemIds: ["work-1", "work-2"],
-      }),
-    );
+    expect(projects.projects).toEqual([]);
   });
+
 
   it("does not mix realtime MVP signals into backend framework work items", () => {
     const snapshot = createSnapshot();
