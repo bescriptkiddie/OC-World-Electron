@@ -284,12 +284,12 @@
           <div class="iteration">
             <div class="iteration-card">
               <div class="iteration-label">本轮迭代时间</div>
-              <div class="iteration-value">2026-05-07 17:37:10 CST</div>
+              <div class="iteration-value">2026-05-07 18:17:59 CST</div>
               <ul class="mini-list">
-                <li>vague strong-intent 不再直接生成 work-item，会转成 `evaluator_mismatch` drift signal</li>
-                <li>growth pipeline 已接上 task-noise guardrail，并保留强意图正向 work-item 路径</li>
-                <li>drift / growth / backend tests 已补齐 work-item noise 回归</li>
-                <li>全量回归 156 / 156 通过，build 通过</li>
+                <li>补齐 task-noise reviewer 回归：模糊推进语句不会提成事项</li>
+                <li>保留 realtime MVP release intent 正向事项路径，并避免把 Ship 信号串进 backend 事项</li>
+                <li>growth / backend tests 已补 reviewer 指向的两条边界回归</li>
+                <li>全量回归 158 / 158 通过，build 通过</li>
               </ul>
             </div>
             <div class="iteration-card">
@@ -329,11 +329,11 @@
             </div>
             <div class="status-item">
               <div class="status-title">代码</div>
-              <div class="status-value">chat / pipeline / preload / IPC / runtime tests 已补齐 task-noise 在内的三类 guardrail 回归</div>
+              <div class="status-value">chat / pipeline / preload / IPC / runtime tests 已补齐 task-noise 在内的三类 guardrail 回归，并锁住 reviewer 补充边界</div>
             </div>
             <div class="status-item">
               <div class="status-title">测试</div>
-              <div class="status-value">全量 156 / 156，build 通过</div>
+              <div class="status-value">全量 158 / 158，build 通过</div>
             </div>
           </div>
           <div class="legend">
@@ -430,7 +430,7 @@
               <li>`electron/services/chat-engine.ts`：聊天写回后会清 snapshot 缓存，并在 prompt 前调用 retrieval。</li>
               <li>`electron/services/recall-service.ts`：手动 recall 评估强制 `bypassCache`。</li>
               <li>`electron/services/recall.ts`：recall 文本开始拼接相关记忆和相关事项。</li>
-              <li>`electron/services/work-items.ts`：强意图过滤、任务信号收紧、标题归一化合并，并屏蔽 vague task 被默认实时任务误提权。</li>
+              <li>`electron/services/work-items.ts`：强意图过滤、任务信号收紧、标题归一化合并，并屏蔽 vague task 被默认实时任务误提权；同时避免把 realtime MVP 信号串进 backend 事项。</li>
               <li>`electron/services/growth-pipeline.ts`：task signal 会先过 drift guardrail，模糊强意图改写成 `evaluator_mismatch` 并落盘。</li>
               <li>`electron/services/projects.ts`：按规范化标题聚合项目，减少重复 project。</li>
             </ul>
@@ -468,6 +468,16 @@
             <div>
               <div class="column-tag">Iteration Log</div>
               <h2>本轮迭代记录</h2>
+            </div>
+          </div>
+
+          <div class="entry">
+            <div class="entry-head">
+              <div class="entry-title">补齐 task-noise reviewer 边界回归</div>
+              <div class="entry-time">2026-05-07 18:17:59 CST</div>
+            </div>
+            <div class="entry-body">
+              新增两条 reviewer 指向回归：一条锁住“我想继续推进这个”不会误提成事项，另一条锁住 realtime MVP release intent 仍能走正向事项路径，同时不把 Ship 信号串进 backend framework 事项。主链返回值、存储结果和 build 都重新验证过。
             </div>
           </div>
 

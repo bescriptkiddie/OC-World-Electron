@@ -128,6 +128,27 @@ describe("backend growth services", () => {
     );
   });
 
+  it("does not mix realtime MVP signals into backend framework work items", () => {
+    const snapshot = createSnapshot();
+    snapshot.realtimeContext.tasks = [{ title: "Ship OC World MVP", progressSummary: "in progress" }];
+
+    const rankedSignals = rankTaskWorthySignals({
+      userId: "user-001",
+      userMessage: "我想把 OC World 的后端框架先搭起来。",
+      growthEvent: null,
+      snapshot,
+      now: 1713000000975,
+    });
+
+    expect(rankedSignals[0]).toEqual(
+      expect.objectContaining({
+        title: "Build backend framework",
+        worthy: true,
+      }),
+    );
+    expect(rankedSignals[0]?.relatedSignals).not.toContain("Ship OC World MVP");
+  });
+
   it("does not promote vague progress-only strong intent messages into work items", () => {
     const rankedSignals = rankTaskWorthySignals({
       userId: "user-001",

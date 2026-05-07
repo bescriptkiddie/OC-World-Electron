@@ -176,6 +176,55 @@ describe("growth pipeline", () => {
     );
   });
 
+  it("keeps existing insight work items when a vague turn only produces task drift", async () => {
+    await saveGrowthInsights("user-001", [createGoalInsight()], tempDir);
+
+    const result = await runGrowthPipeline({
+      userId: "user-001",
+      userMessage: "我想先处理一下这个",
+      ocResponse: "先说清你要推进哪一块。",
+      growthEvent: null,
+      snapshot: createSnapshot(),
+      dataRoot: tempDir,
+      now: 1713000000850,
+    });
+
+    const [workItems, projects, driftSignals] = await Promise.all([
+      listWorkItems("user-001", tempDir),
+      loadProjectsState("user-001", tempDir),
+      listDriftSignals({ userId: "user-001" }, tempDir),
+    ]);
+
+    expect(result.workItems[0]).toEqual(
+      expect.objectContaining({
+        title: "跑通完整记忆闭环",
+      }),
+    );
+    expect(workItems[0]).toEqual(
+      expect.objectContaining({
+        title: "跑通完整记忆闭环",
+      }),
+    );
+    expect(result.projects?.projects[0]).toEqual(
+      expect.objectContaining({
+        title: "跑通完整记忆闭环",
+      }),
+    );
+    expect(projects.projects[0]).toEqual(
+      expect.objectContaining({
+        title: "跑通完整记忆闭环",
+      }),
+    );
+    expect(driftSignals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "evaluator_mismatch",
+          recommendedAction: "ask_user",
+        }),
+      ]),
+    );
+  });
+
   it("records evaluator mismatch drift signals for vague strong-intent turns", async () => {
     const result = await runGrowthPipeline({
       userId: "user-001",
