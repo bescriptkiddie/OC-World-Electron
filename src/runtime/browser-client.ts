@@ -250,6 +250,11 @@ export function createBrowserClient(): { client: OcWorldClient; capabilities: Pl
         throw new Error("Writeback revert is unavailable in browser mode");
       },
     },
+    drift: {
+      async listSignals() {
+        return [];
+      },
+    },
     workItems: {
       async list() {
         return [];

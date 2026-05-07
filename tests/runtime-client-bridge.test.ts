@@ -47,6 +47,46 @@ describe("runtime client bridges", () => {
     expect(revert).toHaveBeenCalledWith({ userId: "user-001", proposalId: "wb-1" });
   });
 
+  it("forwards drift signal queries through the electron client", async () => {
+    const listSignals = vi.fn(async () => []);
+
+    Object.defineProperty(window, "ocWorld", {
+      configurable: true,
+      value: {
+        chat: { sendMessage: vi.fn(), cancelActive: vi.fn(), getGreeting: vi.fn() },
+        tts: { synthesize: vi.fn(), cancelActive: vi.fn(), getStatus: vi.fn() },
+        asr: { start: vi.fn(), sendAudio: vi.fn(), stop: vi.fn(), getStatus: vi.fn(), onTranscript: vi.fn(), onError: vi.fn() },
+        character: { getCurrent: vi.fn(), saveCurrent: vi.fn() },
+        timeline: { list: vi.fn() },
+        relationship: { get: vi.fn(), save: vi.fn(), setIntimacyForDemo: vi.fn() },
+        memory: { summaries: vi.fn(), history: vi.fn(), getLongTerm: vi.fn(), getVoice: vi.fn(), runDistill: vi.fn() },
+        awareness: { list: vi.fn() },
+        writeback: { list: vi.fn(), approve: vi.fn(), reject: vi.fn(), revert: vi.fn() },
+        drift: { listSignals },
+        workItems: { list: vi.fn() },
+        projects: { list: vi.fn() },
+        recall: { listRecent: vi.fn(), evaluateNow: vi.fn(), startPolling: vi.fn(), stopPolling: vi.fn(), onHint: vi.fn() },
+        growth: { getLatestReveal: vi.fn(), listInsights: vi.fn(), getProfile: vi.fn(), confirmInsight: vi.fn(), dismissReveal: vi.fn(), rejectInsight: vi.fn() },
+        airjelly: { getContext: vi.fn() },
+        hermes: { getStatus: vi.fn(), getBridgeStatus: vi.fn(), listSessionEvents: vi.fn(), onStatusChanged: vi.fn(), onSessionEvent: vi.fn() },
+        imageGen: { generate: vi.fn() },
+        floatingOc: { show: vi.fn(), close: vi.fn(), toggle: vi.fn(), getState: vi.fn(), focusMain: vi.fn(), startDrag: vi.fn(), dragMove: vi.fn(), endDrag: vi.fn() },
+      },
+    });
+
+    const { client } = createElectronClient();
+
+    await client.drift!.listSignals({ userId: "user-001", limit: 5 });
+
+    expect(listSignals).toHaveBeenCalledWith({ userId: "user-001", limit: 5 });
+  });
+
+  it("returns an empty drift list in browser mode", async () => {
+    const { client } = createBrowserClient();
+
+    await expect(client.drift!.listSignals({ userId: "user-001" })).resolves.toEqual([]);
+  });
+
   it("throws clear errors for browser-only writeback mutations", async () => {
     const { client } = createBrowserClient();
 

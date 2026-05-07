@@ -11,6 +11,7 @@ import type {
   ProjectsState,
   RecallEvent,
   RecallSignalState,
+  DriftSignal,
   Relationship,
   RevealCandidate,
   WorkItem,
@@ -244,6 +245,26 @@ const recallSignalStateSchema = z.object({
   lastTriggeredAt: z.number().optional(),
 });
 
+const driftSignalSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  turnId: z.string(),
+  type: z.enum([
+    "goal_drift",
+    "memory_pollution",
+    "stale_context",
+    "writeback_conflict",
+    "relationship_overfit",
+    "recall_noise",
+    "evaluator_mismatch",
+  ]),
+  severity: z.enum(["info", "warning", "critical"]),
+  summary: z.string(),
+  evidenceEventIds: z.array(z.string()),
+  recommendedAction: z.enum(["observe", "defer_writeback", "pause_distillation", "ask_user", "revert"]),
+  createdAt: z.number(),
+});
+
 const writebackProposalSchema = z.object({
   id: z.string(),
   userId: z.string(),
@@ -310,6 +331,7 @@ export const workItemListSchema = z.array(workItemSchema);
 export const projectsStateListSchema = projectsStateSchema;
 export const recallEventListSchema = z.array(recallEventSchema);
 export const recallSignalStateListSchema = z.array(recallSignalStateSchema);
+export const driftSignalListSchema = z.array(driftSignalSchema);
 export const writebackProposalListSchema = z.array(writebackProposalSchema);
 export const hermesSessionEventQueryStateSchema = hermesSessionEventQuerySchema;
 
@@ -383,4 +405,8 @@ export function parseRecallEventList(value: unknown): RecallEvent[] {
 
 export function parseRecallSignalStateList(value: unknown): RecallSignalState[] {
   return recallSignalStateListSchema.parse(value) as RecallSignalState[];
+}
+
+export function parseDriftSignalList(value: unknown): DriftSignal[] {
+  return driftSignalListSchema.parse(value) as DriftSignal[];
 }

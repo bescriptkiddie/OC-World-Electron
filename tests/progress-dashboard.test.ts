@@ -11,5 +11,6 @@ describe("progress dashboard contract", () => {
     expect(html).toContain("时间线只追加，不改写旧条目");
     expect(html).toContain("2026-05-04 01:20:01 CST");
     expect(html).toContain("2026-05-07 15:31:00 CST");
+    expect(html).toContain("2026-05-07 16:06:00 CST");
   });
 });

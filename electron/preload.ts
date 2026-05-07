@@ -80,6 +80,9 @@ contextBridge.exposeInMainWorld("ocWorld", {
     reject: (payload: { userId: string; proposalId: string; feedback?: string }) => ipcRenderer.invoke("writeback:reject", payload),
     revert: (payload: { userId: string; proposalId: string }) => ipcRenderer.invoke("writeback:revert", payload),
   },
+  drift: {
+    listSignals: (payload: { userId: string; limit?: number }) => ipcRenderer.invoke("drift:list-signals", payload),
+  },
   workItems: {
     list: (userId: string) => ipcRenderer.invoke("work-items:list", userId),
   },

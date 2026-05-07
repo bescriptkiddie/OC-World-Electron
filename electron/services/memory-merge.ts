@@ -1,6 +1,7 @@
-import type { AwarenessEpisode, GrowthInsight } from "../../src/types";
+import type { AwarenessEpisode, GrowthInsight, DriftSignal } from "../../src/types";
 import { appendAwarenessNote, appendConfirmedMemoryNote } from "./unified-memory";
 import { appendWritebackProposal } from "./writeback-ledger";
+import { evaluateWritebackDriftSignals } from "./drift-guardrails";
 
 type MemoryMergeDecisionStatus = "merged" | "deferred" | "discarded";
 
@@ -84,7 +85,7 @@ export async function mergeAwarenessCandidates(input: {
   insights: GrowthInsight[];
   now: number;
   dataRoot?: string;
-}): Promise<MemoryMergeDecision[]> {
+}): Promise<{ decisions: MemoryMergeDecision[]; driftSignals: DriftSignal[] }> {
   const decisions = input.episode.candidateMemoryUpdates.map((candidate, index) => {
     const relatedInsightId = input.episode.relatedInsightIds[index] ?? input.episode.relatedInsightIds[0];
     const insight = input.insights.find((item) => item.id === relatedInsightId);
@@ -94,6 +95,8 @@ export async function mergeAwarenessCandidates(input: {
       candidate,
     });
   });
+
+  const driftSignals: DriftSignal[] = [];
 
   for (const decision of decisions) {
     const insight = decision.insightId
@@ -119,6 +122,17 @@ export async function mergeAwarenessCandidates(input: {
       createdAt: input.now,
       dataRoot: input.dataRoot,
     }).catch(() => null);
+
+    driftSignals.push(
+      ...evaluateWritebackDriftSignals({
+        userId: input.episode.userId,
+        turnId: input.episode.id,
+        decision,
+        confidence: getDecisionConfidence(insight),
+        evidenceEventIds: insight?.evidenceIds ?? [],
+        createdAt: input.now,
+      }),
+    );
   }
 
   await appendAwarenessNote({
@@ -129,5 +143,5 @@ export async function mergeAwarenessCandidates(input: {
     lines: decisions.map((decision) => `${decision.status} ${decision.target} ${decision.insightId ?? "no-insight"}：${decision.reason}`),
   });
 
-  return decisions;
+  return { decisions, driftSignals };
 }

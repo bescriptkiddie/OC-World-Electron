@@ -2,6 +2,7 @@ import { mkdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { listDriftSignals } from "../electron/services/drift-guardrails";
 import { runManualDistillationPipeline, runGrowthPipeline } from "../electron/services/growth-pipeline";
 import { saveGrowthInsights } from "../electron/services/memory";
 import { listWritebackProposals } from "../electron/services/writeback-ledger";
@@ -153,7 +154,10 @@ describe("growth pipeline", () => {
       dataRoot: tempDir,
       now: 3,
     });
-    const proposals = await listWritebackProposals("user-001", tempDir);
+    const [proposals, signals] = await Promise.all([
+      listWritebackProposals("user-001", tempDir),
+      listDriftSignals({ userId: "user-001" }, tempDir),
+    ]);
 
     expect(result.memoryMergeDecisions[0]).toEqual(expect.objectContaining({ status: "merged", target: "memory" }));
     expect(proposals).toEqual([
@@ -164,6 +168,15 @@ describe("growth pipeline", () => {
         status: "merged",
         operation: "append",
         target: "memory",
+      }),
+    ]);
+    expect(signals).toEqual([
+      expect.objectContaining({
+        userId: "user-001",
+        turnId: result.episode.id,
+        type: "memory_pollution",
+        severity: "warning",
+        recommendedAction: "observe",
       }),
     ]);
   });

@@ -6,6 +6,7 @@ import type {
   RecallEvent,
   WorkItem,
 } from "../../src/types";
+import { appendDriftSignals } from "./drift-guardrails";
 import { buildContextSnapshot } from "./context-snapshot";
 import { distillGrowthTurn } from "./distillation";
 import { getMemoryFeatureFlags } from "./feature-flags";
@@ -210,7 +211,7 @@ export async function runGrowthPipeline(input: RunGrowthPipelineInput): Promise<
     distilled,
     insightIds: reveal.insights.map((item) => item.id),
   });
-  const memoryMergeDecisions = await mergeAwarenessCandidates({
+  const { decisions: memoryMergeDecisions, driftSignals } = await mergeAwarenessCandidates({
     episode,
     insights: reveal.insights,
     now,
@@ -222,6 +223,7 @@ export async function runGrowthPipeline(input: RunGrowthPipelineInput): Promise<
     saveGrowthEvidence(input.userId, merged.evidence, input.dataRoot),
     saveGrowthInsights(input.userId, reveal.insights, input.dataRoot),
     saveRevealQueue(input.userId, reveal.queue, input.dataRoot),
+    appendDriftSignals(driftSignals, input.dataRoot),
     appendGrowthLog(
       input.userId,
       {
@@ -322,7 +324,7 @@ export async function runManualDistillationPipeline(input: {
     };
   }
 
-  const memoryMergeDecisions = await mergeAwarenessCandidates({
+  const { decisions: memoryMergeDecisions, driftSignals } = await mergeAwarenessCandidates({
     episode,
     insights,
     now,
@@ -330,6 +332,7 @@ export async function runManualDistillationPipeline(input: {
   });
 
   await appendAwarenessEpisode(episode, dataRoot);
+  await appendDriftSignals(driftSignals, dataRoot);
   const workItems = await syncWorkItemsFromInsights({
     userId: input.userId,
     insights,

@@ -2,9 +2,10 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { listDriftSignals } from "../electron/services/drift-guardrails";
 import { mergeAwarenessCandidates } from "../electron/services/memory-merge";
-import { listWritebackProposals } from "../electron/services/writeback-ledger";
 import { loadLongTermMemory } from "../electron/services/unified-memory";
+import { listWritebackProposals } from "../electron/services/writeback-ledger";
 import type { AwarenessEpisode, GrowthInsight } from "../src/types";
 
 let tempDir = "";
@@ -56,7 +57,7 @@ describe("memory merge", () => {
   });
 
   it("defers latent candidates instead of writing long-term memory", async () => {
-    const decisions = await mergeAwarenessCandidates({
+    const result = await mergeAwarenessCandidates({
       episode: createEpisode(),
       insights: [createInsight("latent")],
       now: 2,
@@ -67,7 +68,7 @@ describe("memory merge", () => {
       listWritebackProposals("user-001", tempDir),
     ]);
 
-    expect(decisions[0]).toEqual(expect.objectContaining({ status: "deferred", target: "none" }));
+    expect(result.decisions[0]).toEqual(expect.objectContaining({ status: "deferred", target: "none" }));
     expect(memory.memoryMarkdown).not.toContain("你反复在朝这个目标靠近。");
     expect(proposals).toEqual([
       expect.objectContaining({
@@ -81,7 +82,7 @@ describe("memory merge", () => {
   });
 
   it("merges confirmed candidates into memory.md", async () => {
-    const decisions = await mergeAwarenessCandidates({
+    const result = await mergeAwarenessCandidates({
       episode: createEpisode(),
       insights: [createInsight("confirmed")],
       now: 2,
@@ -89,20 +90,22 @@ describe("memory merge", () => {
     });
     const memory = await loadLongTermMemory("user-001", tempDir);
 
-    expect(decisions[0]).toEqual(expect.objectContaining({ status: "merged", target: "memory" }));
+    expect(result.decisions[0]).toEqual(expect.objectContaining({ status: "merged", target: "memory" }));
     expect(memory.memoryMarkdown).toContain("你反复在朝这个目标靠近。");
   });
 
   it("records writeback proposals for merge decisions", async () => {
-    await mergeAwarenessCandidates({
+    const result = await mergeAwarenessCandidates({
       episode: createEpisode(),
       insights: [createInsight("confirmed")],
       now: 2,
       dataRoot: tempDir,
     });
-
     const proposals = await listWritebackProposals("user-001", tempDir);
 
+    expect(result.decisions).toEqual([
+      expect.objectContaining({ status: "merged", target: "memory" }),
+    ]);
     expect(proposals).toEqual([
       expect.objectContaining({
         userId: "user-001",
@@ -120,7 +123,7 @@ describe("memory merge", () => {
     await mkdir(path.dirname(resolveWritebackProposalPath(tempDir)), { recursive: true });
     await writeFile(resolveWritebackProposalPath(tempDir), "{", "utf8");
 
-    const decisions = await mergeAwarenessCandidates({
+    const result = await mergeAwarenessCandidates({
       episode: createEpisode(),
       insights: [createInsight("confirmed")],
       now: 2,
@@ -128,7 +131,7 @@ describe("memory merge", () => {
     });
     const memory = await loadLongTermMemory("user-001", tempDir);
 
-    expect(decisions[0]).toEqual(expect.objectContaining({ status: "merged", target: "memory" }));
+    expect(result.decisions[0]).toEqual(expect.objectContaining({ status: "merged", target: "memory" }));
     expect(memory.memoryMarkdown).toContain("你反复在朝这个目标靠近。");
   });
 
@@ -153,7 +156,7 @@ describe("memory merge", () => {
   });
 
   it("discards rejected candidates", async () => {
-    const decisions = await mergeAwarenessCandidates({
+    const result = await mergeAwarenessCandidates({
       episode: createEpisode(),
       insights: [createInsight("rejected")],
       now: 2,
@@ -161,7 +164,7 @@ describe("memory merge", () => {
     });
     const proposals = await listWritebackProposals("user-001", tempDir);
 
-    expect(decisions[0]).toEqual(expect.objectContaining({ status: "discarded", target: "none" }));
+    expect(result.decisions[0]).toEqual(expect.objectContaining({ status: "discarded", target: "none" }));
     expect(proposals).toEqual([
       expect.objectContaining({
         userId: "user-001",
@@ -171,5 +174,34 @@ describe("memory merge", () => {
         target: "none",
       }),
     ]);
+  });
+
+  it("returns drift signals for low-confidence merged memory writes", async () => {
+    const result = await mergeAwarenessCandidates({
+      episode: createEpisode(),
+      insights: [createInsight("confirmed")],
+      now: 2,
+      dataRoot: tempDir,
+    });
+
+    expect(result.driftSignals).toEqual([
+      expect.objectContaining({
+        userId: "user-001",
+        turnId: "awareness-1",
+        type: "memory_pollution",
+        severity: "warning",
+      }),
+    ]);
+  });
+
+  it("does not persist drift signals during merge-only evaluation", async () => {
+    await mergeAwarenessCandidates({
+      episode: createEpisode(),
+      insights: [createInsight("confirmed")],
+      now: 2,
+      dataRoot: tempDir,
+    });
+
+    await expect(listDriftSignals({ userId: "user-001" }, tempDir)).resolves.toEqual([]);
   });
 });

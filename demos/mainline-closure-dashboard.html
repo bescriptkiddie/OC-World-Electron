@@ -284,12 +284,12 @@
           <div class="iteration">
             <div class="iteration-card">
               <div class="iteration-label">本轮迭代时间</div>
-              <div class="iteration-value">2026-05-07 15:31:00 CST</div>
+              <div class="iteration-value">2026-05-07 16:06:00 CST</div>
               <ul class="mini-list">
-                <li>writeback mutation 现在要求 userId，跨用户 proposal 不能再直接改</li>
-                <li>proposal 状态迁移已收紧，merged / discarded / reverted 不再伪装成 pending</li>
-                <li>facade 缺失 mutation service 时改成明确报错，不再吐 undefined</li>
-                <li>全量回归 139 / 139 通过，build 通过</li>
+                <li>drift signal 已从 growth pipeline 接到 JSONL 落盘、IPC、preload、runtime client</li>
+                <li>低置信 merged memory write 会产 memory_pollution warning，供后续 UI 与 guardrail 消费</li>
+                <li>Hermes / writeback / drift contract 回归已补齐，memory-merge 也补了 drift 地板</li>
+                <li>全量回归 145 / 145 通过，build 通过</li>
               </ul>
             </div>
             <div class="iteration-card">
@@ -321,25 +321,25 @@
           <div class="status-grid">
             <div class="status-item">
               <div class="status-title">产品</div>
-              <div class="status-value">writeback mutation 已通到 bridge、runtime，并带 user-scoped 保护</div>
+              <div class="status-value">writeback mutation 与 drift signal 都已通到治理链路</div>
             </div>
             <div class="status-item">
               <div class="status-title">架构</div>
-              <div class="status-value">Hermes event store + writeback mutation bridge + transition guardrails 已落地</div>
+              <div class="status-value">Hermes event store + writeback bridge + drift signal ledger 已落地</div>
             </div>
             <div class="status-item">
               <div class="status-title">代码</div>
-              <div class="status-value">preload / IPC / facade / runtime tests 已补齐 mutation 与 hardening 回归</div>
+              <div class="status-value">preload / IPC / facade / runtime / pipeline tests 已补齐 drift 回归</div>
             </div>
             <div class="status-item">
               <div class="status-title">测试</div>
-              <div class="status-value">全量 139 / 139，build 通过</div>
+              <div class="status-value">全量 145 / 145，build 通过</div>
             </div>
           </div>
           <div class="legend">
-            <span class="pill good">已完成：Hermes session event store、writeback ledger、writeback approve/reject/revert bridge、user-scoped mutation guard、runtime/facade/contract 回归</span>
-            <span class="pill warn">待处理：writeback 真正落到 UI 可操作入口，drift guardrails 和 recall / awareness 串联继续往前推</span>
-            <span class="pill bad">未接：renderer 侧还没有消费真实 writeback / Hermes 治理入口</span>
+            <span class="pill good">已完成：Hermes session event store、writeback ledger、writeback approve/reject/revert bridge、user-scoped mutation guard、drift signal 落盘与查询回归</span>
+            <span class="pill warn">待处理：drift guardrails 还只是最小规则版，后面要继续接 writeback defer / UI 可解释入口</span>
+            <span class="pill bad">未接：renderer 侧还没有消费 drift signal / writeback / Hermes 的统一治理面板</span>
           </div>
         </aside>
       </section>
@@ -464,6 +464,16 @@
             <div>
               <div class="column-tag">Iteration Log</div>
               <h2>本轮迭代记录</h2>
+            </div>
+          </div>
+
+          <div class="entry">
+            <div class="entry-head">
+              <div class="entry-title">补齐 drift signal 的最小治理链路</div>
+              <div class="entry-time">2026-05-07 16:06:00 CST</div>
+            </div>
+            <div class="entry-body">
+              低置信 merged memory write 现在会产出 `memory_pollution` warning，并落到 `drift/signals.jsonl`；同时 renderer 已经能经由 IPC / preload / runtime client 查询 drift signals，后面可以继续往 defer writeback 和 UI 可解释面板推进。
             </div>
           </div>
 

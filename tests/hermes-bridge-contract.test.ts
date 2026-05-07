@@ -7,7 +7,7 @@ afterEach(() => {
 });
 
 describe("hermes bridge contract", () => {
-  it("exposes writeback calls from preload", async () => {
+  it("exposes writeback and drift calls from preload", async () => {
     const exposeInMainWorld = vi.fn();
     const ipcRenderer = {
       invoke: vi.fn(),
@@ -28,21 +28,25 @@ describe("hermes bridge contract", () => {
     const approvePayload = { userId: "user-001", proposalId: "wb-1" };
     const rejectPayload = { userId: "user-001", proposalId: "wb-1", feedback: "not stable enough" };
     const revertPayload = { userId: "user-001", proposalId: "wb-1" };
+    const driftQuery = { userId: "user-001", limit: 5 };
 
     expect(api.writeback.list).toBeTypeOf("function");
     expect(api.writeback.approve).toBeTypeOf("function");
     expect(api.writeback.reject).toBeTypeOf("function");
     expect(api.writeback.revert).toBeTypeOf("function");
+    expect(api.drift.listSignals).toBeTypeOf("function");
 
     api.writeback.list(listQuery);
     api.writeback.approve(approvePayload);
     api.writeback.reject(rejectPayload);
     api.writeback.revert(revertPayload);
+    api.drift.listSignals(driftQuery);
 
     expect(ipcRenderer.invoke).toHaveBeenCalledWith("writeback:list", listQuery);
     expect(ipcRenderer.invoke).toHaveBeenCalledWith("writeback:approve", approvePayload);
     expect(ipcRenderer.invoke).toHaveBeenCalledWith("writeback:reject", rejectPayload);
     expect(ipcRenderer.invoke).toHaveBeenCalledWith("writeback:revert", revertPayload);
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith("drift:list-signals", driftQuery);
   });
 
   it("exposes hermes bridge calls and session event subscription from preload", async () => {
@@ -93,7 +97,7 @@ describe("hermes bridge contract", () => {
     expect(ipcRenderer.removeListener).toHaveBeenCalledWith("hermes:session-event", listener);
   });
 
-  it("registers hermes and writeback IPC handlers with stub responses", async () => {
+  it("registers hermes writeback and drift IPC handlers with stub responses", async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>();
     const ipcMain = {
       handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
@@ -115,6 +119,7 @@ describe("hermes bridge contract", () => {
       lastHealthCheckAt: null,
     });
     const onStatusChanged = vi.fn().mockReturnValue(vi.fn());
+    const listDriftSignals = vi.fn(async () => []);
 
     vi.doMock("electron", () => ({ BrowserWindow, ipcMain }));
     vi.doMock("../electron/services/chat-engine", () => ({ chat: vi.fn(), generateGreeting: vi.fn() }));
@@ -178,6 +183,10 @@ describe("hermes bridge contract", () => {
       rejectWritebackProposal,
       revertWritebackProposal,
     }));
+    vi.doMock("../electron/services/drift-guardrails", () => ({
+      appendDriftSignals: vi.fn(),
+      listDriftSignals,
+    }));
     vi.doMock("../electron/services/relationship", () => ({ getStage: vi.fn() }));
 
     const { registerIpcHandlers, unregisterIpcHandlers } = await import("../electron/ipc");
@@ -190,6 +199,7 @@ describe("hermes bridge contract", () => {
     expect(handlers.has("writeback:approve")).toBe(true);
     expect(handlers.has("writeback:reject")).toBe(true);
     expect(handlers.has("writeback:revert")).toBe(true);
+    expect(handlers.has("drift:list-signals")).toBe(true);
 
     await expect(handlers.get("hermes:get-bridge-status")?.({})).resolves.toEqual({
       connected: false,
@@ -217,9 +227,11 @@ describe("hermes bridge contract", () => {
     await expect(handlers.get("writeback:revert")?.({}, { userId: "user-001", proposalId: "wb-1" })).resolves.toEqual(
       expect.objectContaining({ id: "wb-1", status: "reverted" }),
     );
+    await expect(handlers.get("drift:list-signals")?.({}, { userId: "user-001", limit: 5 })).resolves.toEqual([]);
     expect(approveWritebackProposal).toHaveBeenCalledWith({ userId: "user-001", proposalId: "wb-1" });
     expect(rejectWritebackProposal).toHaveBeenCalledWith({ userId: "user-001", proposalId: "wb-1", feedback: "not stable enough" });
     expect(revertWritebackProposal).toHaveBeenCalledWith({ userId: "user-001", proposalId: "wb-1" });
+    expect(listDriftSignals).toHaveBeenCalledWith({ userId: "user-001", limit: 5 });
 
     unregisterIpcHandlers();
 
@@ -229,6 +241,7 @@ describe("hermes bridge contract", () => {
     expect(ipcMain.removeHandler).toHaveBeenCalledWith("writeback:approve");
     expect(ipcMain.removeHandler).toHaveBeenCalledWith("writeback:reject");
     expect(ipcMain.removeHandler).toHaveBeenCalledWith("writeback:revert");
+    expect(ipcMain.removeHandler).toHaveBeenCalledWith("drift:list-signals");
   });
 
   it("emits hermes session events during chat turns", async () => {
@@ -318,6 +331,10 @@ describe("hermes bridge contract", () => {
       approveWritebackProposal: vi.fn(),
       rejectWritebackProposal: vi.fn(),
       revertWritebackProposal: vi.fn(),
+    }));
+    vi.doMock("../electron/services/drift-guardrails", () => ({
+      appendDriftSignals: vi.fn(),
+      listDriftSignals: vi.fn(async () => []),
     }));
     vi.doMock("../electron/services/relationship", () => ({ getStage: vi.fn() }));
 
@@ -446,6 +463,10 @@ describe("hermes bridge contract", () => {
       rejectWritebackProposal: vi.fn(),
       revertWritebackProposal: vi.fn(),
     }));
+    vi.doMock("../electron/services/drift-guardrails", () => ({
+      appendDriftSignals: vi.fn(),
+      listDriftSignals: vi.fn(async () => []),
+    }));
     vi.doMock("../electron/services/relationship", () => ({ getStage: vi.fn() }));
 
     const { registerIpcHandlers, unregisterIpcHandlers } = await import("../electron/ipc");
@@ -557,6 +578,10 @@ describe("hermes bridge contract", () => {
       approveWritebackProposal: vi.fn(),
       rejectWritebackProposal: vi.fn(),
       revertWritebackProposal: vi.fn(),
+    }));
+    vi.doMock("../electron/services/drift-guardrails", () => ({
+      appendDriftSignals: vi.fn(),
+      listDriftSignals: vi.fn(async () => []),
     }));
     vi.doMock("../electron/services/relationship", () => ({ getStage: vi.fn() }));
 

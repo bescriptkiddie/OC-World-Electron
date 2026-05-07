@@ -28,6 +28,7 @@ interface CapabilityServices {
   approveWritebackProposal?: (payload: { userId: string; proposalId: string; dataRoot?: string }) => Promise<import("../../src/types").WritebackProposal>;
   rejectWritebackProposal?: (payload: { userId: string; proposalId: string; feedback?: string; dataRoot?: string }) => Promise<import("../../src/types").WritebackProposal>;
   revertWritebackProposal?: (payload: { userId: string; proposalId: string; dataRoot?: string }) => Promise<import("../../src/types").WritebackProposal>;
+  listDriftSignals?: (payload: { userId: string; limit?: number }, dataRoot?: string) => Promise<import("../../src/types").DriftSignal[]>;
   hermesManager: { getStatus: () => HermesRuntimeStatus };
   getHermesBridgeStatus?: () => Promise<HermesBridgeStatus>;
   listHermesSessionEvents?: (query: HermesSessionEventQuery) => Promise<HermesSessionEvent[]>;
@@ -128,6 +129,11 @@ export function createOcWorldCapabilities(options: CreateOcWorldCapabilitiesOpti
           throw new Error("Writeback revert is unavailable in this runtime");
         }
         return services.revertWritebackProposal({ ...payload, dataRoot: context.dataRoot });
+      },
+    },
+    drift: {
+      listSignals(payload: { userId: string; limit?: number }) {
+        return services.listDriftSignals?.(payload, context.dataRoot) ?? [];
       },
     },
     hermes: {
