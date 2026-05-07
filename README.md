@@ -246,15 +246,17 @@ electron/
 
 cli/                      # CLI 路由与入口
 src/
-├── components/           # UI 组件
+├── components/           # UI 组件与桌面/对话 surface
 ├── hooks/                # React hooks
-├── pages/                # 页面
-├── types/                # 类型定义
-└── lib/                  # 工具函数
+├── lib/                  # 前端工具函数（语音、TTS 等）
+├── runtime/              # runtime client / adapter / capability 注入层
+├── types/                # 共享类型定义
+└── pages/                # 页面级入口
 
-oc-data/                 # 本地数据存储
-tests/                   # 测试
-scripts/                 # 脚本工具
+oc-data/                  # 本地数据存储
+tests/                    # 测试
+scripts/                  # 脚本工具
+demos/                    # 独立 HTML 原型、架构图与演示页
 ```
 
 ## 对外接入文档
