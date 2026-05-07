@@ -485,7 +485,7 @@
           <div class="mark">OC</div>
           <div>
             <strong>OC World</strong>
-            <span>Current Architecture Map · Huashu-style HTML</span>
+            <span>当前架构图 · Huashu-style HTML</span>
           </div>
         </div>
         <div class="chips">
@@ -498,7 +498,7 @@
 
       <section class="hero">
         <div>
-          <div class="eyebrow">current project architecture</div>
+          <div class="eyebrow">current architecture</div>
           <h1>前台是 OC 与对话，后台是记忆与成长，边界正在从 Electron 壳收口成跨平台 runtime。</h1>
           <p class="subhead">
             现在这个项目仍然是一个 Electron 桌面应用，但核心业务契约已经被重排为 runtime client + optional capabilities。
@@ -506,7 +506,7 @@
           </p>
         </div>
         <aside class="hero-card">
-          <small>one-line read</small>
+          <small>一句话理解</small>
           <h2>这不是“网页 + Electron 包壳”</h2>
           <p>它现在是一套分层明确的产品系统：Electron 提供桌面壳和桥接，`electron/services/*` 提供领域能力，React renderer 通过 `src/runtime/*` 消费统一契约，browser fallback 作为非壳环境的退化路径。</p>
         </aside>
@@ -635,12 +635,12 @@
 
       <section class="hero" style="margin-top: 14px;">
         <div class="hero-card">
-          <small>what is already true now</small>
+          <small>当前已成立</small>
           <h2>已经收口完成的点</h2>
           <p>Renderer 主流程已经通过 `src/runtime/*` 统一入口；browser fallback 不再只是占位，而能正确处理 growth confirm / reject / dismiss；TTS / ASR 已支持从 runtime capability 注入。</p>
         </div>
         <div class="hero-card">
-          <small>what is still desktop-only</small>
+          <small>仍属桌面专属</small>
           <h2>仍然不能直接搬去 iOS 的点</h2>
           <p>`BrowserWindow`、preload 注入、`ipcMain/ipcRenderer`、透明浮窗拖拽、Electron 权限模型都还属于桌面壳。未来 iOS 只能复用业务契约和 renderer 结构，不能复用这些宿主能力。</p>
         </div>
