@@ -12,6 +12,13 @@ OC World 当前不是传统 HTTP REST 后端。后端能力运行在 Electron ma
 window.ocWorld
 ```
 
+仓库内部当前还多了一层前端 runtime adapter：
+
+- `src/main.tsx` 会在启动时根据 `window.ocWorld` 是否存在，选择 `createElectronClient()` 或 `createBrowserClient()`
+- `src/runtime/electron-client.ts` 负责把 preload bridge 包装成统一业务 client
+- `src/runtime/browser-client.ts` 负责无 bridge 时的 browser fallback
+- `src/runtime/context.tsx` / `src/runtime/use-runtime.ts` 负责把当前 runtime 注入 React
+
 因此外部前端有两种接入方式：
 
 1. 推荐方式：把外部前端作为 OC World Electron 窗口中的 renderer 加载，直接调用 `window.ocWorld.*`。
