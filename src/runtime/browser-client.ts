@@ -1,11 +1,36 @@
 import { DEFAULT_CHARACTER, DEFAULT_HISTORY, DEFAULT_RELATIONSHIP, DEFAULT_AIRJELLY_CONTEXT, DEFAULT_SUMMARIES } from "../../electron/services/demo-fallback";
-import type { CharacterConfig, ChatHistoryEntry, ChatResult, GrowthInsight, GrowthProfile, Relationship, TimelineItem } from "../types";
+import type {
+  CharacterConfig,
+  ChatHistoryEntry,
+  ChatResult,
+  DriftSignal,
+  GrowthInsight,
+  GrowthProfile,
+  HermesSessionEvent,
+  Relationship,
+  TimelineItem,
+  WritebackProposal,
+} from "../types";
 import type { OcWorldClient } from "./client";
 import type { PlatformCapabilities } from "./platform-capabilities";
 
 const defaultCharacterId = "char-001";
 const defaultUserId = "user-001";
 const browserCharacterStorageKey = "oc-world.browser.character";
+
+type BrowserReveal = import("../types").RevealCandidate & { text?: string; title?: string };
+
+type BrowserUserState = {
+  relationship: Relationship;
+  history: ChatHistoryEntry[];
+  growthInsights: GrowthInsight[];
+  growthProfile: GrowthProfile;
+  activeReveal: BrowserReveal | null;
+  writebackProposals: WritebackProposal[];
+  driftSignals: DriftSignal[];
+  sessionEvents: HermesSessionEvent[];
+  lastBrowserEventAt: number | null;
+};
 
 function readBrowserCharacterFallback(): CharacterConfig {
   try {
@@ -26,9 +51,9 @@ function writeBrowserCharacterFallback(character: CharacterConfig) {
   }
 }
 
-function createEmptyProfile(): GrowthProfile {
+function createEmptyProfile(userId: string): GrowthProfile {
   return {
-    userId: defaultUserId,
+    userId,
     updatedAt: 0,
     goals: [],
     strengths: [],
@@ -37,10 +62,24 @@ function createEmptyProfile(): GrowthProfile {
   };
 }
 
-function createBrowserTimeline(): TimelineItem[] {
-  return DEFAULT_RELATIONSHIP.keyMoments.map((moment, index) => ({
+function createInitialUserState(userId: string): BrowserUserState {
+  return {
+    relationship: { ...DEFAULT_RELATIONSHIP, userId },
+    history: [...DEFAULT_HISTORY],
+    growthInsights: [],
+    growthProfile: createEmptyProfile(userId),
+    activeReveal: null,
+    writebackProposals: [],
+    driftSignals: [],
+    sessionEvents: [],
+    lastBrowserEventAt: null,
+  };
+}
+
+function createBrowserTimeline(relationship: Relationship): TimelineItem[] {
+  return relationship.keyMoments.map((moment, index) => ({
     ...moment,
-    intimacyAfter: Math.min(100, DEFAULT_RELATIONSHIP.intimacy + index * 4),
+    intimacyAfter: Math.min(100, relationship.intimacy + index * 4),
   }));
 }
 
@@ -59,7 +98,7 @@ function createBrowserDemoReply(userMessage: string, nextRelationship: Relations
 
 function createBrowserDemoInsight(userId: string, userMessage: string, now: number): {
   insight: GrowthInsight;
-  reveal: (import("../types").RevealCandidate & { text?: string; title?: string }) | null;
+  reveal: BrowserReveal | null;
 } {
   const text = /交互|点击|实现|完成|demo|MVP/i.test(userMessage)
     ? "你在意的不是页面看起来像聊天，而是每一次点击都要让用户感觉到 OC 在回应、理解并继续推进。"
@@ -124,22 +163,94 @@ function addConfirmedInsightToProfile(profile: GrowthProfile, insight: GrowthIns
   return { ...profile, updatedAt: now };
 }
 
+function createBrowserWritebackProposal(input: { userId: string; insight: GrowthInsight; createdAt: number }): WritebackProposal {
+  return {
+    id: `wb_browser_${input.insight.id}_${input.createdAt}`,
+    userId: input.userId,
+    episodeId: `browser-turn-${input.createdAt}`,
+    turnId: `browser-turn-${input.createdAt}`,
+    insightId: input.insight.id,
+    target: input.insight.type === "preference" ? "voice" : "memory",
+    operation: "append",
+    text: input.insight.text,
+    evidenceEventIds: input.insight.evidenceIds,
+    evidenceSummary: "browser demo proposal",
+    confidence: input.insight.confidence,
+    status: "deferred",
+    reason: "browser mode keeps writeback as visible proposal",
+    requiresUserConfirmation: true,
+    createdAt: input.createdAt,
+  };
+}
+
+function createBrowserDriftSignal(input: { userId: string; turnId: string; insight: GrowthInsight; createdAt: number }): DriftSignal {
+  return {
+    id: `drift_browser_${input.insight.id}_${input.createdAt}`,
+    userId: input.userId,
+    turnId: input.turnId,
+    type: "memory_pollution",
+    severity: "warning",
+    summary: "browser demo keeps suggested memory writes visible instead of applying them",
+    evidenceEventIds: input.insight.evidenceIds,
+    recommendedAction: "observe",
+    createdAt: input.createdAt,
+  };
+}
+
+function createBrowserSessionEvents(input: { userId: string; turnId: string; createdAt: number }): HermesSessionEvent[] {
+  return [
+    { id: `${input.turnId}:start`, sessionId: `${input.userId}:${defaultCharacterId}`, turnId: input.turnId, kind: "turn_start", emittedAt: input.createdAt },
+    { id: `${input.turnId}:context`, sessionId: `${input.userId}:${defaultCharacterId}`, turnId: input.turnId, kind: "context_built", emittedAt: input.createdAt + 1 },
+    { id: `${input.turnId}:bundle`, sessionId: `${input.userId}:${defaultCharacterId}`, turnId: input.turnId, kind: "memory_bundle_loaded", emittedAt: input.createdAt + 2 },
+    { id: `${input.turnId}:llm-start`, sessionId: `${input.userId}:${defaultCharacterId}`, turnId: input.turnId, kind: "llm_started", emittedAt: input.createdAt + 3 },
+    { id: `${input.turnId}:llm-finished`, sessionId: `${input.userId}:${defaultCharacterId}`, turnId: input.turnId, kind: "llm_finished", emittedAt: input.createdAt + 4 },
+    { id: `${input.turnId}:growth`, sessionId: `${input.userId}:${defaultCharacterId}`, turnId: input.turnId, kind: "growth_pipeline_queued", emittedAt: input.createdAt + 5 },
+    { id: `${input.turnId}:end`, sessionId: `${input.userId}:${defaultCharacterId}`, turnId: input.turnId, kind: "turn_end", emittedAt: input.createdAt + 6 },
+  ];
+}
+
+function getScopedUserState(states: Map<string, BrowserUserState>, userId: string) {
+  const existing = states.get(userId);
+  if (existing) {
+    return existing;
+  }
+
+  const created = createInitialUserState(userId);
+  states.set(userId, created);
+  return created;
+}
+
+function getLatestBrowserEventAt(states: Map<string, BrowserUserState>) {
+  const values = Array.from(states.values())
+    .map((state) => state.lastBrowserEventAt)
+    .filter((value): value is number => typeof value === "number");
+
+  return values.length ? Math.max(...values) : null;
+}
+
+function listScopedSessionEvents(state: BrowserUserState, query: { sessionId?: string; turnId?: string; limit?: number }) {
+  const bySession = query.sessionId
+    ? state.sessionEvents.filter((event) => event.sessionId === query.sessionId)
+    : state.sessionEvents;
+  const byTurn = query.turnId ? bySession.filter((event) => event.turnId === query.turnId) : bySession;
+  return query.limit ? byTurn.slice(-query.limit) : [...byTurn];
+}
+
 export function createBrowserClient(): { client: OcWorldClient; capabilities: PlatformCapabilities } {
   let character = readBrowserCharacterFallback();
-  let relationship = DEFAULT_RELATIONSHIP;
-  let history = [...DEFAULT_HISTORY];
-  let growthInsights: GrowthInsight[] = [];
-  let growthProfile = createEmptyProfile();
-  let activeReveal: (import("../types").RevealCandidate & { text?: string; title?: string }) | null = null;
+  const userStates = new Map<string, BrowserUserState>();
 
   const client: OcWorldClient = {
     chat: {
       async sendMessage(payload) {
-        const result = createBrowserDemoReply(payload.userMessage, relationship);
+        const state = getScopedUserState(userStates, payload.userId);
+        const result = createBrowserDemoReply(payload.userMessage, state.relationship);
         const now = Date.now();
+        const turnId = `browser-turn-${now}`;
         const demoGrowth = createBrowserDemoInsight(payload.userId, payload.userMessage, now);
-        history = [
-          ...history,
+
+        state.history = [
+          ...state.history,
           {
             timestamp: now,
             userMessage: payload.userMessage,
@@ -147,14 +258,18 @@ export function createBrowserClient(): { client: OcWorldClient; capabilities: Pl
             emotion: result.emotion,
           },
         ];
-        relationship = {
-          ...relationship,
+        state.relationship = {
+          ...state.relationship,
           intimacy: result.intimacy,
           stage: result.stage,
           lastInteraction: now,
         };
-        growthInsights = [demoGrowth.insight, ...growthInsights.filter((item) => item.id !== demoGrowth.insight.id)].slice(0, 6);
-        activeReveal = demoGrowth.reveal;
+        state.growthInsights = [demoGrowth.insight, ...state.growthInsights.filter((item) => item.id !== demoGrowth.insight.id)].slice(0, 6);
+        state.activeReveal = demoGrowth.reveal;
+        state.writebackProposals = [createBrowserWritebackProposal({ userId: payload.userId, insight: demoGrowth.insight, createdAt: now })];
+        state.driftSignals = [createBrowserDriftSignal({ userId: payload.userId, turnId, insight: demoGrowth.insight, createdAt: now })];
+        state.sessionEvents = createBrowserSessionEvents({ userId: payload.userId, turnId, createdAt: now });
+        state.lastBrowserEventAt = state.sessionEvents.at(-1)?.emittedAt ?? now;
         return result;
       },
       async cancelActive() {
@@ -175,41 +290,43 @@ export function createBrowserClient(): { client: OcWorldClient; capabilities: Pl
       },
     },
     timeline: {
-      async list() {
-        return createBrowserTimeline();
+      async list(userId) {
+        return createBrowserTimeline(getScopedUserState(userStates, userId).relationship);
       },
     },
     relationship: {
-      async get() {
-        return relationship;
+      async get(userId) {
+        return getScopedUserState(userStates, userId).relationship;
       },
       async save(payload) {
-        relationship = payload.relationship;
-        return relationship;
+        const state = getScopedUserState(userStates, payload.userId);
+        state.relationship = payload.relationship;
+        return state.relationship;
       },
       async setIntimacyForDemo(payload) {
-        relationship = { ...relationship, intimacy: payload.intimacy };
-        return relationship;
+        const state = getScopedUserState(userStates, payload.userId);
+        state.relationship = { ...state.relationship, intimacy: payload.intimacy };
+        return state.relationship;
       },
     },
     memory: {
       async summaries() {
         return DEFAULT_SUMMARIES;
       },
-      async history() {
-        return history as ChatHistoryEntry[];
+      async history(userId) {
+        return getScopedUserState(userStates, userId).history as ChatHistoryEntry[];
       },
-      async getLongTerm() {
-        return { userId: defaultUserId, memoryMarkdown: "", voiceMarkdown: "", systemRemindersMarkdown: "", updatedAt: 0 };
+      async getLongTerm(userId) {
+        return { userId, memoryMarkdown: "", voiceMarkdown: "", systemRemindersMarkdown: "", updatedAt: 0 };
       },
-      async getVoice() {
-        return { userId: defaultUserId, voiceMarkdown: "", updatedAt: 0 };
+      async getVoice(userId) {
+        return { userId, voiceMarkdown: "", updatedAt: 0 };
       },
-      async runDistill() {
+      async runDistill(payload) {
         return {
           episode: {
             id: "browser-episode",
-            userId: defaultUserId,
+            userId: payload.userId,
             source: "manual",
             createdAt: Date.now(),
             title: "browser",
@@ -224,7 +341,7 @@ export function createBrowserClient(): { client: OcWorldClient; capabilities: Pl
           projects: {
             version: 1,
             generatedAt: Date.now(),
-            userId: defaultUserId,
+            userId: payload.userId,
             projects: [],
           },
           recallEvents: [],
@@ -237,8 +354,8 @@ export function createBrowserClient(): { client: OcWorldClient; capabilities: Pl
       },
     },
     writeback: {
-      async list() {
-        return [];
+      async list(payload) {
+        return [...getScopedUserState(userStates, payload.userId).writebackProposals];
       },
       async approve() {
         throw new Error("Writeback approval is unavailable in browser mode");
@@ -251,8 +368,9 @@ export function createBrowserClient(): { client: OcWorldClient; capabilities: Pl
       },
     },
     drift: {
-      async listSignals() {
-        return [];
+      async listSignals(payload) {
+        const state = getScopedUserState(userStates, payload.userId);
+        return payload.limit ? state.driftSignals.slice(0, payload.limit) : [...state.driftSignals];
       },
     },
     workItems: {
@@ -261,11 +379,11 @@ export function createBrowserClient(): { client: OcWorldClient; capabilities: Pl
       },
     },
     projects: {
-      async list() {
+      async list(userId) {
         return {
           version: 1,
           generatedAt: Date.now(),
-          userId: defaultUserId,
+          userId,
           projects: [],
         };
       },
@@ -288,46 +406,59 @@ export function createBrowserClient(): { client: OcWorldClient; capabilities: Pl
       },
     },
     growth: {
-      async getLatestReveal() {
-        return activeReveal;
+      async getLatestReveal(userId) {
+        return getScopedUserState(userStates, userId).activeReveal;
       },
-      async listInsights() {
-        return growthInsights;
+      async listInsights(userId) {
+        return [...getScopedUserState(userStates, userId).growthInsights];
       },
-      async getProfile() {
-        return growthProfile;
+      async getProfile(userId) {
+        return getScopedUserState(userStates, userId).growthProfile;
       },
       async confirmInsight(payload) {
+        const state = getScopedUserState(userStates, payload.userId);
         const now = Date.now();
-        const insight = growthInsights.find((item) => item.id === payload.insightId);
+        const insight = state.growthInsights.find((item) => item.id === payload.insightId);
         if (!insight) {
-          return activeReveal;
+          return state.activeReveal;
         }
 
-        growthInsights = growthInsights.map((item) =>
+        state.growthInsights = state.growthInsights.map((item) =>
           item.id === payload.insightId
             ? { ...item, status: "confirmed" as const, updatedAt: now }
             : item,
         );
-        growthProfile = addConfirmedInsightToProfile(growthProfile, { ...insight, status: "confirmed", updatedAt: now }, now);
-        activeReveal = activeReveal?.insightId === payload.insightId ? null : activeReveal;
-        return activeReveal;
+        state.growthProfile = addConfirmedInsightToProfile(state.growthProfile, { ...insight, status: "confirmed", updatedAt: now }, now);
+        state.activeReveal = state.activeReveal?.insightId === payload.insightId ? null : state.activeReveal;
+        state.writebackProposals = state.writebackProposals.map((proposal) =>
+          proposal.insightId === payload.insightId
+            ? { ...proposal, status: "merged" as const, reason: "browser demo approved", requiresUserConfirmation: false, updatedAt: now }
+            : proposal,
+        );
+        return state.activeReveal;
       },
       async dismissReveal(payload) {
-        if (activeReveal?.id === payload.candidateId) {
-          activeReveal = null;
+        const state = getScopedUserState(userStates, payload.userId);
+        if (state.activeReveal?.id === payload.candidateId) {
+          state.activeReveal = null;
         }
-        return activeReveal;
+        return state.activeReveal;
       },
       async rejectInsight(payload) {
+        const state = getScopedUserState(userStates, payload.userId);
         const now = Date.now();
-        growthInsights = growthInsights.map((item) =>
+        state.growthInsights = state.growthInsights.map((item) =>
           item.id === payload.insightId
             ? { ...item, status: "rejected" as const, userFeedback: payload.feedback, updatedAt: now }
             : item,
         );
-        activeReveal = activeReveal?.insightId === payload.insightId ? null : activeReveal;
-        return activeReveal;
+        state.activeReveal = state.activeReveal?.insightId === payload.insightId ? null : state.activeReveal;
+        state.writebackProposals = state.writebackProposals.map((proposal) =>
+          proposal.insightId === payload.insightId
+            ? { ...proposal, status: "discarded" as const, reason: payload.feedback ?? "browser demo rejected", requiresUserConfirmation: false, updatedAt: now, feedback: payload.feedback }
+            : proposal,
+        );
+        return state.activeReveal;
       },
     },
     airjelly: {
@@ -340,10 +471,11 @@ export function createBrowserClient(): { client: OcWorldClient; capabilities: Pl
         return { state: "disabled", pid: null, restartCount: 0, lastError: null, lastStartedAt: null, lastHealthCheckAt: null };
       },
       async getBridgeStatus() {
-        return { connected: false, transport: "none", lastEventAt: null };
+        return { connected: false, transport: "none", lastEventAt: getLatestBrowserEventAt(userStates) };
       },
-      async listSessionEvents() {
-        return [];
+      async listSessionEvents(payload) {
+        const state = getScopedUserState(userStates, payload.userId ?? defaultUserId);
+        return listScopedSessionEvents(state, payload);
       },
       onStatusChanged() {
         return () => {};
@@ -360,3 +492,4 @@ export function createBrowserClient(): { client: OcWorldClient; capabilities: Pl
   };
 }
 
+export type BrowserClient = ReturnType<typeof createBrowserClient>;

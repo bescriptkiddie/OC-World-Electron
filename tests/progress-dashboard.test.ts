@@ -12,10 +12,10 @@ describe("progress dashboard contract", () => {
     expect(html).toContain("还没有做完的内容");
     expect(html).toContain("Session event JSONL");
     expect(html).toContain("Chat lifecycle governance");
+    expect(html).toContain("Browser governance fallback");
+    expect(html).toContain("2026-05-08 16:53:12 · browser governance fallback slice");
+    expect(html).toContain("slice 3 核心回归通过");
     expect(html).toContain("Confirmed writeback ledger apply");
-    expect(html).toContain("2026-05-08 16:18:42 · confirmed writeback ledger slice");
-    expect(html).toContain("slice 2 核心回归通过");
-    expect(html).toContain("Renderer 消费治理信号");
     expect(html).toContain("2026-05-07 19:04:44 · recall context gate");
     expect(html).toContain("2026-05-08 00:51:07 · unified-memory direct bundle gate");
   });

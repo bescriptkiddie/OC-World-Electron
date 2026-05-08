@@ -81,13 +81,32 @@ describe("runtime client bridges", () => {
     expect(listSignals).toHaveBeenCalledWith({ userId: "user-001", limit: 5 });
   });
 
-  it("returns an empty drift list in browser mode", async () => {
+
+  it("scopes browser governance data per user", async () => {
     const { client } = createBrowserClient();
 
-    await expect(client.drift!.listSignals({ userId: "user-001" })).resolves.toEqual([]);
+    await client.chat.sendMessage({
+      characterId: "char-001",
+      userId: "user-001",
+      userMessage: "先把这个 MVP 做出来。",
+    });
+    await client.chat.sendMessage({
+      characterId: "char-001",
+      userId: "user-002",
+      userMessage: "我最近总感觉节奏不太对。",
+    });
+
+    await expect(client.growth.getProfile("user-001")).resolves.toEqual(expect.objectContaining({ userId: "user-001" }));
+    await expect(client.growth.getProfile("user-002")).resolves.toEqual(expect.objectContaining({ userId: "user-002" }));
+    await expect(client.writeback.list({ userId: "user-001" })).resolves.toEqual([
+      expect.objectContaining({ userId: "user-001" }),
+    ]);
+    await expect(client.writeback.list({ userId: "user-002" })).resolves.toEqual([
+      expect.objectContaining({ userId: "user-002" }),
+    ]);
   });
 
-  it("throws clear errors for browser-only writeback mutations", async () => {
+  it("keeps browser writeback mutations fail-fast", async () => {
     const { client } = createBrowserClient();
 
     await expect(client.writeback.approve({ userId: "user-001", proposalId: "wb-1" })).rejects.toThrow(

@@ -59,4 +59,36 @@ describe("browser runtime growth fallback", () => {
     expect(afterRejectInsights[0]?.status).toBe("rejected");
     expect(profile.goals).toHaveLength(0);
   });
+
+
+  it("keeps browser fallback governance state scoped per user", async () => {
+    const { client } = createBrowserClient();
+
+    await client.chat.sendMessage({
+      characterId: "char-001",
+      userId: "user-001",
+      userMessage: "先把这个 MVP 做出来。",
+    });
+    await client.chat.sendMessage({
+      characterId: "char-001",
+      userId: "user-002",
+      userMessage: "我最近总感觉节奏不太对。",
+    });
+
+    const [userOneReveal, userTwoReveal, userOneWritebacks, userTwoWritebacks, userOneEvents, userTwoEvents] = await Promise.all([
+      client.growth.getLatestReveal("user-001"),
+      client.growth.getLatestReveal("user-002"),
+      client.writeback.list({ userId: "user-001" }),
+      client.writeback.list({ userId: "user-002" }),
+      client.hermes.listSessionEvents({ userId: "user-001", characterId: "char-001" }),
+      client.hermes.listSessionEvents({ userId: "user-002", characterId: "char-001" }),
+    ]);
+
+    expect(userOneReveal?.userId).toBe("user-001");
+    expect(userTwoReveal?.userId).toBe("user-002");
+    expect(userOneWritebacks[0]?.userId).toBe("user-001");
+    expect(userTwoWritebacks[0]?.userId).toBe("user-002");
+    expect(userOneEvents[0]?.sessionId).toContain("user-001");
+    expect(userTwoEvents[0]?.sessionId).toContain("user-002");
+  });
 });

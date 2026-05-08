@@ -263,22 +263,22 @@
           <div class="progress-wrap">
             <div class="progress-head">
               <div class="progress-title">主线完成度</div>
-              <div class="progress-value">84%</div>
+              <div class="progress-value">88%</div>
             </div>
             <div class="progress-bar"><div class="progress-fill"></div></div>
           </div>
           <div class="hero-meta">
             <div class="meta-card">
               <div class="meta-label">最新同步时间</div>
-              <div class="meta-value">2026-05-08 16:18:42 CST</div>
+              <div class="meta-value">2026-05-08 16:53:12 CST</div>
             </div>
             <div class="meta-card">
               <div class="meta-label">已落地切片</div>
-              <div class="meta-value">12 个</div>
+              <div class="meta-value">13 个</div>
             </div>
             <div class="meta-card">
               <div class="meta-label">验证状态</div>
-              <div class="meta-value">slice 2 核心回归通过</div>
+              <div class="meta-value">slice 3 核心回归通过</div>
             </div>
           </div>
           <div class="metric-grid">
@@ -302,7 +302,7 @@
           <div class="status-grid">
             <div class="status-card">
               <div class="meta-label">产品效果</div>
-              <div class="status-value">弱信号不再轻易写长期记忆、不再乱生成事项、不再乱抬项目，也不再经 recall / bundle 回流污染 prompt；过期 reveal pending 也不再卡死后续建议。confirmed insight 现在只会经 ledger 批准后落 profile 和长期记忆。</div>
+              <div class="status-value">弱信号不再轻易写长期记忆、不再乱生成事项、不再乱抬项目，也不再经 recall / bundle 回流污染 prompt；过期 reveal pending 也不再卡死后续建议。confirmed insight 现在只会经 ledger 批准后落 profile 和长期记忆，browser fallback 也能返回最小治理视图。</div>
             </div>
             <div class="status-card">
               <div class="meta-label">架构状态</div>
@@ -318,7 +318,7 @@
             </div>
           </div>
           <div class="legend">
-            <span class="pill good">已完成：11 个后端治理切片已推到分支</span>
+            <span class="pill good">已完成：13 个治理切片已在当前分支落地</span>
             <span class="pill warn">待补：UI explainability / renderer 面板 / project drift 同级信号</span>
             <span class="pill bad">未做：relationship 硬拦截、完整治理控制台</span>
           </div>
@@ -333,6 +333,7 @@
             </div>
           </div>
           <div class="slices-grid">
+            <div class="slice-card"><h3>Browser governance fallback</h3><div class="slice-list">没有 Electron bridge 时，browser mode 也能返回 reveal、writeback proposal、drift signal、session event 的最小治理状态，前端契约不再掉成空壳。</div></div>
             <div class="slice-card"><h3>Confirmed writeback ledger apply</h3><div class="slice-list">confirm 不再只改 proposal 状态；ledger approve 会串行执行 profile 更新、长期记忆落盘，并在账本写回失败时回滚 side effect。</div></div>
             <div class="slice-card"><h3>Session event JSONL</h3><div class="slice-list">session-events 现在同时保留内存查询和 turn 级 JSONL 落盘，重启后还能按 session / turn 回放。</div></div>
             <div class="slice-card"><h3>Chat lifecycle governance</h3><div class="slice-list">chat 主链开始显式记录 context / memory bundle / llm / relationship / history / growth queue 这些治理节点。</div></div>
@@ -375,7 +376,7 @@
           <div class="code-grid">
             <div class="code-card"><h3>治理规则</h3><ul class="code-list"><li>`electron/services/drift-guardrails.ts`</li><li>`electron/services/work-items.ts`</li><li>`electron/services/projects.ts`</li><li>`electron/services/reveal-policy.ts`</li></ul></div>
             <div class="code-card"><h3>主链串联</h3><ul class="code-list"><li>`electron/services/growth-pipeline.ts`</li><li>`electron/services/chat-engine.ts`</li><li>`electron/services/recall.ts`</li></ul></div>
-            <div class="code-card"><h3>契约与存储</h3><ul class="code-list"><li>`electron/ipc.ts`</li><li>`electron/preload.ts`</li><li>`electron/services/unified-memory.ts`</li></ul></div>
+            <div class="code-card"><h3>契约与存储</h3><ul class="code-list"><li>`electron/ipc.ts`</li><li>`electron/preload.ts`</li><li>`electron/services/unified-memory.ts`</li><li>`src/runtime/browser-client.ts`</li></ul></div>
           </div>
         </article>
         <article class="panel section-panel">
@@ -386,7 +387,7 @@
             </div>
           </div>
           <div class="code-grid">
-            <div class="code-card"><h3>Contract</h3><ul class="code-list"><li>`tests/hermes-bridge-contract.test.ts`</li><li>`tests/runtime-client-bridge.test.ts`</li></ul></div>
+            <div class="code-card"><h3>Contract</h3><ul class="code-list"><li>`tests/hermes-bridge-contract.test.ts`</li><li>`tests/runtime-client-bridge.test.ts`</li><li>`tests/browser-client.test.ts`</li></ul></div>
             <div class="code-card"><h3>Growth / Recall</h3><ul class="code-list"><li>`tests/growth-pipeline.test.ts`</li><li>`tests/recall.test.ts`</li><li>`tests/memory-retrieval.test.ts`</li><li>`tests/reveal-policy.test.ts`</li></ul></div>
             <div class="code-card"><h3>State / Storage</h3><ul class="code-list"><li>`tests/backend-growth-services.test.ts`</li><li>`tests/unified-memory.test.ts`</li><li>`tests/chat-engine.test.ts`</li></ul></div>
           </div>
@@ -401,7 +402,8 @@
             </div>
           </div>
           <div class="timeline-list">
-            <div class="entry"><div class="entry-head"><div class="entry-title">2026-05-08 16:18:42 · confirmed writeback ledger slice</div><div class="entry-time">最新</div></div><div class="entry-body">confirmed insight 的 profile / memory 写回统一收紧到 ledger approve，proposal 变更加入串行保护，账本写回失败时会回滚 side effect。</div></div>
+            <div class="entry"><div class="entry-head"><div class="entry-title">2026-05-08 16:53:12 · browser governance fallback slice</div><div class="entry-time">最新</div></div><div class="entry-body">browser mode 现在会返回最小 reveal / writeback / drift / hermes session event 状态，renderer 在无 bridge 时也能走完整治理契约。</div></div>
+            <div class="entry"><div class="entry-head"><div class="entry-title">2026-05-08 16:18:42 · confirmed writeback ledger slice</div><div class="entry-time">已推送</div></div><div class="entry-body">confirmed insight 的 profile / memory 写回统一收紧到 ledger approve，proposal 变更加入串行保护，账本写回失败时会回滚 side effect。</div></div>
             <div class="entry"><div class="entry-head"><div class="entry-title">2026-05-08 14:17:34 · session event governance slice</div><div class="entry-time">已推送</div></div><div class="entry-body">session-events 现在落 turn 级 JSONL，chat 主链也会显式发出 context / llm / relationship / history / growth queue 事件，作为后续 renderer explainability 的基础。</div></div>
             <div class="entry"><div class="entry-head"><div class="entry-title">2026-05-08 01:23:19 · reveal stale queue gate</div><div class="entry-time">已推送</div></div><div class="entry-body">过期 pending reveal 不再长期卡住下一轮 stable insight 建议。</div></div>
             <div class="entry"><div class="entry-head"><div class="entry-title">2026-05-08 00:51:07 · unified-memory direct bundle gate</div><div class="entry-time">已推送</div></div><div class="entry-body">`loadRetrievedMemoryBundle()` 直出结果也过治理过滤，弱项目 / 弱事项不再经旁路泄漏。</div></div>
