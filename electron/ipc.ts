@@ -4,7 +4,6 @@ import { chat, generateGreeting } from "./services/chat-engine";
 import { appendDriftSignals, listDriftSignals } from "./services/drift-guardrails";
 import { runManualDistillationPipeline } from "./services/growth-pipeline";
 import { rejectInsight } from "./services/growth-insights";
-import { confirmInsightToProfile } from "./services/growth-profile";
 import { hermesManager } from "./services/hermes-manager";
 import { generateImage } from "./services/image-gen";
 import {
@@ -28,7 +27,6 @@ import { getSessionEventBridgeStatus, listSessionEvents, recordSessionEvent } fr
 import { getAsrStatus, StepFunAsrSession } from "./services/stepfun-asr";
 import { getTtsStatus, synthesizeSpeech } from "./services/tts";
 import {
-  appendConfirmedMemoryNote,
   listAwarenessEpisodes,
   listRecentRecallEvents,
   listWorkItems,
@@ -429,40 +427,67 @@ export function registerIpcHandlers() {
   ipcMain.handle(ipcChannels.growthListInsights, async (_event, userId: string) => loadGrowthInsights(userId));
   ipcMain.handle(ipcChannels.growthGetProfile, async (_event, userId: string) => loadGrowthProfile(userId));
   ipcMain.handle(ipcChannels.growthConfirmInsight, async (_event, payload: { userId: string; insightId: string }) => {
-    const [insights, profile, queue] = await Promise.all([
+    const [insights, queue, proposals] = await Promise.all([
       loadGrowthInsights(payload.userId),
-      loadGrowthProfile(payload.userId),
       loadRevealQueue(payload.userId),
+      listWritebackProposals(payload.userId),
     ]);
     const insight = insights.find((item) => item.id === payload.insightId);
     if (!insight) {
       return null;
     }
 
+    const pendingProposal = proposals.find((proposal) => proposal.insightId === payload.insightId && proposal.status === "deferred");
+    if (!pendingProposal) {
+      return null;
+    }
+
     const now = Date.now();
-    await Promise.all([
-      saveGrowthInsights(
-        payload.userId,
-        insights.map((item) =>
-          item.id === payload.insightId ? { ...item, status: "confirmed" as const, updatedAt: now } : item,
-        ),
-      ),
-      saveGrowthProfile(payload.userId, confirmInsightToProfile({ profile, insight, now })),
-      appendConfirmedMemoryNote({
+    const nextInsights = insights.map((item) =>
+      item.id === payload.insightId ? { ...item, status: "confirmed" as const, updatedAt: now } : item,
+    );
+    const nextQueue = queue.map((item) =>
+      item.insightId === payload.insightId ? { ...item, status: "confirmed" as const, shownAt: now } : item,
+    );
+
+    let approvedProposal: Awaited<ReturnType<typeof approveWritebackProposal>> | null = null;
+
+    try {
+      approvedProposal = await approveWritebackProposal({
         userId: payload.userId,
-        insightId: insight.id,
-        title: insight.title,
-        text: insight.text,
-        type: insight.type === "preference" ? "voice" : "memory",
-        now,
-      }),
-      saveRevealQueue(
-        payload.userId,
-        queue.map((item) =>
-          item.insightId === payload.insightId ? { ...item, status: "confirmed" as const, shownAt: now } : item,
-        ),
-      ),
-    ]);
+        proposalId: pendingProposal.id,
+      });
+
+      if (approvedProposal.status !== "merged") {
+        throw new Error(`Writeback proposal not merged: ${approvedProposal.id}`);
+      }
+
+      if (approvedProposal.insightId !== payload.insightId) {
+        throw new Error(`Writeback proposal insight mismatch: ${approvedProposal.id}`);
+      }
+
+      await saveGrowthInsights(payload.userId, nextInsights);
+      await saveRevealQueue(payload.userId, nextQueue);
+    } catch (error) {
+      if (approvedProposal?.status === "merged") {
+        const rollbackResults = await Promise.allSettled([
+          revertWritebackProposal({
+            userId: payload.userId,
+            proposalId: approvedProposal.id,
+          }),
+          saveGrowthInsights(payload.userId, insights),
+          saveRevealQueue(payload.userId, queue),
+        ]);
+        const rollbackError = rollbackResults.find((result) => result.status === "rejected");
+
+        if (rollbackError?.status === "rejected") {
+          const rollbackReason = rollbackError.reason instanceof Error ? rollbackError.reason.message : String(rollbackError.reason);
+          throw new Error(`growth confirm rollback failed after ${error instanceof Error ? error.message : String(error)}: ${rollbackReason}`);
+        }
+      }
+
+      throw error;
+    }
 
     return getLatestReveal(payload.userId);
   });

@@ -74,6 +74,7 @@ describe("memory merge", () => {
       expect.objectContaining({
         userId: "user-001",
         episodeId: "awareness-1",
+        turnId: "awareness-1",
         insightId: "insight-1",
         status: "deferred",
         target: "none",
@@ -81,17 +82,30 @@ describe("memory merge", () => {
     ]);
   });
 
-  it("merges confirmed candidates into memory.md", async () => {
+  it("records merged confirmed candidates as ledger proposals instead of writing memory immediately", async () => {
     const result = await mergeAwarenessCandidates({
       episode: createEpisode(),
       insights: [createInsight("confirmed", 0.9)],
       now: 2,
       dataRoot: tempDir,
     });
-    const memory = await loadLongTermMemory("user-001", tempDir);
+    const [memory, proposals] = await Promise.all([
+      loadLongTermMemory("user-001", tempDir),
+      listWritebackProposals("user-001", tempDir),
+    ]);
 
     expect(result.decisions[0]).toEqual(expect.objectContaining({ status: "merged", target: "memory" }));
-    expect(memory.memoryMarkdown).toContain("你反复在朝这个目标靠近。");
+    expect(memory.memoryMarkdown).not.toContain("你反复在朝这个目标靠近。");
+    expect(proposals).toEqual([
+      expect.objectContaining({
+        userId: "user-001",
+        episodeId: "awareness-1",
+        turnId: "awareness-1",
+        insightId: "insight-1",
+        status: "merged",
+        target: "memory",
+      }),
+    ]);
   });
 
   it("records writeback proposals for merge decisions", async () => {
@@ -110,6 +124,7 @@ describe("memory merge", () => {
       expect.objectContaining({
         userId: "user-001",
         episodeId: "awareness-1",
+        turnId: "awareness-1",
         insightId: "insight-1",
         target: "memory",
         operation: "append",
@@ -148,20 +163,20 @@ describe("memory merge", () => {
     ]);
   });
 
-  it("keeps merged memory writes even when ledger append fails", async () => {
-    await mkdir(path.dirname(resolveWritebackProposalPath(tempDir)), { recursive: true });
-    await writeFile(resolveWritebackProposalPath(tempDir), "{", "utf8");
+  it("fails the merge when proposal append fails", async () => {
+    await mkdir(resolveWritebackProposalPath(tempDir), { recursive: true });
 
-    const result = await mergeAwarenessCandidates({
-      episode: createEpisode(),
-      insights: [createInsight("confirmed", 0.9)],
-      now: 2,
-      dataRoot: tempDir,
-    });
+    await expect(
+      mergeAwarenessCandidates({
+        episode: createEpisode(),
+        insights: [createInsight("confirmed", 0.9)],
+        now: 2,
+        dataRoot: tempDir,
+      }),
+    ).rejects.toThrow();
+
     const memory = await loadLongTermMemory("user-001", tempDir);
-
-    expect(result.decisions[0]).toEqual(expect.objectContaining({ status: "merged", target: "memory" }));
-    expect(memory.memoryMarkdown).toContain("你反复在朝这个目标靠近。");
+    expect(memory.memoryMarkdown).not.toContain("你反复在朝这个目标靠近。");
   });
 
   it("stores proposals in jsonl format", async () => {
@@ -178,6 +193,7 @@ describe("memory merge", () => {
     expect(JSON.parse(raw.trim())).toEqual(
       expect.objectContaining({
         userId: "user-001",
+        turnId: "awareness-1",
         operation: "append",
         status: "merged",
       }),
@@ -198,6 +214,7 @@ describe("memory merge", () => {
       expect.objectContaining({
         userId: "user-001",
         episodeId: "awareness-1",
+        turnId: "awareness-1",
         insightId: "insight-1",
         status: "discarded",
         target: "none",

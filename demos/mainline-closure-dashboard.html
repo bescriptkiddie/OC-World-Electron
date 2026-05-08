@@ -258,19 +258,19 @@
           <div class="eyebrow">OC World · Completion Status</div>
           <h1>这一轮到底做到了哪一步</h1>
           <p class="lead">
-            这不是过程记录页，是完成度页。只看三件事：总完成度、已经落地的治理切片、还没做完的缺口。当前分支已经把写回、关系、事项、项目、recall、direct bundle、reveal stale queue 这些后端治理骨架连续收进主线。
+            这不是过程记录页，是完成度页。只看三件事：总完成度、已经落地的治理切片、还没做完的缺口。当前分支已经把写回、关系、事项、项目、recall、direct bundle、reveal stale queue 这些后端治理骨架连续收进主线，confirmed insight 的 profile / memory 落盘也已经收紧到 ledger。
           </p>
           <div class="progress-wrap">
             <div class="progress-head">
               <div class="progress-title">主线完成度</div>
-              <div class="progress-value">80%</div>
+              <div class="progress-value">84%</div>
             </div>
             <div class="progress-bar"><div class="progress-fill"></div></div>
           </div>
           <div class="hero-meta">
             <div class="meta-card">
               <div class="meta-label">最新同步时间</div>
-              <div class="meta-value">2026-05-08 14:17:34 CST</div>
+              <div class="meta-value">2026-05-08 16:18:42 CST</div>
             </div>
             <div class="meta-card">
               <div class="meta-label">已落地切片</div>
@@ -278,7 +278,7 @@
             </div>
             <div class="meta-card">
               <div class="meta-label">验证状态</div>
-              <div class="meta-value">slice 1 核心回归通过</div>
+              <div class="meta-value">slice 2 核心回归通过</div>
             </div>
           </div>
           <div class="metric-grid">
@@ -302,7 +302,7 @@
           <div class="status-grid">
             <div class="status-card">
               <div class="meta-label">产品效果</div>
-              <div class="status-value">弱信号不再轻易写长期记忆、不再乱生成事项、不再乱抬项目，也不再经 recall / bundle 回流污染 prompt；过期 reveal pending 也不再卡死后续建议。</div>
+              <div class="status-value">弱信号不再轻易写长期记忆、不再乱生成事项、不再乱抬项目，也不再经 recall / bundle 回流污染 prompt；过期 reveal pending 也不再卡死后续建议。confirmed insight 现在只会经 ledger 批准后落 profile 和长期记忆。</div>
             </div>
             <div class="status-card">
               <div class="meta-label">架构状态</div>
@@ -333,6 +333,7 @@
             </div>
           </div>
           <div class="slices-grid">
+            <div class="slice-card"><h3>Confirmed writeback ledger apply</h3><div class="slice-list">confirm 不再只改 proposal 状态；ledger approve 会串行执行 profile 更新、长期记忆落盘，并在账本写回失败时回滚 side effect。</div></div>
             <div class="slice-card"><h3>Session event JSONL</h3><div class="slice-list">session-events 现在同时保留内存查询和 turn 级 JSONL 落盘，重启后还能按 session / turn 回放。</div></div>
             <div class="slice-card"><h3>Chat lifecycle governance</h3><div class="slice-list">chat 主链开始显式记录 context / memory bundle / llm / relationship / history / growth queue 这些治理节点。</div></div>
             <div class="slice-card"><h3>Hermes session event store</h3><div class="slice-list">IPC 查询不再是空壳；session event 已有真实内存事件源和 contract 回归。</div></div>
@@ -400,7 +401,8 @@
             </div>
           </div>
           <div class="timeline-list">
-            <div class="entry"><div class="entry-head"><div class="entry-title">2026-05-08 14:17:34 · session event governance slice</div><div class="entry-time">最新</div></div><div class="entry-body">session-events 现在落 turn 级 JSONL，chat 主链也会显式发出 context / llm / relationship / history / growth queue 事件，作为后续 renderer explainability 的基础。</div></div>
+            <div class="entry"><div class="entry-head"><div class="entry-title">2026-05-08 16:18:42 · confirmed writeback ledger slice</div><div class="entry-time">最新</div></div><div class="entry-body">confirmed insight 的 profile / memory 写回统一收紧到 ledger approve，proposal 变更加入串行保护，账本写回失败时会回滚 side effect。</div></div>
+            <div class="entry"><div class="entry-head"><div class="entry-title">2026-05-08 14:17:34 · session event governance slice</div><div class="entry-time">已推送</div></div><div class="entry-body">session-events 现在落 turn 级 JSONL，chat 主链也会显式发出 context / llm / relationship / history / growth queue 事件，作为后续 renderer explainability 的基础。</div></div>
             <div class="entry"><div class="entry-head"><div class="entry-title">2026-05-08 01:23:19 · reveal stale queue gate</div><div class="entry-time">已推送</div></div><div class="entry-body">过期 pending reveal 不再长期卡住下一轮 stable insight 建议。</div></div>
             <div class="entry"><div class="entry-head"><div class="entry-title">2026-05-08 00:51:07 · unified-memory direct bundle gate</div><div class="entry-time">已推送</div></div><div class="entry-body">`loadRetrievedMemoryBundle()` 直出结果也过治理过滤，弱项目 / 弱事项不再经旁路泄漏。</div></div>
             <div class="entry"><div class="entry-head"><div class="entry-title">2026-05-07 19:04:44 · recall context gate</div><div class="entry-time">已推送</div></div><div class="entry-body">retrieval / recall 只回流通过治理的 project / work-item，弱条目不再二次污染 prompt 和 hint。</div></div>

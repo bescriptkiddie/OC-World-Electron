@@ -1,5 +1,5 @@
 import type { AwarenessEpisode, GrowthInsight, DriftSignal } from "../../src/types";
-import { appendAwarenessNote, appendConfirmedMemoryNote } from "./unified-memory";
+import { appendAwarenessNote } from "./unified-memory";
 import { appendWritebackProposal } from "./writeback-ledger";
 import { evaluateWritebackDriftSignals } from "./drift-guardrails";
 
@@ -7,6 +7,7 @@ type MemoryMergeDecisionStatus = "merged" | "deferred" | "discarded";
 
 export interface MemoryMergeDecision {
   episodeId: string;
+  turnId: string;
   insightId: string | null;
   status: MemoryMergeDecisionStatus;
   target: "memory" | "voice" | "none";
@@ -32,6 +33,7 @@ function createDecision(input: {
   if (!input.insight) {
     return {
       episodeId: input.episode.id,
+      turnId: input.episode.id,
       insightId: null,
       status: "deferred",
       target: "none",
@@ -43,6 +45,7 @@ function createDecision(input: {
   if (input.insight.status === "confirmed") {
     return {
       episodeId: input.episode.id,
+      turnId: input.episode.id,
       insightId: input.insight.id,
       status: "merged",
       target,
@@ -54,6 +57,7 @@ function createDecision(input: {
   if (input.insight.status === "rejected" || input.insight.status === "archived") {
     return {
       episodeId: input.episode.id,
+      turnId: input.episode.id,
       insightId: input.insight.id,
       status: "discarded",
       target: "none",
@@ -64,6 +68,7 @@ function createDecision(input: {
 
   return {
     episodeId: input.episode.id,
+    turnId: input.episode.id,
     insightId: input.insight.id,
     status: "deferred",
     target: "none",
@@ -133,25 +138,13 @@ export async function mergeAwarenessCandidates(input: {
     driftSignals.push(...nextDriftSignals);
     decisions.push(decision);
 
-    if (decision.status === "merged" && decision.insightId && decision.target !== "none") {
-      await appendConfirmedMemoryNote({
-        userId: input.episode.userId,
-        insightId: decision.insightId,
-        title: insight?.title ?? decision.text,
-        text: decision.text,
-        type: decision.target,
-        now: input.now,
-        dataRoot: input.dataRoot,
-      });
-    }
-
     await appendWritebackProposal({
       userId: input.episode.userId,
       decision,
       confidence: getDecisionConfidence(insight),
       createdAt: input.now,
       dataRoot: input.dataRoot,
-    }).catch(() => null);
+    });
   }
 
   await appendAwarenessNote({

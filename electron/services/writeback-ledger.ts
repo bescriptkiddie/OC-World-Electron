@@ -1,8 +1,11 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { MemoryMergeDecision, WritebackProposal, WritebackProposalStatus } from "../../src/types";
+import type { GrowthInsight, MemoryMergeDecision, WritebackProposal, WritebackProposalStatus } from "../../src/types";
 import { resolveOcDataPath } from "../capabilities/storage-paths";
+import { confirmInsightToProfile } from "./growth-profile";
+import { loadGrowthInsights, loadGrowthProfile, saveGrowthProfile } from "./memory";
 import { parseWritebackProposalList } from "./schemas";
+import { appendConfirmedMemoryNote, loadLongTermMemory, writeLongTermMemoryDocument } from "./unified-memory";
 
 const allowedWritebackTransitions: Record<WritebackProposalStatus, readonly WritebackProposalStatus[]> = {
   proposed: ["merged", "discarded"],
@@ -11,6 +14,8 @@ const allowedWritebackTransitions: Record<WritebackProposalStatus, readonly Writ
   discarded: [],
   reverted: [],
 };
+
+const ledgerFileLocks = new Map<string, Promise<unknown>>();
 
 function resolveWritebackProposalPath(dataRoot?: string) {
   return resolveOcDataPath(dataRoot, "writeback-ledger", "proposals.jsonl");
@@ -38,6 +43,7 @@ function toProposal(input: {
     id: `wb_${input.decision.episodeId}_${input.decision.insightId ?? "no_insight"}_${input.createdAt}`,
     userId: input.userId,
     episodeId: input.decision.episodeId,
+    turnId: input.decision.turnId,
     insightId: input.decision.insightId,
     target: input.decision.target,
     operation: "append",
@@ -103,7 +109,113 @@ function updateProposalStatus(
   };
 }
 
-async function mutateProposal(input: {
+async function findInsightForProposal(proposal: WritebackProposal, dataRoot?: string) {
+  if (!proposal.insightId) {
+    return null;
+  }
+
+  const insights = await loadGrowthInsights(proposal.userId, dataRoot);
+  return insights.find((insight) => insight.id === proposal.insightId) ?? null;
+}
+
+async function applyProfileWriteback(input: {
+  proposal: WritebackProposal;
+  insight: GrowthInsight;
+  dataRoot?: string;
+}) {
+  if (input.proposal.target !== "memory" && input.proposal.target !== "voice") {
+    return;
+  }
+
+  const profile = await loadGrowthProfile(input.proposal.userId, input.dataRoot);
+  const nextProfile = confirmInsightToProfile({
+    profile,
+    insight: input.insight,
+    now: input.proposal.updatedAt ?? input.proposal.createdAt,
+  });
+  await saveGrowthProfile(input.proposal.userId, nextProfile, input.dataRoot);
+}
+
+async function applyMergedWriteback(proposal: WritebackProposal, dataRoot?: string) {
+  if (!proposal.insightId || proposal.target === "none") {
+    return;
+  }
+
+  const insight = await findInsightForProposal(proposal, dataRoot);
+  if (!insight) {
+    throw new Error(`Growth insight not found for writeback proposal: ${proposal.id}`);
+  }
+
+  await applyProfileWriteback({ proposal, insight, dataRoot });
+
+  if (proposal.target === "memory" || proposal.target === "voice") {
+    await appendConfirmedMemoryNote({
+      userId: proposal.userId,
+      insightId: proposal.insightId,
+      title: insight.title,
+      text: proposal.text,
+      type: proposal.target,
+      now: proposal.updatedAt ?? proposal.createdAt,
+      dataRoot,
+    });
+  }
+}
+
+async function captureWritebackRollbackState(proposal: WritebackProposal, dataRoot?: string) {
+  if (proposal.target !== "memory" && proposal.target !== "voice") {
+    return null;
+  }
+
+  const [profile, longTermMemory] = await Promise.all([
+    loadGrowthProfile(proposal.userId, dataRoot),
+    loadLongTermMemory(proposal.userId, dataRoot),
+  ]);
+
+  return {
+    profile,
+    ...(proposal.target === "memory"
+      ? { memoryMarkdown: longTermMemory.memoryMarkdown as string }
+      : { voiceMarkdown: longTermMemory.voiceMarkdown as string }),
+  };
+}
+
+async function restoreWritebackRollbackState(
+  proposal: WritebackProposal,
+  snapshot: Awaited<ReturnType<typeof captureWritebackRollbackState>>,
+  dataRoot?: string,
+) {
+  if (!snapshot) {
+    return;
+  }
+
+  const restoreOperations: Promise<unknown>[] = [saveGrowthProfile(proposal.userId, snapshot.profile, dataRoot)];
+
+  if ("memoryMarkdown" in snapshot) {
+    restoreOperations.push(
+      writeLongTermMemoryDocument({
+        userId: proposal.userId,
+        type: "memory",
+        markdown: snapshot.memoryMarkdown,
+        dataRoot,
+      }),
+    );
+  }
+
+  if ("voiceMarkdown" in snapshot) {
+    restoreOperations.push(
+      writeLongTermMemoryDocument({
+        userId: proposal.userId,
+        type: "voice",
+        markdown: snapshot.voiceMarkdown,
+        dataRoot,
+      }),
+    );
+  }
+
+  await Promise.all(restoreOperations);
+}
+
+async function mutateProposalUnlocked(input: {
   userId: string;
   proposalId: string;
   dataRoot?: string;
@@ -131,8 +243,46 @@ async function mutateProposal(input: {
   );
   const nextProposal = nextProposals.find((proposal) => proposal.id === input.proposalId && proposal.userId === input.userId)!;
 
-  await writeAllProposals(filePath, nextProposals);
+  const rollbackSnapshot = input.nextStatus === "merged" ? await captureWritebackRollbackState(nextProposal, input.dataRoot) : null;
+
+  try {
+    if (input.nextStatus === "merged") {
+      await applyMergedWriteback(nextProposal, input.dataRoot);
+    }
+
+    await writeAllProposals(filePath, nextProposals);
+  } catch (error) {
+    await restoreWritebackRollbackState(nextProposal, rollbackSnapshot, input.dataRoot);
+    throw error;
+  }
+
   return nextProposal;
+}
+
+async function withLedgerFileLock<T>(filePath: string, operation: () => Promise<T>) {
+  const previous = ledgerFileLocks.get(filePath) ?? Promise.resolve();
+  const current = previous.then(operation, operation);
+  ledgerFileLocks.set(filePath, current);
+
+  try {
+    return await current;
+  } finally {
+    if (ledgerFileLocks.get(filePath) === current) {
+      ledgerFileLocks.delete(filePath);
+    }
+  }
+}
+
+async function mutateProposal(input: {
+  userId: string;
+  proposalId: string;
+  dataRoot?: string;
+  nextStatus: WritebackProposalStatus;
+  reason: string;
+  feedback?: string;
+}) {
+  const filePath = resolveWritebackProposalPath(input.dataRoot);
+  return withLedgerFileLock(filePath, () => mutateProposalUnlocked(input));
 }
 
 export async function appendWritebackProposal(input: {
@@ -145,9 +295,11 @@ export async function appendWritebackProposal(input: {
   const filePath = resolveWritebackProposalPath(input.dataRoot);
   const proposal = toProposal(input);
 
-  await ensureParentDir(filePath);
-  await writeFile(filePath, `${JSON.stringify(proposal)}\n`, { encoding: "utf8", flag: "a" });
-  return proposal;
+  return withLedgerFileLock(filePath, async () => {
+    await ensureParentDir(filePath);
+    await writeFile(filePath, `${JSON.stringify(proposal)}\n`, { encoding: "utf8", flag: "a" });
+    return proposal;
+  });
 }
 
 export async function listWritebackProposals(userId: string, dataRoot?: string) {

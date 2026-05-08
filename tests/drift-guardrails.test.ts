@@ -77,6 +77,7 @@ describe("drift guardrails", () => {
         turnId: "turn-1",
         decision: {
           episodeId: "episode-1",
+          turnId: "turn-1",
           insightId: "insight-1",
           status: "merged",
           target: "memory",
@@ -105,6 +106,7 @@ describe("drift guardrails", () => {
         turnId: "turn-1",
         decision: {
           episodeId: "episode-1",
+          turnId: "turn-1",
           insightId: "insight-1",
           status: "merged",
           target: "memory",
@@ -133,6 +135,7 @@ describe("drift guardrails", () => {
         turnId: "turn-1",
         decision: {
           episodeId: "episode-1",
+          turnId: "turn-1",
           insightId: "insight-1",
           status: "merged",
           target: "memory",

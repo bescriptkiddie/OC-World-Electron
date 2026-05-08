@@ -330,6 +330,7 @@ export interface RecallHintEvent extends RecallEvent {
 
 export interface MemoryMergeDecision {
   episodeId: string;
+  turnId: string;
   insightId: string | null;
   status: "merged" | "deferred" | "discarded";
   target: "memory" | "voice" | "none";
@@ -345,6 +346,7 @@ export interface WritebackProposal {
   id: string;
   userId: string;
   episodeId: string;
+  turnId?: string;
   insightId: string | null;
   target: WritebackProposalTarget;
   operation: WritebackProposalOperation;

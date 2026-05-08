@@ -552,6 +552,20 @@ export async function appendConfirmedMemoryNote(input: {
   await writeFile(filePath, next, "utf8");
 }
 
+export async function writeLongTermMemoryDocument(input: {
+  userId: string;
+  type: "memory" | "voice";
+  markdown: string;
+  dataRoot?: string;
+}) {
+  const legacyMemoryPath = shouldUseLegacyMemoryFallback(input.userId) ? resolveLegacyMemoryPath(input.dataRoot) : null;
+  const legacyVoicePath = shouldUseLegacyMemoryFallback(input.userId) ? resolveLegacyVoicePath(input.dataRoot) : null;
+  const filePath = input.type === "voice" ? resolveVoicePath(input.userId, input.dataRoot) : resolveMemoryPath(input.userId, input.dataRoot);
+  const legacyFilePath = input.type === "voice" ? legacyVoicePath : legacyMemoryPath;
+  await ensureTextFileWithLegacy(filePath, legacyFilePath, input.type === "voice" ? DEFAULT_VOICE_MARKDOWN : DEFAULT_MEMORY_MARKDOWN);
+  await writeFile(filePath, input.markdown, "utf8");
+}
+
 export async function appendAwarenessNote(input: {
   userId: string;
   episodeId: string;

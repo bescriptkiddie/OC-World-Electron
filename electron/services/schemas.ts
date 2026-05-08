@@ -269,6 +269,7 @@ const writebackProposalSchema = z.object({
   id: z.string(),
   userId: z.string(),
   episodeId: z.string(),
+  turnId: z.string().optional(),
   insightId: z.string().nullable(),
   target: z.enum(["memory", "voice", "none"]),
   operation: z.literal("append"),

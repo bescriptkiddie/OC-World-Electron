@@ -1,7 +1,8 @@
 import { mkdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { MemoryMergeDecision } from "../electron/services/memory-merge";
 import {
   appendWritebackProposal,
   approveWritebackProposal,
@@ -9,13 +10,13 @@ import {
   rejectWritebackProposal,
   revertWritebackProposal,
 } from "../electron/services/writeback-ledger";
-import type { MemoryMergeDecision } from "../electron/services/memory-merge";
 
 let tempDir = "";
 
 function createDecision(status: MemoryMergeDecision["status"]): MemoryMergeDecision {
   return {
     episodeId: "awareness-1",
+    turnId: "turn-1",
     insightId: "insight-1",
     status,
     target: status === "merged" ? "memory" : "none",
@@ -35,6 +36,8 @@ describe("writeback ledger", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
+    vi.doUnmock("node:fs/promises");
     if (tempDir) {
       await rm(tempDir, { recursive: true, force: true });
     }
@@ -142,22 +145,104 @@ describe("writeback ledger", () => {
     ]);
   });
 
-  it("rejects invalid status transitions", async () => {
+  it("serializes concurrent mutations on the same proposal", async () => {
     const proposal = await appendWritebackProposal({
       userId: "user-001",
-      decision: createDecision("merged"),
+      decision: createDecision("deferred"),
       confidence: 0.7,
       createdAt: 1,
       dataRoot: tempDir,
     });
 
-    await expect(
+    const [approved, rejected] = await Promise.allSettled([
       approveWritebackProposal({
         userId: "user-001",
         proposalId: proposal.id,
         dataRoot: tempDir,
       }),
-    ).rejects.toThrow("Writeback proposal cannot transition from merged to merged");
+      rejectWritebackProposal({
+        userId: "user-001",
+        proposalId: proposal.id,
+        feedback: "not stable enough",
+        dataRoot: tempDir,
+      }),
+    ]);
+
+    expect(approved).toEqual(
+      expect.objectContaining({
+        status: "fulfilled",
+        value: expect.objectContaining({ id: proposal.id, status: "merged" }),
+      }),
+    );
+    expect(rejected.status).toBe("rejected");
+    if (rejected.status === "rejected") {
+      expect(String(rejected.reason)).toContain("Writeback proposal cannot transition from merged to discarded");
+    }
+    await expect(listWritebackProposals("user-001", tempDir)).resolves.toEqual([
+      expect.objectContaining({ id: proposal.id, status: "merged", requiresUserConfirmation: false }),
+    ]);
+  });
+
+  it("preserves appends queued during proposal rewrite", async () => {
+    vi.resetModules();
+    let resolveRewriteGate!: () => void;
+    const rewriteGate = new Promise<void>((resolve) => {
+      resolveRewriteGate = resolve;
+    });
+    let rewriteSeen = false;
+
+    vi.doMock("node:fs/promises", async () => {
+      const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+      return {
+        ...actual,
+        writeFile: vi.fn(async (filePath, data, options) => {
+          if (String(filePath).endsWith(path.join("writeback-ledger", "proposals.jsonl")) && options === "utf8") {
+            rewriteSeen = true;
+            await rewriteGate;
+          }
+          return actual.writeFile(filePath, data, options as never);
+        }),
+      };
+    });
+
+    const ledger = await import("../electron/services/writeback-ledger");
+    const first = await ledger.appendWritebackProposal({
+      userId: "user-001",
+      decision: createDecision("deferred"),
+      confidence: 0.7,
+      createdAt: 1,
+      dataRoot: tempDir,
+    });
+
+    const approval = ledger.approveWritebackProposal({
+      userId: "user-001",
+      proposalId: first.id,
+      dataRoot: tempDir,
+    });
+    await vi.waitFor(() => expect(rewriteSeen).toBe(true));
+
+    const append = ledger.appendWritebackProposal({
+      userId: "user-001",
+      decision: {
+        ...createDecision("deferred"),
+        insightId: "insight-2",
+        turnId: "turn-2",
+      },
+      confidence: 0.8,
+      createdAt: 2,
+      dataRoot: tempDir,
+    });
+
+    if (!resolveRewriteGate) {
+      throw new Error("rewrite gate missing");
+    }
+    resolveRewriteGate();
+    await Promise.all([approval, append]);
+
+    await expect(ledger.listWritebackProposals("user-001", tempDir)).resolves.toEqual([
+      expect.objectContaining({ id: first.id, status: "merged" }),
+      expect.objectContaining({ id: "wb_awareness-1_insight-2_2", status: "deferred" }),
+    ]);
   });
 
   it("persists status transitions back to jsonl", async () => {
