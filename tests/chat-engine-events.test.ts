@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { mkdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -135,6 +136,78 @@ describe("chat engine governance events", () => {
     ]);
   });
 
+  it("does not block chat completion on a slow event recorder", async () => {
+    const buildContextSnapshot = vi.fn().mockResolvedValue(createSnapshot());
+    const retrieveMemoryBundle = vi.fn().mockResolvedValue({
+      longTermFacts: "",
+      voiceHints: "",
+      systemReminders: "",
+      activeProjects: [],
+      relevantWorkItems: [],
+      recentAwarenessHighlights: [],
+    });
+    const callLLM = vi.fn().mockResolvedValue({ text: "收到", emotion: "happy", growthEvent: null });
+    const updateRelationshipState = vi.fn().mockReturnValue({
+      ...createSnapshot().relationshipState,
+      intimacy: 11,
+      lastInteraction: Date.now(),
+    });
+    const saveRelationship = vi.fn().mockImplementation(async (_userId, relationship) => relationship);
+    const appendOCHistory = vi.fn().mockResolvedValue(undefined);
+    const appendDriftSignals = vi.fn().mockResolvedValue(undefined);
+    const runGrowthPipeline = vi.fn().mockResolvedValue(undefined);
+
+    vi.doMock("../electron/services/context-snapshot", () => ({
+      buildContextSnapshot,
+      clearContextSnapshotCache: vi.fn(),
+    }));
+    vi.doMock("../electron/services/memory-retrieval", () => ({ retrieveMemoryBundle }));
+    vi.doMock("../electron/services/llm", () => ({ callLLM }));
+    vi.doMock("../electron/services/relationship", async () => {
+      const actual = await vi.importActual<typeof import("../electron/services/relationship")>("../electron/services/relationship");
+      return { ...actual, updateRelationshipState };
+    });
+    vi.doMock("../electron/services/memory", async () => {
+      const actual = await vi.importActual<typeof import("../electron/services/memory")>("../electron/services/memory");
+      return { ...actual, saveRelationship, appendOCHistory };
+    });
+    vi.doMock("../electron/services/drift-guardrails", async () => {
+      const actual = await vi.importActual<typeof import("../electron/services/drift-guardrails")>("../electron/services/drift-guardrails");
+      return { ...actual, appendDriftSignals };
+    });
+    vi.doMock("../electron/services/growth-pipeline", () => ({ runGrowthPipeline }));
+
+    const { chat } = await import("../electron/services/chat-engine");
+    let releaseRecorder!: () => void;
+    const recorderBlock = new Promise<void>((resolve) => {
+      releaseRecorder = resolve;
+    });
+    const eventRecorder = vi.fn(async () => {
+      await recorderBlock;
+    });
+
+    const pendingChat = chat(
+      { characterId: "char-001", userId: "user-001", userMessage: "你好" },
+      {
+        signal: undefined,
+        sessionId: "user-001:char-001",
+        turnId: "turn-2",
+        eventRecorder,
+        dataRoot: tempDir,
+      },
+    );
+
+    const raced = await Promise.race([
+      pendingChat,
+      new Promise<"blocked">((resolve) => setTimeout(() => resolve("blocked"), 20)),
+    ]);
+
+    releaseRecorder();
+    await pendingChat;
+
+    expect(raced).not.toBe("blocked");
+  });
+
   it("emits growth pipeline failure events through the injected recorder", async () => {
     const buildContextSnapshot = vi.fn().mockResolvedValue(createSnapshot());
     const callLLM = vi.fn().mockResolvedValue({ text: "收到", emotion: "happy", growthEvent: null });
@@ -179,7 +252,7 @@ describe("chat engine governance events", () => {
       {
         signal: undefined,
         sessionId: "user-001:char-001",
-        turnId: "turn-2",
+        turnId: "turn-3",
         eventRecorder,
         dataRoot: tempDir,
       },

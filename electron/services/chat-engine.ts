@@ -49,7 +49,7 @@ function buildQuerySignals(snapshot: Awaited<ReturnType<typeof buildContextSnaps
   ];
 }
 
-async function emitTurnEvent(
+function emitTurnEvent(
   options: ChatOptions,
   kind: HermesSessionEvent["kind"],
   payload?: Record<string, unknown>,
@@ -59,7 +59,7 @@ async function emitTurnEvent(
     return;
   }
 
-  await options.eventRecorder({
+  const event: HermesSessionEvent = {
     id: `${options.turnId}:${kind}:${Date.now()}`,
     sessionId: options.sessionId,
     turnId: options.turnId,
@@ -67,7 +67,9 @@ async function emitTurnEvent(
     emittedAt: Date.now(),
     ...(payload ? { payload } : {}),
     ...(text ? { text } : {}),
-  });
+  };
+
+  void Promise.resolve(options.eventRecorder(event)).catch(() => undefined);
 }
 
 export async function chat(payload: ChatSendPayload, options: ChatOptions = {}): Promise<ChatResult> {
@@ -86,7 +88,7 @@ export async function chat(payload: ChatSendPayload, options: ChatOptions = {}):
     recentChatLimit: 10,
     dataRoot,
   });
-  await emitTurnEvent(options, "context_built", {
+  emitTurnEvent(options, "context_built", {
     source: snapshot.realtimeContext.source,
     recentChatCount: snapshot.conversationState.recentChat.length,
   });
@@ -100,7 +102,7 @@ export async function chat(payload: ChatSendPayload, options: ChatOptions = {}):
     : undefined;
 
   if (retrievedMemoryBundle) {
-    await emitTurnEvent(options, "memory_bundle_loaded", {
+    emitTurnEvent(options, "memory_bundle_loaded", {
       activeProjectCount: retrievedMemoryBundle.activeProjects.length,
       relevantWorkItemCount: retrievedMemoryBundle.relevantWorkItems.length,
       awarenessHighlightCount: retrievedMemoryBundle.recentAwarenessHighlights.length,
@@ -127,11 +129,11 @@ export async function chat(payload: ChatSendPayload, options: ChatOptions = {}):
     sessionId,
     ...(options.signal ? { signal: options.signal } : {}),
   };
-  await emitTurnEvent(options, "llm_started", {
+  emitTurnEvent(options, "llm_started", {
     messageCount: messages.length,
   });
   const response = await callLLM(systemPrompt, messages, llmOptions);
-  await emitTurnEvent(options, "llm_finished", {
+  emitTurnEvent(options, "llm_finished", {
     emotion: response.emotion,
     hasGrowthEvent: Boolean(response.growthEvent),
   });
@@ -163,16 +165,16 @@ export async function chat(payload: ChatSendPayload, options: ChatOptions = {}):
     ),
     appendDriftSignals(relationshipDriftSignals, dataRoot),
   ]);
-  await emitTurnEvent(options, "relationship_saved", {
+  emitTurnEvent(options, "relationship_saved", {
     intimacy: nextRelationship.intimacy,
     stage: nextRelationship.stage,
   });
-  await emitTurnEvent(options, "history_saved", {
+  emitTurnEvent(options, "history_saved", {
     messageLength: combinedUserMessage.length,
   });
   clearContextSnapshotCache();
 
-  await emitTurnEvent(options, "growth_pipeline_queued");
+  emitTurnEvent(options, "growth_pipeline_queued");
   void runGrowthPipeline({
     userId: payload.userId,
     userMessage: combinedUserMessage,
@@ -191,7 +193,7 @@ export async function chat(payload: ChatSendPayload, options: ChatOptions = {}):
       },
       dataRoot,
     );
-    await emitTurnEvent(
+    emitTurnEvent(
       options,
       "growth_pipeline_failed",
       undefined,
