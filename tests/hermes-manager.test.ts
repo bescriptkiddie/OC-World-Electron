@@ -139,7 +139,7 @@ describe("hermes manager", () => {
     const hermesRoot = String(options.cwd);
     const hermesCliPath = path.join(hermesRoot, "hermes_cli", "main.py");
 
-    expect(executable).toEqual(expect.stringMatching(/(?:python3?|hermes)$/));
+    expect(executable).toEqual(expect.stringMatching(/(?:python(?:3(?:\.\d+)?)?|hermes)$/));
     const defaultGatewayArgs = ["gateway", "run", "--replace"];
     if (String(executable).endsWith("hermes")) {
       expect(args).toEqual(defaultGatewayArgs);
