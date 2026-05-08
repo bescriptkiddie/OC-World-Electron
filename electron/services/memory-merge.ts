@@ -1,5 +1,7 @@
-import type { AwarenessEpisode, GrowthInsight } from "../../src/types";
+import type { AwarenessEpisode, GrowthInsight, DriftSignal } from "../../src/types";
 import { appendAwarenessNote, appendConfirmedMemoryNote } from "./unified-memory";
+import { appendWritebackProposal } from "./writeback-ledger";
+import { evaluateWritebackDriftSignals } from "./drift-guardrails";
 
 type MemoryMergeDecisionStatus = "merged" | "deferred" | "discarded";
 
@@ -70,37 +72,86 @@ function createDecision(input: {
   };
 }
 
+function getDecisionConfidence(insight: GrowthInsight | undefined) {
+  if (!insight) {
+    return 0;
+  }
+
+  return insight.confidence;
+}
+
+function applyCriticalDriftDeferral(input: {
+  decision: MemoryMergeDecision;
+  driftSignals: DriftSignal[];
+}): MemoryMergeDecision {
+  const shouldDefer = input.driftSignals.some(
+    (signal) => signal.severity === "critical" && signal.recommendedAction === "defer_writeback",
+  );
+
+  if (!shouldDefer) {
+    return input.decision;
+  }
+
+  return {
+    ...input.decision,
+    status: "deferred",
+    target: "none",
+    reason: "drift guardrail 命中高风险低置信写回，先延后进入长期记忆。",
+  };
+}
+
 export async function mergeAwarenessCandidates(input: {
   episode: AwarenessEpisode;
   insights: GrowthInsight[];
   now: number;
   dataRoot?: string;
-}): Promise<MemoryMergeDecision[]> {
-  const decisions = input.episode.candidateMemoryUpdates.map((candidate, index) => {
+}): Promise<{ decisions: MemoryMergeDecision[]; driftSignals: DriftSignal[] }> {
+  const decisions: MemoryMergeDecision[] = [];
+  const driftSignals: DriftSignal[] = [];
+
+  for (const [index, candidate] of input.episode.candidateMemoryUpdates.entries()) {
     const relatedInsightId = input.episode.relatedInsightIds[index] ?? input.episode.relatedInsightIds[0];
     const insight = input.insights.find((item) => item.id === relatedInsightId);
-    return createDecision({
+    const baseDecision = createDecision({
       episode: input.episode,
       insight,
       candidate,
     });
-  });
+    const nextDriftSignals = evaluateWritebackDriftSignals({
+      userId: input.episode.userId,
+      turnId: input.episode.id,
+      decision: baseDecision,
+      confidence: getDecisionConfidence(insight),
+      evidenceEventIds: insight?.evidenceIds ?? [],
+      createdAt: input.now,
+    });
+    const decision = applyCriticalDriftDeferral({
+      decision: baseDecision,
+      driftSignals: nextDriftSignals,
+    });
 
-  for (const decision of decisions) {
-    if (decision.status !== "merged" || !decision.insightId || decision.target === "none") {
-      continue;
+    driftSignals.push(...nextDriftSignals);
+    decisions.push(decision);
+
+    if (decision.status === "merged" && decision.insightId && decision.target !== "none") {
+      await appendConfirmedMemoryNote({
+        userId: input.episode.userId,
+        insightId: decision.insightId,
+        title: insight?.title ?? decision.text,
+        text: decision.text,
+        type: decision.target,
+        now: input.now,
+        dataRoot: input.dataRoot,
+      });
     }
 
-    const insight = input.insights.find((item) => item.id === decision.insightId);
-    await appendConfirmedMemoryNote({
+    await appendWritebackProposal({
       userId: input.episode.userId,
-      insightId: decision.insightId,
-      title: insight?.title ?? decision.text,
-      text: decision.text,
-      type: decision.target,
-      now: input.now,
+      decision,
+      confidence: getDecisionConfidence(insight),
+      createdAt: input.now,
       dataRoot: input.dataRoot,
-    });
+    }).catch(() => null);
   }
 
   await appendAwarenessNote({
@@ -111,5 +162,5 @@ export async function mergeAwarenessCandidates(input: {
     lines: decisions.map((decision) => `${decision.status} ${decision.target} ${decision.insightId ?? "no-insight"}：${decision.reason}`),
   });
 
-  return decisions;
+  return { decisions, driftSignals };
 }

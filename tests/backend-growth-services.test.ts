@@ -109,22 +109,65 @@ describe("backend growth services", () => {
     );
   });
 
-  it("deduplicates projects by normalized title", () => {
+  it("does not derive a project from a single deferred insight work item", () => {
     const projects = deriveProjectsFromWorkItems({
       state: createEmptyProjectsState("user-001"),
       workItems: [
-        createWorkItem({ id: "work-1", title: "Build memory layer" }),
-        createWorkItem({ id: "work-2", title: "Build   memory   layer", summary: "second summary" }),
+        createWorkItem({
+          id: "work-deferred-1",
+          title: "跑通完整记忆闭环",
+          summary: "用户正在推进完整记忆闭环。",
+          relatedSignals: ["insight-manual-goal", "evidence-1"],
+        }),
       ],
-      now: 1713000000700,
+      now: 1713000000750,
     });
 
-    expect(projects.projects).toHaveLength(1);
-    expect(projects.projects[0]).toEqual(
+    expect(projects.projects).toEqual([]);
+  });
+
+
+  it("does not mix realtime MVP signals into backend framework work items", () => {
+    const snapshot = createSnapshot();
+    snapshot.realtimeContext.tasks = [{ title: "Ship OC World MVP", progressSummary: "in progress" }];
+
+    const rankedSignals = rankTaskWorthySignals({
+      userId: "user-001",
+      userMessage: "我想把 OC World 的后端框架先搭起来。",
+      growthEvent: null,
+      snapshot,
+      now: 1713000000975,
+    });
+
+    expect(rankedSignals[0]).toEqual(
       expect.objectContaining({
-        title: "Build memory layer",
-        workItemIds: ["work-1", "work-2"],
+        title: "Build backend framework",
+        worthy: true,
       }),
     );
+    expect(rankedSignals[0]?.relatedSignals).not.toContain("Ship OC World MVP");
+  });
+
+  it("does not promote vague progress-only strong intent messages into work items", () => {
+    const rankedSignals = rankTaskWorthySignals({
+      userId: "user-001",
+      userMessage: "我想继续推进这个",
+      growthEvent: null,
+      snapshot: createSnapshot(),
+      now: 1713000000950,
+    });
+
+    const merged = mergeWorkItems({
+      existing: [],
+      signals: rankedSignals,
+      now: 1713000001000,
+    });
+
+    expect(rankedSignals[0]).toEqual(
+      expect.objectContaining({
+        worthy: false,
+      }),
+    );
+    expect(merged).toEqual([]);
   });
 });

@@ -86,6 +86,15 @@ declare global {
       awareness: {
         list: (payload: { userId: string; limit?: number }) => Promise<AwarenessEpisode[]>;
       };
+      writeback: {
+        list: (payload: { userId: string }) => Promise<import("./index").WritebackProposal[]>;
+        approve: (payload: { userId: string; proposalId: string }) => Promise<import("./index").WritebackProposal>;
+        reject: (payload: { userId: string; proposalId: string; feedback?: string }) => Promise<import("./index").WritebackProposal>;
+        revert: (payload: { userId: string; proposalId: string }) => Promise<import("./index").WritebackProposal>;
+      };
+      drift: {
+        listSignals: (payload: { userId: string; limit?: number }) => Promise<import("./index").DriftSignal[]>;
+      };
       workItems: {
         list: (userId: string) => Promise<WorkItem[]>;
       };

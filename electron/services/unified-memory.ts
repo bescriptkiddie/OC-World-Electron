@@ -13,6 +13,7 @@ import type {
 } from "../../src/types";
 import { resolveOcDataPath } from "../capabilities/storage-paths";
 import { parseProjectsState, parseRecallEventList, parseRecallSignalStateList, parseWorkItem } from "./schemas";
+import { isProjectEligible } from "./projects";
 
 const DEFAULT_MEMORY_MARKDOWN = `# OC World Long-term Memory
 
@@ -500,13 +501,19 @@ export async function loadRetrievedMemoryBundle(userId: string, dataRoot?: strin
     listWorkItems(userId, dataRoot),
     loadProjectsState(userId, dataRoot),
   ]);
+  const governedProjects = projectsState.projects.filter((project) =>
+    project.workItemIds.some((workItemId) => workItems.some((item) => item.id === workItemId && isProjectEligible(item))),
+  );
+  const governedWorkItems = workItems.filter(
+    (item) => (item.status === "pending" || item.status === "in_progress" || item.status === "blocked") && isProjectEligible(item),
+  );
 
   return {
     longTermFacts: compactMarkdown(longTermMemory.memoryMarkdown),
     voiceHints: compactMarkdown(longTermMemory.voiceMarkdown),
     systemReminders: compactMarkdown(longTermMemory.systemRemindersMarkdown),
-    activeProjects: projectsState.projects.slice(0, 5),
-    relevantWorkItems: workItems.filter((item) => item.status === "pending" || item.status === "in_progress" || item.status === "blocked").slice(0, 5),
+    activeProjects: governedProjects.slice(0, 5),
+    relevantWorkItems: governedWorkItems.slice(0, 5),
     recentAwarenessHighlights: awareness,
   };
 }

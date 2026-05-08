@@ -74,6 +74,15 @@ contextBridge.exposeInMainWorld("ocWorld", {
   awareness: {
     list: (payload: { userId: string; limit?: number }) => ipcRenderer.invoke("awareness:list", payload),
   },
+  writeback: {
+    list: (payload: { userId: string }) => ipcRenderer.invoke("writeback:list", payload),
+    approve: (payload: { userId: string; proposalId: string }) => ipcRenderer.invoke("writeback:approve", payload),
+    reject: (payload: { userId: string; proposalId: string; feedback?: string }) => ipcRenderer.invoke("writeback:reject", payload),
+    revert: (payload: { userId: string; proposalId: string }) => ipcRenderer.invoke("writeback:revert", payload),
+  },
+  drift: {
+    listSignals: (payload: { userId: string; limit?: number }) => ipcRenderer.invoke("drift:list-signals", payload),
+  },
   workItems: {
     list: (userId: string) => ipcRenderer.invoke("work-items:list", userId),
   },

@@ -77,6 +77,15 @@ export interface OcWorldClient {
   awareness: {
     list(payload: { userId: string; limit?: number }): Promise<AwarenessEpisode[]>;
   };
+  writeback: {
+    list(payload: { userId: string }): Promise<import("../types").WritebackProposal[]>;
+    approve(payload: { userId: string; proposalId: string }): Promise<import("../types").WritebackProposal>;
+    reject(payload: { userId: string; proposalId: string; feedback?: string }): Promise<import("../types").WritebackProposal>;
+    revert(payload: { userId: string; proposalId: string }): Promise<import("../types").WritebackProposal>;
+  };
+  drift?: {
+    listSignals(payload: { userId: string; limit?: number }): Promise<import("../types").DriftSignal[]>;
+  };
   workItems: {
     list(userId: string): Promise<WorkItem[]>;
   };

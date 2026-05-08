@@ -284,12 +284,12 @@
           <div class="iteration">
             <div class="iteration-card">
               <div class="iteration-label">本轮迭代时间</div>
-              <div class="iteration-value">2026-05-04 01:20:01 CST</div>
+              <div class="iteration-value">2026-05-07 19:04:44 CST</div>
               <ul class="mini-list">
-                <li>Hermes status IPC 恢复，bridge / reveal 断口补齐</li>
-                <li>主线候选分支全量回归 97 / 97 通过</li>
-                <li>进度看板改成固定三栏 + 追加时间线 contract</li>
-                <li>准备把收口结果并回 main</li>
+                <li>retrieval / recall 不再把弱 project 和弱 work-item 回流到 prompt 与 recall hint</li>
+                <li>recall 正向相关事项仍保留，但必须通过同一套治理 eligibility</li>
+                <li>memory-retrieval / recall tests 已补 recall context gate 回归</li>
+                <li>全量回归 159 / 159 通过，build 通过</li>
               </ul>
             </div>
             <div class="iteration-card">
@@ -321,25 +321,25 @@
           <div class="status-grid">
             <div class="status-item">
               <div class="status-title">产品</div>
-              <div class="status-value">提示更像“轻提醒”，事项也更少脏数据</div>
+              <div class="status-value">memory / relationship / task noise / project promotion / recall context 五类基础治理已开始拦脏写回与脏聚合</div>
             </div>
             <div class="status-item">
               <div class="status-title">架构</div>
-              <div class="status-value">snapshot / retrieval / recall / task 聚合边界更清楚</div>
+              <div class="status-value">Hermes event store + writeback bridge + drift ledger + memory/relationship/task-noise guard 已落地</div>
             </div>
             <div class="status-item">
               <div class="status-title">代码</div>
-              <div class="status-value">retrieval、recall、work-item、project 已继续收口</div>
+              <div class="status-value">chat / pipeline / preload / IPC / runtime tests 已补齐 task-noise 在内的三类 guardrail 回归，并锁住 reviewer 补充边界</div>
             </div>
             <div class="status-item">
               <div class="status-title">测试</div>
-              <div class="status-value">growth quality 定向 16 / 16 通过</div>
+              <div class="status-value">全量 160 / 160，build 通过</div>
             </div>
           </div>
           <div class="legend">
-            <span class="pill good">已完成：bridge 壳、snapshot 缓存失效、recall 刷新、memory retrieval 拆出、hint 上下文增强、task/project 质量收紧</span>
-            <span class="pill warn">待处理：user-scoped 持久化收口</span>
-            <span class="pill bad">未接：真实 Hermes 事件流</span>
+            <span class="pill good">已完成：Hermes session event store、writeback ledger、writeback approve/reject/revert bridge、user-scoped mutation guard、memory defer、relationship overfit、task-noise evaluator mismatch、project promotion gate、recall context gate、unified-memory direct bundle gate</span>
+            <span class="pill warn">待处理：relationship 目前只发 warning，不会拦截；project 聚合还没接同级 drift guardrail</span>
+            <span class="pill bad">未接：renderer 侧还没有消费 relationship drift、memory defer、writeback 审批的统一治理面板</span>
           </div>
         </aside>
       </section>
@@ -361,6 +361,9 @@
               <li>prompt 开始基于当前语境提取相关记忆、相关项目、相关事项，不再把整包 retrieval 直接挂在 snapshot 上。</li>
               <li>recall hint 现在会顺带带出相关记忆和相关事项，更像可用的轻提醒。</li>
               <li>task / project 的生成开始更克制，不再只要沾上关键词就粗暴落项目。</li>
+              <li>弱事项和弱项目不再经 retrieval / recall 回流到提示文本，减少低质量上下文二次污染。</li>
+              <li>单条 deferred insight 不再立刻被抬成 project，只有更明确的推进信号才会继续聚合。</li>
+              <li>vague strong-intent 不再直接生成事项，而会转成一条可解释的 `evaluator_mismatch` drift signal。</li>
               <li>Hermes 在主线里只暴露 bridge 契约，没有伪装成“已经全接通工具 runtime”。</li>
             </ul>
           </div>
@@ -394,7 +397,9 @@
               <li><strong>ContextSnapshot</strong>：从“每次都重拼”收成“可缓存、可显式失效”的主链状态入口。</li>
               <li><strong>Recall</strong>：手动评估站到“读新快照”这一边，提示文本也开始接 long-term memory / work-item 上下文。</li>
               <li><strong>Memory Retrieval</strong>：从 snapshot 中拆出，变成按 querySignals 取相关内容的独立层。</li>
-              <li><strong>Work / Project 聚合</strong>：开始从“粗关键词触发”收成“强意图 + 规范化标题聚合”。</li>
+              <li><strong>Work / Project 聚合</strong>：开始从“粗关键词触发”收成“强意图 + 规范化标题聚合”，并给模糊强意图补上 drift 解释层。</li>
+              <li><strong>Project Gate</strong>：单条 deferred insight work-item 不再直接抬升成 project，避免把低置信记忆候选绕道写成长期推进面。</li>
+              <li><strong>Recall Context Gate</strong>：retrieval 和 recall 只回流通过治理的 project / work-item，弱信号不再经提示层重新污染 prompt。</li>
             </ul>
           </div>
 
@@ -429,8 +434,10 @@
               <li>`electron/services/chat-engine.ts`：聊天写回后会清 snapshot 缓存，并在 prompt 前调用 retrieval。</li>
               <li>`electron/services/recall-service.ts`：手动 recall 评估强制 `bypassCache`。</li>
               <li>`electron/services/recall.ts`：recall 文本开始拼接相关记忆和相关事项。</li>
-              <li>`electron/services/work-items.ts`：强意图过滤、任务信号收紧、标题归一化合并。</li>
-              <li>`electron/services/projects.ts`：按规范化标题聚合项目，减少重复 project。</li>
+              <li>`electron/services/work-items.ts`：强意图过滤、任务信号收紧、标题归一化合并，并屏蔽 vague task 被默认实时任务误提权；同时避免把 realtime MVP 信号串进 backend 事项。</li>
+              <li>`electron/services/growth-pipeline.ts`：task signal 会先过 drift guardrail，模糊强意图改写成 `evaluator_mismatch` 并落盘。</li>
+              <li>`electron/services/projects.ts`：只让更明确的推进信号进入项目聚合，单条 deferred insight 不再直接抬升为 project。</li>
+              <li>`electron/services/memory-retrieval.ts` / `electron/services/recall.ts`：retrieval 与 recall 只回流通过治理的事项和项目，弱上下文不再二次污染提示层。</li>
             </ul>
           </div>
 
@@ -453,6 +460,8 @@
               <li>`tests/recall-service.test.ts`</li>
               <li>`tests/recall.test.ts`</li>
               <li>`tests/backend-growth-services.test.ts`</li>
+              <li>`tests/growth-pipeline.test.ts`</li>
+              <li>`tests/drift-guardrails.test.ts`</li>
             </ul>
           </div>
         </article>
@@ -469,11 +478,91 @@
 
           <div class="entry">
             <div class="entry-head">
-              <div class="entry-title">补齐 Hermes error 事件和 recall 读取成本控制</div>
-              <div class="entry-time">2026-05-04 01:52:50 CST</div>
+              <div class="entry-title">给 retrieval / recall 补上 context gate</div>
+              <div class="entry-time">2026-05-07 19:04:44 CST</div>
             </div>
             <div class="entry-body">
-              聊天失败时现在也会补发 `error` 和 `turn_end`，前端不会留下悬空回合；同时 recall 只在本轮真的命中候选信号时才批量读取长期记忆和事项，避免按 signal 重复打磁盘。
+              retrieval 和 recall 现在只会带回通过治理的 project / work-item；像“做饭计划”“买菜”这类弱条目不会再从存储层回流进 prompt 和 recall hint，同时保留真正相关的 backend memory 事项提示。
+            </div>
+          </div>
+
+          <div class="entry">
+            <div class="entry-head">
+              <div class="entry-title">给 project 聚合补上 deferred insight 闸门</div>
+              <div class="entry-time">2026-05-07 18:42:05 CST</div>
+            </div>
+            <div class="entry-body">
+              现在单条 deferred insight 产生的 work-item 不会立刻被抬成 project；只有更明确的推进信号才继续进入项目层。同时补了 chat-engine 的异步空项目回归，防止 fire-and-forget pipeline 把旧空文件误判成未落盘。
+            </div>
+          </div>
+
+          <div class="entry">
+            <div class="entry-head">
+              <div class="entry-title">补齐 task-noise reviewer 边界回归</div>
+              <div class="entry-time">2026-05-07 18:17:59 CST</div>
+            </div>
+            <div class="entry-body">
+              新增两条 reviewer 指向回归：一条锁住“我想继续推进这个”不会误提成事项，另一条锁住 realtime MVP release intent 仍能走正向事项路径，同时不把 Ship 信号串进 backend framework 事项。主链返回值、存储结果和 build 都重新验证过。
+            </div>
+          </div>
+
+          <div class="entry">
+            <div class="entry-head">
+              <div class="entry-title">把 vague task 收成 evaluator_mismatch 漂移信号</div>
+              <div class="entry-time">2026-05-07 17:37:10 CST</div>
+            </div>
+            <div class="entry-body">
+              work-item 入口不再把“我想先处理一下这个”这类模糊强意图和默认 realtime task 粘在一起误提成事项；growth pipeline 现在会把这类 turn 记成 `evaluator_mismatch` warning 并写进 drift ledger，同时保留真正结构化强意图的正向事项生成链路。
+            </div>
+          </div>
+
+          <div class="entry">
+            <div class="entry-head">
+              <div class="entry-title">给关系写回补上 relationship_overfit 漂移信号</div>
+              <div class="entry-time">2026-05-07 16:42:00 CST</div>
+            </div>
+            <div class="entry-body">
+              chat 主链在保存 relationship 前会检查单轮亲密度跳变；当 intimacy delta 过大时，会把这次关系写回记成 `relationship_overfit` warning，并落到 drift ledger，给后面的 explainability 和更强 guardrail 留入口。
+            </div>
+          </div>
+
+          <div class="entry">
+            <div class="entry-head">
+              <div class="entry-title">把极低置信 memory write 改成 defer_writeback</div>
+              <div class="entry-time">2026-05-07 16:15:00 CST</div>
+            </div>
+            <div class="entry-body">
+              drift guardrail 现在不只是记录 warning；当 merged memory write 的置信度低到 critical 阈值时，会直接把 merge decision 改写成 deferred，阻止这次长期记忆写入，同时把 signal 落成 `defer_writeback` 建议。
+            </div>
+          </div>
+
+          <div class="entry">
+            <div class="entry-head">
+              <div class="entry-title">补齐 drift signal 的最小治理链路</div>
+              <div class="entry-time">2026-05-07 16:06:00 CST</div>
+            </div>
+            <div class="entry-body">
+              低置信 merged memory write 现在会产出 `memory_pollution` warning，并落到 `drift/signals.jsonl`；同时 renderer 已经能经由 IPC / preload / runtime client 查询 drift signals，后面可以继续往 defer writeback 和 UI 可解释面板推进。
+            </div>
+          </div>
+
+          <div class="entry">
+            <div class="entry-head">
+              <div class="entry-title">收紧 writeback mutation 的用户边界和状态语义</div>
+              <div class="entry-time">2026-05-07 15:31:00 CST</div>
+            </div>
+            <div class="entry-body">
+              writeback mutation 现在必须带 `userId`，ledger 只允许修改当前用户自己的 proposal；同时状态迁移只允许 `proposed/deferred → merged/discarded`、`merged → reverted`，并且 mutation 完成后会清掉 `requiresUserConfirmation`。facade 缺少 mutation service 时也改成直接报错。
+            </div>
+          </div>
+
+          <div class="entry">
+            <div class="entry-head">
+              <div class="entry-title">补齐 writeback mutation bridge 并修复 reverted 读取断点</div>
+              <div class="entry-time">2026-05-07 15:12:00 CST</div>
+            </div>
+            <div class="entry-body">
+              `approve / reject / revert` 已从 ledger service 接到 preload、IPC、facade、runtime client；同时补回 Hermes contract 回归，并把 `reverted` 纳入 schema，避免 revert 后下次读取 proposal ledger 直接 parse 失败。
             </div>
           </div>
 
@@ -547,6 +636,14 @@
           </div>
           <div class="files-grid">
             <div class="file-card">
+              <div class="file-path">electron/services/work-items.ts / electron/services/growth-pipeline.ts / electron/services/drift-guardrails.ts</div>
+              <div class="file-note">task-worthiness、pipeline drift 落盘、evaluator mismatch 判断收紧，避免模糊强意图被默认 realtime task 污染成事项。</div>
+            </div>
+            <div class="file-card">
+              <div class="file-path">tests/backend-growth-services.test.ts / tests/drift-guardrails.test.ts / tests/growth-pipeline.test.ts / tests/progress-dashboard.test.ts</div>
+              <div class="file-note">这轮 benchmark 锁住 vague task 不落事项、evaluator mismatch 落漂移信号、正向强意图事项路径保留、HTML 看板时间线继续追加。</div>
+            </div>
+            <div class="file-card">
               <div class="file-path">electron/services/context-snapshot.ts</div>
               <div class="file-note">主链状态入口；现在只负责状态，不再吞整包 retrieval。</div>
             </div>
@@ -567,8 +664,8 @@
               <div class="file-note">事项生成和项目聚合开始更克制，减少脏 work-item 和重复 project。</div>
             </div>
             <div class="file-card">
-              <div class="file-path">tests/context-snapshot.test.ts / tests/memory-retrieval.test.ts / tests/chat-engine.test.ts / tests/recall-service.test.ts / tests/recall.test.ts / tests/backend-growth-services.test.ts / tests/hermes-bridge-contract.test.ts</div>
-              <div class="file-note">这轮 benchmark 锁住缓存失效、retrieval 独立化、bridge 契约、recall 刷新、hint 上下文增强、task/project 质量收紧。</div>
+              <div class="file-path">tests/context-snapshot.test.ts / tests/memory-retrieval.test.ts / tests/chat-engine.test.ts / tests/recall-service.test.ts / tests/recall.test.ts / tests/backend-growth-services.test.ts / tests/growth-pipeline.test.ts / tests/drift-guardrails.test.ts / tests/hermes-bridge-contract.test.ts</div>
+              <div class="file-note">这轮 benchmark 锁住缓存失效、retrieval 独立化、bridge 契约、recall 刷新、hint 上下文增强、task/project 质量收紧，以及 vague task 的 drift guardrail。</div>
             </div>
           </div>
         </aside>

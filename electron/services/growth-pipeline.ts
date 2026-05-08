@@ -6,6 +6,7 @@ import type {
   RecallEvent,
   WorkItem,
 } from "../../src/types";
+import { appendDriftSignals, evaluateTaskSignalDriftSignals } from "./drift-guardrails";
 import { buildContextSnapshot } from "./context-snapshot";
 import { distillGrowthTurn } from "./distillation";
 import { getMemoryFeatureFlags } from "./feature-flags";
@@ -77,26 +78,49 @@ function createManualAwarenessEpisode(input: {
 
 async function mergeTaskSignalsIntoWorkItems(input: {
   userId: string;
+  turnId: string;
   userMessage: string;
   growthEvent: string | null;
   snapshot: ContextSnapshot;
   now: number;
   dataRoot: string;
 }) {
+  const rankedSignals = rankTaskWorthySignals({
+    userId: input.userId,
+    userMessage: input.userMessage,
+    growthEvent: input.growthEvent,
+    snapshot: input.snapshot,
+    now: input.now,
+  });
+  const driftSignals = rankedSignals.flatMap((signal) =>
+    evaluateTaskSignalDriftSignals({
+      userId: input.userId,
+      turnId: input.turnId,
+      userMessage: input.userMessage,
+      worthy: signal.worthy,
+      relatedSignals: signal.relatedSignals,
+      createdAt: input.now,
+    }),
+  );
+  const worthySignals = rankedSignals.filter((signal) => signal.worthy);
+
+  if (!worthySignals.length) {
+    await appendDriftSignals(driftSignals, input.dataRoot);
+    return [];
+  }
+
   const existing = await listWorkItems(input.userId, input.dataRoot);
   const merged = mergeWorkItems({
     existing,
-    signals: rankTaskWorthySignals({
-      userId: input.userId,
-      userMessage: input.userMessage,
-      growthEvent: input.growthEvent,
-      snapshot: input.snapshot,
-      now: input.now,
-    }),
+    signals: rankedSignals,
     now: input.now,
   });
+  const writeOperations = [
+    ...merged.map((item) => saveWorkItem(item, input.dataRoot)),
+    ...(driftSignals.length ? [appendDriftSignals(driftSignals, input.dataRoot)] : []),
+  ];
 
-  await Promise.all(merged.map((item) => saveWorkItem(item, input.dataRoot)));
+  await Promise.all(writeOperations);
   return merged.sort((left, right) => right.updatedAt - left.updatedAt);
 }
 
@@ -210,7 +234,7 @@ export async function runGrowthPipeline(input: RunGrowthPipelineInput): Promise<
     distilled,
     insightIds: reveal.insights.map((item) => item.id),
   });
-  const memoryMergeDecisions = await mergeAwarenessCandidates({
+  const { decisions: memoryMergeDecisions, driftSignals } = await mergeAwarenessCandidates({
     episode,
     insights: reveal.insights,
     now,
@@ -222,6 +246,7 @@ export async function runGrowthPipeline(input: RunGrowthPipelineInput): Promise<
     saveGrowthEvidence(input.userId, merged.evidence, input.dataRoot),
     saveGrowthInsights(input.userId, reveal.insights, input.dataRoot),
     saveRevealQueue(input.userId, reveal.queue, input.dataRoot),
+    appendDriftSignals(driftSignals, input.dataRoot),
     appendGrowthLog(
       input.userId,
       {
@@ -245,6 +270,7 @@ export async function runGrowthPipeline(input: RunGrowthPipelineInput): Promise<
     }),
     mergeTaskSignalsIntoWorkItems({
       userId: input.userId,
+      turnId: episode.id,
       userMessage: input.userMessage,
       growthEvent: input.growthEvent,
       snapshot: input.snapshot,
@@ -322,7 +348,7 @@ export async function runManualDistillationPipeline(input: {
     };
   }
 
-  const memoryMergeDecisions = await mergeAwarenessCandidates({
+  const { decisions: memoryMergeDecisions, driftSignals } = await mergeAwarenessCandidates({
     episode,
     insights,
     now,
@@ -330,6 +356,7 @@ export async function runManualDistillationPipeline(input: {
   });
 
   await appendAwarenessEpisode(episode, dataRoot);
+  await appendDriftSignals(driftSignals, dataRoot);
   const workItems = await syncWorkItemsFromInsights({
     userId: input.userId,
     insights,

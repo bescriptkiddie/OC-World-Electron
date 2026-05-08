@@ -337,6 +337,53 @@ export interface MemoryMergeDecision {
   text: string;
 }
 
+export type WritebackProposalTarget = "memory" | "voice" | "none";
+export type WritebackProposalOperation = "append";
+export type WritebackProposalStatus = "proposed" | "merged" | "deferred" | "discarded" | "reverted";
+
+export interface WritebackProposal {
+  id: string;
+  userId: string;
+  episodeId: string;
+  insightId: string | null;
+  target: WritebackProposalTarget;
+  operation: WritebackProposalOperation;
+  text: string;
+  evidenceEventIds: string[];
+  evidenceSummary: string;
+  confidence: number;
+  status: WritebackProposalStatus;
+  reason: string;
+  requiresUserConfirmation: boolean;
+  createdAt: number;
+  updatedAt?: number;
+  feedback?: string;
+}
+
+export type DriftSignalType =
+  | "goal_drift"
+  | "memory_pollution"
+  | "stale_context"
+  | "writeback_conflict"
+  | "relationship_overfit"
+  | "recall_noise"
+  | "evaluator_mismatch";
+
+export type DriftSignalSeverity = "info" | "warning" | "critical";
+export type DriftSignalRecommendedAction = "observe" | "defer_writeback" | "pause_distillation" | "ask_user" | "revert";
+
+export interface DriftSignal {
+  id: string;
+  userId: string;
+  turnId: string;
+  type: DriftSignalType;
+  severity: DriftSignalSeverity;
+  summary: string;
+  evidenceEventIds: string[];
+  recommendedAction: DriftSignalRecommendedAction;
+  createdAt: number;
+}
+
 export interface ManualDistillationResult {
   episode: AwarenessEpisode;
   memoryMergeDecisions: MemoryMergeDecision[];
@@ -344,6 +391,7 @@ export interface ManualDistillationResult {
   projects: ProjectsState;
   recallEvents: RecallEvent[];
 }
+
 
 export interface RetrievedMemoryBundle {
   longTermFacts: string;

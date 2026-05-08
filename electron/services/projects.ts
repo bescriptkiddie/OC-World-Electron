@@ -5,12 +5,22 @@ import {
   saveProjectsState,
 } from "./unified-memory";
 
+const projectPromotionSignalPattern = /memory|backend|mvp|ship|上线|发布/i;
+
 function normalizeTitle(title: string) {
   return title.trim().replace(/\s+/g, " ");
 }
 
 function toProjectId(title: string) {
   return `project_${normalizeTitle(title).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+}
+
+export function isProjectPromotionSignal(signal: string) {
+  return signal.length <= 32 && projectPromotionSignalPattern.test(signal);
+}
+
+export function isProjectEligible(item: WorkItem) {
+  return item.relatedSignals.some(isProjectPromotionSignal);
 }
 
 export function createEmptyProjectsState(userId: string): ProjectsState {
@@ -27,7 +37,7 @@ export function deriveProjectsFromWorkItems(input: {
   workItems: WorkItem[];
   now: number;
 }): ProjectsState {
-  const relevantItems = input.workItems.filter((item) => item.status !== "cancelled");
+  const relevantItems = input.workItems.filter((item) => item.status !== "cancelled" && isProjectEligible(item));
   const groupedProjects = new Map<string, WorkItem[]>();
 
   for (const item of relevantItems) {

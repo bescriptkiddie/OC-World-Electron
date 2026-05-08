@@ -24,6 +24,11 @@ interface CapabilityServices {
   loadOCHistory: (userId: string, limit: number, dataRoot?: string) => Promise<ChatHistoryEntry[]>;
   loadRecentSummaries: (userId: string, weeks: number, dataRoot?: string) => Promise<MemorySummary[]>;
   getAirJellyContext: (dataRoot?: string) => Promise<AirJellyContext>;
+  listWritebackProposals?: (userId: string, dataRoot?: string) => Promise<import("../../src/types").WritebackProposal[]>;
+  approveWritebackProposal?: (payload: { userId: string; proposalId: string; dataRoot?: string }) => Promise<import("../../src/types").WritebackProposal>;
+  rejectWritebackProposal?: (payload: { userId: string; proposalId: string; feedback?: string; dataRoot?: string }) => Promise<import("../../src/types").WritebackProposal>;
+  revertWritebackProposal?: (payload: { userId: string; proposalId: string; dataRoot?: string }) => Promise<import("../../src/types").WritebackProposal>;
+  listDriftSignals?: (payload: { userId: string; limit?: number }, dataRoot?: string) => Promise<import("../../src/types").DriftSignal[]>;
   hermesManager: { getStatus: () => HermesRuntimeStatus };
   getHermesBridgeStatus?: () => Promise<HermesBridgeStatus>;
   listHermesSessionEvents?: (query: HermesSessionEventQuery) => Promise<HermesSessionEvent[]>;
@@ -101,6 +106,34 @@ export function createOcWorldCapabilities(options: CreateOcWorldCapabilitiesOpti
     airjelly: {
       getContext() {
         return services.getAirJellyContext(context.dataRoot);
+      },
+    },
+    writeback: {
+      list(payload: { userId: string }) {
+        return services.listWritebackProposals?.(payload.userId, context.dataRoot) ?? [];
+      },
+      async approve(payload: { userId: string; proposalId: string }) {
+        if (!services.approveWritebackProposal) {
+          throw new Error("Writeback approval is unavailable in this runtime");
+        }
+        return services.approveWritebackProposal({ ...payload, dataRoot: context.dataRoot });
+      },
+      async reject(payload: { userId: string; proposalId: string; feedback?: string }) {
+        if (!services.rejectWritebackProposal) {
+          throw new Error("Writeback rejection is unavailable in this runtime");
+        }
+        return services.rejectWritebackProposal({ ...payload, dataRoot: context.dataRoot });
+      },
+      async revert(payload: { userId: string; proposalId: string }) {
+        if (!services.revertWritebackProposal) {
+          throw new Error("Writeback revert is unavailable in this runtime");
+        }
+        return services.revertWritebackProposal({ ...payload, dataRoot: context.dataRoot });
+      },
+    },
+    drift: {
+      listSignals(payload: { userId: string; limit?: number }) {
+        return services.listDriftSignals?.(payload, context.dataRoot) ?? [];
       },
     },
     hermes: {

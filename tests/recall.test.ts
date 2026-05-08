@@ -128,7 +128,7 @@ describe("recall evaluator", () => {
           description: "推进 backend memory retrieval",
           status: "pending",
           source: "distillation",
-          relatedSignals: ["跑通 Chat 主链路"],
+          relatedSignals: ["backend", "memory", "跑通 Chat 主链路"],
           notes: [{ at: 1, text: "目标线索", source: "distillation" }],
           summary: "推进 backend memory retrieval",
           createdAt: 1,
@@ -146,6 +146,62 @@ describe("recall evaluator", () => {
 
     expect(events[0]?.text).toContain("相关记忆：跑通 Chat 主链路是当前第一优先级");
     expect(events[0]?.text).toContain("相关事项：统一记忆仓");
+  });
+
+  it("does not leak weak work-item context into recall text", async () => {
+    const snapshot = createSnapshot();
+    await mkdir(path.join(tempDir, "oc-data", "memory", "users", "user-001"), { recursive: true });
+    await mkdir(path.join(tempDir, "oc-data", "projects", "users", "user-001"), { recursive: true });
+    await mkdir(path.join(tempDir, "oc-data", "work-items"), { recursive: true });
+
+    await writeFile(
+      path.join(tempDir, "oc-data", "memory", "users", "user-001", "memory.md"),
+      "# OC World Long-term Memory\n\n## Growth Focus\n- 跑通 Chat 主链路是当前第一优先级\n",
+      "utf8",
+    );
+    await writeFile(
+      path.join(tempDir, "oc-data", "memory", "users", "user-001", "voice.md"),
+      "# OC World Voice Memory\n\n## 适合的语气\n- 直接一点\n",
+      "utf8",
+    );
+    await writeFile(
+      path.join(tempDir, "oc-data", "memory", "users", "user-001", "system-reminders.md"),
+      "# System Reminders\n\n- 不要编造\n",
+      "utf8",
+    );
+    await writeFile(
+      path.join(tempDir, "oc-data", "projects", "users", "user-001", "projects.json"),
+      JSON.stringify({ version: 1, generatedAt: 1, userId: "user-001", projects: [] }, null, 2),
+      "utf8",
+    );
+    await writeFile(
+      path.join(tempDir, "oc-data", "work-items", "work-1.json"),
+      JSON.stringify(
+        {
+          id: "work-1",
+          userId: "user-001",
+          title: "买菜",
+          description: "无关事项",
+          status: "pending",
+          source: "distillation",
+          relatedSignals: ["kitchen"],
+          notes: [{ at: 1, text: "无关", source: "distillation" }],
+          summary: "无关事项",
+          createdAt: 1,
+          updatedAt: 2,
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    await evaluateRecallCandidates({ userId: "user-001", snapshot, now: 1, dataRoot: tempDir });
+    await evaluateRecallCandidates({ userId: "user-001", snapshot, now: 2, dataRoot: tempDir });
+    const events = await evaluateRecallCandidates({ userId: "user-001", snapshot, now: 3, dataRoot: tempDir });
+
+    expect(events[0]?.text).toContain("相关记忆：跑通 Chat 主链路是当前第一优先级");
+    expect(events[0]?.text).not.toContain("相关事项：买菜");
   });
 
   it("loads long-term memory and work items once per evaluation even with multiple signals", async () => {

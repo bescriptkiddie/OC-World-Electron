@@ -11,6 +11,7 @@ import type {
   ProjectsState,
   RecallEvent,
   RecallSignalState,
+  DriftSignal,
   Relationship,
   RevealCandidate,
   WorkItem,
@@ -244,6 +245,77 @@ const recallSignalStateSchema = z.object({
   lastTriggeredAt: z.number().optional(),
 });
 
+const driftSignalSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  turnId: z.string(),
+  type: z.enum([
+    "goal_drift",
+    "memory_pollution",
+    "stale_context",
+    "writeback_conflict",
+    "relationship_overfit",
+    "recall_noise",
+    "evaluator_mismatch",
+  ]),
+  severity: z.enum(["info", "warning", "critical"]),
+  summary: z.string(),
+  evidenceEventIds: z.array(z.string()),
+  recommendedAction: z.enum(["observe", "defer_writeback", "pause_distillation", "ask_user", "revert"]),
+  createdAt: z.number(),
+});
+
+const writebackProposalSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  episodeId: z.string(),
+  insightId: z.string().nullable(),
+  target: z.enum(["memory", "voice", "none"]),
+  operation: z.literal("append"),
+  text: z.string(),
+  evidenceEventIds: z.array(z.string()),
+  evidenceSummary: z.string(),
+  confidence: z.number(),
+  status: z.enum(["proposed", "merged", "deferred", "discarded", "reverted"]),
+  reason: z.string(),
+  requiresUserConfirmation: z.boolean(),
+  createdAt: z.number(),
+  updatedAt: z.number().optional(),
+  feedback: z.string().optional(),
+});
+
+const hermesSessionEventQuerySchema = z
+  .object({
+    sessionId: z.string().min(1).optional(),
+    turnId: z.string().min(1).optional(),
+    userId: z.string().min(1).optional(),
+    characterId: z.string().min(1).optional(),
+    limit: z.number().int().positive().optional(),
+  })
+  .superRefine((query, context) => {
+    const hasSessionId = query.sessionId !== undefined;
+    const hasUserId = query.userId !== undefined;
+    const hasCharacterId = query.characterId !== undefined;
+
+    if (hasSessionId && (hasUserId || hasCharacterId)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "sessionId cannot be combined with userId or characterId",
+        path: ["sessionId"],
+      });
+    }
+
+    if (hasUserId === hasCharacterId) {
+      return;
+    }
+
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "userId and characterId must be provided together",
+      path: hasUserId ? ["characterId"] : ["userId"],
+    });
+  });
+
 export const airJellyContextListSchema = airJellyContextSchema;
 export const memorySummaryListSchema = z.array(summarySchema);
 export const relationshipStateSchema = relationshipSchema;
@@ -259,6 +331,21 @@ export const workItemListSchema = z.array(workItemSchema);
 export const projectsStateListSchema = projectsStateSchema;
 export const recallEventListSchema = z.array(recallEventSchema);
 export const recallSignalStateListSchema = z.array(recallSignalStateSchema);
+export const driftSignalListSchema = z.array(driftSignalSchema);
+export const writebackProposalListSchema = z.array(writebackProposalSchema);
+export const hermesSessionEventQueryStateSchema = hermesSessionEventQuerySchema;
+
+export function parseWritebackProposalList(value: unknown) {
+  return writebackProposalListSchema.parse(value);
+}
+
+export function safeParseHermesSessionEventQuery(value: unknown) {
+  return hermesSessionEventQueryStateSchema.safeParse(value);
+}
+
+export function parseHermesSessionEventQuery(value: unknown) {
+  return hermesSessionEventQueryStateSchema.parse(value);
+}
 
 export function parseAirJellyContext(value: unknown): AirJellyContext {
   return airJellyContextListSchema.parse(value) as AirJellyContext;
@@ -318,4 +405,8 @@ export function parseRecallEventList(value: unknown): RecallEvent[] {
 
 export function parseRecallSignalStateList(value: unknown): RecallSignalState[] {
   return recallSignalStateListSchema.parse(value) as RecallSignalState[];
+}
+
+export function parseDriftSignalList(value: unknown): DriftSignal[] {
+  return driftSignalListSchema.parse(value) as DriftSignal[];
 }
