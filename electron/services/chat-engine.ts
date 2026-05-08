@@ -1,4 +1,4 @@
-import type { ChatResponse, ChatResult, ChatSendPayload } from "../../src/types";
+import type { ChatResponse, ChatResult, ChatSendPayload, HermesSessionEvent } from "../../src/types";
 import { buildContextSnapshot, clearContextSnapshotCache } from "./context-snapshot";
 import { appendDriftSignals, evaluateRelationshipDriftSignals } from "./drift-guardrails";
 import { getMemoryFeatureFlags } from "./feature-flags";
@@ -16,6 +16,10 @@ import { calculateIntimacyDelta, updateRelationshipState } from "./relationship"
 
 interface ChatOptions {
   signal?: AbortSignal;
+  sessionId?: string;
+  turnId?: string;
+  dataRoot?: string;
+  eventRecorder?: (event: HermesSessionEvent) => Promise<void> | void;
 }
 
 function getTurnMessages(payload: ChatSendPayload) {
@@ -45,11 +49,33 @@ function buildQuerySignals(snapshot: Awaited<ReturnType<typeof buildContextSnaps
   ];
 }
 
+async function emitTurnEvent(
+  options: ChatOptions,
+  kind: HermesSessionEvent["kind"],
+  payload?: Record<string, unknown>,
+  text?: string,
+) {
+  if (!options.eventRecorder || !options.sessionId || !options.turnId) {
+    return;
+  }
+
+  await options.eventRecorder({
+    id: `${options.turnId}:${kind}:${Date.now()}`,
+    sessionId: options.sessionId,
+    turnId: options.turnId,
+    kind,
+    emittedAt: Date.now(),
+    ...(payload ? { payload } : {}),
+    ...(text ? { text } : {}),
+  });
+}
+
 export async function chat(payload: ChatSendPayload, options: ChatOptions = {}): Promise<ChatResult> {
-  const dataRoot = process.cwd();
+  const dataRoot = options.dataRoot ?? process.cwd();
   const turnMessages = getTurnMessages(payload);
   const combinedUserMessage = turnMessages.join("\n");
   const flags = getMemoryFeatureFlags();
+  const sessionId = options.sessionId ?? `${payload.userId}:${payload.characterId}`;
 
   throwIfAborted(options.signal);
 
@@ -60,6 +86,11 @@ export async function chat(payload: ChatSendPayload, options: ChatOptions = {}):
     recentChatLimit: 10,
     dataRoot,
   });
+  await emitTurnEvent(options, "context_built", {
+    source: snapshot.realtimeContext.source,
+    recentChatCount: snapshot.conversationState.recentChat.length,
+  });
+
   const retrievedMemoryBundle = flags.unifiedMemory
     ? await retrieveMemoryBundle({
         userId: payload.userId,
@@ -67,6 +98,14 @@ export async function chat(payload: ChatSendPayload, options: ChatOptions = {}):
         querySignals: buildQuerySignals(snapshot, combinedUserMessage),
       })
     : undefined;
+
+  if (retrievedMemoryBundle) {
+    await emitTurnEvent(options, "memory_bundle_loaded", {
+      activeProjectCount: retrievedMemoryBundle.activeProjects.length,
+      relevantWorkItemCount: retrievedMemoryBundle.relevantWorkItems.length,
+      awarenessHighlightCount: retrievedMemoryBundle.recentAwarenessHighlights.length,
+    });
+  }
 
   const systemPrompt = buildSystemPrompt({
     snapshot,
@@ -85,10 +124,17 @@ export async function chat(payload: ChatSendPayload, options: ChatOptions = {}):
   throwIfAborted(options.signal);
 
   const llmOptions = {
-    sessionId: `${payload.userId}:${payload.characterId}`,
+    sessionId,
     ...(options.signal ? { signal: options.signal } : {}),
   };
+  await emitTurnEvent(options, "llm_started", {
+    messageCount: messages.length,
+  });
   const response = await callLLM(systemPrompt, messages, llmOptions);
+  await emitTurnEvent(options, "llm_finished", {
+    emotion: response.emotion,
+    hasGrowthEvent: Boolean(response.growthEvent),
+  });
 
   throwIfAborted(options.signal);
 
@@ -96,7 +142,7 @@ export async function chat(payload: ChatSendPayload, options: ChatOptions = {}):
   const nextRelationship = updateRelationshipState(snapshot.relationshipState, intimacyDelta, response.growthEvent);
   const relationshipDriftSignals = evaluateRelationshipDriftSignals({
     userId: payload.userId,
-    turnId: llmOptions.sessionId,
+    turnId: options.turnId ?? llmOptions.sessionId,
     previousIntimacy: snapshot.relationshipState.intimacy,
     nextIntimacy: nextRelationship.intimacy,
     growthEvent: response.growthEvent,
@@ -117,8 +163,16 @@ export async function chat(payload: ChatSendPayload, options: ChatOptions = {}):
     ),
     appendDriftSignals(relationshipDriftSignals, dataRoot),
   ]);
+  await emitTurnEvent(options, "relationship_saved", {
+    intimacy: nextRelationship.intimacy,
+    stage: nextRelationship.stage,
+  });
+  await emitTurnEvent(options, "history_saved", {
+    messageLength: combinedUserMessage.length,
+  });
   clearContextSnapshotCache();
 
+  await emitTurnEvent(options, "growth_pipeline_queued");
   void runGrowthPipeline({
     userId: payload.userId,
     userMessage: combinedUserMessage,
@@ -136,6 +190,12 @@ export async function chat(payload: ChatSendPayload, options: ChatOptions = {}):
         message: error instanceof Error ? error.message : String(error),
       },
       dataRoot,
+    );
+    await emitTurnEvent(
+      options,
+      "growth_pipeline_failed",
+      undefined,
+      error instanceof Error ? error.message : String(error),
     );
   });
 

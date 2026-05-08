@@ -501,6 +501,15 @@ export interface HermesBridgeStatus {
 
 export type HermesSessionEventKind =
   | "turn_start"
+  | "context_built"
+  | "memory_bundle_loaded"
+  | "llm_started"
+  | "llm_finished"
+  | "state_write_proposed"
+  | "relationship_saved"
+  | "history_saved"
+  | "growth_pipeline_queued"
+  | "growth_pipeline_failed"
   | "text_delta"
   | "tool_call_start"
   | "tool_call_end"
