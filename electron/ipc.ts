@@ -171,10 +171,12 @@ async function stopAsrSession(payload: AsrStopPayload) {
   return true;
 }
 
-function broadcastHermesSessionEvent(event: HermesSessionEvent) {
-  recordSessionEvent(event);
+async function broadcastHermesSessionEvent(event: HermesSessionEvent) {
+  await recordSessionEvent(event);
 
-  for (const window of BrowserWindow.getAllWindows()) {
+  const maybeWindows = typeof BrowserWindow.getAllWindows === "function" ? BrowserWindow.getAllWindows() : [];
+  const windows = Array.isArray(maybeWindows) ? maybeWindows : [];
+  for (const window of windows) {
     window.webContents.send(ipcChannels.hermesSessionEvent, event);
   }
 }
@@ -238,7 +240,7 @@ export function registerIpcHandlers() {
     const controller = new AbortController();
     activeChatControllers.set(sessionKey, controller);
 
-    broadcastHermesSessionEvent({
+    await broadcastHermesSessionEvent({
       id: `${turnId}:start`,
       sessionId: sessionKey,
       turnId,
@@ -248,8 +250,15 @@ export function registerIpcHandlers() {
     });
 
     try {
-      const result = await chat(payload, { signal: controller.signal });
-      broadcastHermesSessionEvent({
+      const result = await chat(payload, {
+        signal: controller.signal,
+        sessionId: sessionKey,
+        turnId,
+        eventRecorder: async (sessionEvent) => {
+          await broadcastHermesSessionEvent(sessionEvent);
+        },
+      });
+      await broadcastHermesSessionEvent({
         id: `${turnId}:end`,
         sessionId: sessionKey,
         turnId,
@@ -259,7 +268,7 @@ export function registerIpcHandlers() {
       return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      broadcastHermesSessionEvent({
+      await broadcastHermesSessionEvent({
         id: `${turnId}:error`,
         sessionId: sessionKey,
         turnId,
@@ -267,7 +276,7 @@ export function registerIpcHandlers() {
         emittedAt: Date.now(),
         text: message,
       });
-      broadcastHermesSessionEvent({
+      await broadcastHermesSessionEvent({
         id: `${turnId}:end`,
         sessionId: sessionKey,
         turnId,

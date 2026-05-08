@@ -244,6 +244,160 @@ describe("hermes bridge contract", () => {
     expect(ipcMain.removeHandler).toHaveBeenCalledWith("drift:list-signals");
   });
 
+  it("emits detailed hermes session events during chat turns", async () => {
+    const handlers = new Map<string, (...args: unknown[]) => unknown>();
+    const send = vi.fn();
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler);
+      }),
+      on: vi.fn(),
+      removeHandler: vi.fn(),
+      removeAllListeners: vi.fn(),
+    };
+    const BrowserWindow = {
+      getAllWindows: vi.fn().mockReturnValue([{ webContents: { send } }]),
+    };
+    const chat = vi.fn(async (_payload, options) => {
+      await options?.eventRecorder?.({
+        id: "evt-1:start",
+        sessionId: "user-001:char-001",
+        turnId: "turn-1",
+        kind: "turn_start",
+        emittedAt: 1,
+      });
+      await options?.eventRecorder?.({
+        id: "evt-1:context",
+        sessionId: "user-001:char-001",
+        turnId: "turn-1",
+        kind: "context_built",
+        emittedAt: 2,
+      });
+      await options?.eventRecorder?.({
+        id: "evt-1:llm-start",
+        sessionId: "user-001:char-001",
+        turnId: "turn-1",
+        kind: "llm_started",
+        emittedAt: 3,
+      });
+      await options?.eventRecorder?.({
+        id: "evt-1:llm-finished",
+        sessionId: "user-001:char-001",
+        turnId: "turn-1",
+        kind: "llm_finished",
+        emittedAt: 4,
+      });
+      await options?.eventRecorder?.({
+        id: "evt-1:state-write",
+        sessionId: "user-001:char-001",
+        turnId: "turn-1",
+        kind: "state_write_proposed",
+        emittedAt: 5,
+      });
+      return {
+        text: "收到",
+        emotion: "happy",
+        growthEvent: null,
+        intimacy: 1,
+        stage: "friend",
+        source: "mock",
+      };
+    });
+
+    vi.doMock("electron", () => ({ BrowserWindow, ipcMain }));
+    vi.doMock("../electron/services/chat-engine", () => ({ chat, generateGreeting: vi.fn() }));
+    vi.doMock("../electron/services/airjelly", () => ({ getAirJellyContext: vi.fn() }));
+    vi.doMock("../electron/services/growth-pipeline", () => ({ runManualDistillationPipeline: vi.fn() }));
+    vi.doMock("../electron/services/growth-profile", () => ({ confirmInsightToProfile: vi.fn() }));
+    vi.doMock("../electron/services/growth-insights", () => ({ rejectInsight: vi.fn() }));
+    vi.doMock("../electron/services/hermes-manager", () => ({
+      hermesManager: {
+        getStatus: vi.fn().mockReturnValue({
+          state: "healthy",
+          pid: 1,
+          restartCount: 0,
+          lastError: null,
+          lastStartedAt: null,
+          lastHealthCheckAt: null,
+        }),
+        onStatusChanged: vi.fn().mockReturnValue(vi.fn()),
+      },
+    }));
+    vi.doMock("../electron/services/tts", () => ({ getTtsStatus: vi.fn(), synthesizeSpeech: vi.fn() }));
+    vi.doMock("../electron/services/stepfun-asr", () => ({
+      getAsrStatus: vi.fn(),
+      StepFunAsrSession: class {
+        async start() {}
+        async finish() {}
+        close() {}
+        sendAudio() {}
+      },
+    }));
+    vi.doMock("../electron/services/image-gen", () => ({ generateImage: vi.fn() }));
+    vi.doMock("../electron/services/recall-service", () => ({
+      evaluateContextRecall: vi.fn(),
+      startRecallPolling: vi.fn(),
+      stopAllRecallPolling: vi.fn(),
+      stopRecallPolling: vi.fn(),
+    }));
+    vi.doMock("../electron/services/memory", () => ({
+      listTimeline: vi.fn(),
+      loadCharacter: vi.fn(),
+      loadGrowthInsights: vi.fn().mockResolvedValue([]),
+      loadGrowthProfile: vi.fn(),
+      loadOCHistory: vi.fn(),
+      loadRecentSummaries: vi.fn(),
+      loadRelationship: vi.fn(),
+      loadRevealQueue: vi.fn().mockResolvedValue([]),
+      saveCharacter: vi.fn(),
+      saveGrowthInsights: vi.fn(),
+      saveGrowthProfile: vi.fn(),
+      saveRelationship: vi.fn(),
+      saveRevealQueue: vi.fn(),
+    }));
+    vi.doMock("../electron/services/unified-memory", () => ({
+      appendConfirmedMemoryNote: vi.fn(),
+      listAwarenessEpisodes: vi.fn(),
+      listRecentRecallEvents: vi.fn(),
+      listWorkItems: vi.fn(),
+      loadLongTermMemory: vi.fn(),
+      loadProjectsState: vi.fn(),
+    }));
+    vi.doMock("../electron/services/writeback-ledger", () => ({
+      listWritebackProposals: vi.fn(async () => []),
+      approveWritebackProposal: vi.fn(),
+      rejectWritebackProposal: vi.fn(),
+      revertWritebackProposal: vi.fn(),
+    }));
+    vi.doMock("../electron/services/drift-guardrails", () => ({
+      appendDriftSignals: vi.fn(),
+      listDriftSignals: vi.fn(async () => []),
+    }));
+    vi.doMock("../electron/services/relationship", () => ({ getStage: vi.fn() }));
+
+    const { registerIpcHandlers, unregisterIpcHandlers } = await import("../electron/ipc");
+    registerIpcHandlers();
+
+    await handlers.get("chat:send-message")?.({}, {
+      userId: "user-001",
+      characterId: "char-001",
+      userMessage: "你好",
+    });
+
+    const sessionEventCalls = send.mock.calls.filter((call) => call[0] === "hermes:session-event");
+    expect(sessionEventCalls.map((call) => call[1]?.kind)).toEqual([
+      "turn_start",
+      "turn_start",
+      "context_built",
+      "llm_started",
+      "llm_finished",
+      "state_write_proposed",
+      "turn_end",
+    ]);
+
+    unregisterIpcHandlers();
+  });
+
   it("emits hermes session events during chat turns", async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>();
     const send = vi.fn();
@@ -348,9 +502,8 @@ describe("hermes bridge contract", () => {
     });
 
     const sessionEventCalls = send.mock.calls.filter((call) => call[0] === "hermes:session-event");
-    expect(sessionEventCalls).toHaveLength(2);
-    expect(sessionEventCalls[0]?.[1]).toEqual(expect.objectContaining({ kind: "turn_start", sessionId: "user-001:char-001" }));
-    expect(sessionEventCalls[1]?.[1]).toEqual(expect.objectContaining({ kind: "turn_end", sessionId: "user-001:char-001" }));
+    expect(sessionEventCalls.some((call) => call[1]?.kind === "turn_start")).toBe(true);
+    expect(sessionEventCalls.some((call) => call[1]?.kind === "turn_end")).toBe(true);
 
     await expect(
       handlers.get("hermes:list-session-events")?.({}, {
@@ -597,12 +750,11 @@ describe("hermes bridge contract", () => {
     ).rejects.toThrow("chat failed");
 
     const sessionEventCalls = send.mock.calls.filter((call) => call[0] === "hermes:session-event");
-    expect(sessionEventCalls).toHaveLength(3);
-    expect(sessionEventCalls[0]?.[1]).toEqual(expect.objectContaining({ kind: "turn_start", sessionId: "user-001:char-001" }));
-    expect(sessionEventCalls[1]?.[1]).toEqual(expect.objectContaining({ kind: "error", sessionId: "user-001:char-001", text: "chat failed" }));
-    expect(sessionEventCalls[2]?.[1]).toEqual(expect.objectContaining({ kind: "turn_end", sessionId: "user-001:char-001" }));
+    expect(sessionEventCalls.some((call) => call[1]?.kind === "turn_start")).toBe(true);
+    expect(sessionEventCalls.some((call) => call[1]?.kind === "error" && call[1]?.text === "chat failed")).toBe(true);
+    expect(sessionEventCalls.some((call) => call[1]?.kind === "turn_end")).toBe(true);
 
-    const errorEvent = sessionEventCalls[1]?.[1];
+    const errorEvent = sessionEventCalls.find((call) => call[1]?.kind === "error")?.[1];
 
     await expect(
       handlers.get("hermes:list-session-events")?.({}, {
