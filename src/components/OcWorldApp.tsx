@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRuntime } from "../runtime/use-runtime";
 import { useChat } from "../hooks/useChat";
 import { ChatView } from "./ChatView";
@@ -22,6 +22,7 @@ export function OcWorldApp() {
   const [initialViewResolved, setInitialViewResolved] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [floatingOcOpen, setFloatingOcOpen] = useState(false);
+  const memoryTriggerRef = useRef<HTMLElement | null>(null);
   const floatingOcAvailable = Boolean(capabilities.floatingOc);
   const workspaceView = view === "memory" ? "chat" : view;
   const headerView = settingsOpen ? "settings" : memoryOpen ? "memory" : workspaceView;
@@ -60,10 +61,17 @@ export function OcWorldApp() {
     };
   }, [capabilities.floatingOc]);
 
+  const openMemory = (trigger?: HTMLElement | null) => {
+    if (trigger) {
+      memoryTriggerRef.current = trigger;
+    }
+    setMemoryOpen(true);
+  };
+
   const handleViewChange = (nextView: ViewId) => {
     setSettingsOpen(false);
     if (nextView === "memory") {
-      setMemoryOpen(true);
+      openMemory();
       if (view === "memory") {
         setView("chat");
       }
@@ -78,6 +86,9 @@ export function OcWorldApp() {
     if (view === "memory") {
       setView("chat");
     }
+    queueMicrotask(() => {
+      memoryTriggerRef.current?.focus();
+    });
   };
 
   const sendPrompt = async (text: string) => {
@@ -152,7 +163,7 @@ export function OcWorldApp() {
         setView("chat");
         setMemoryOpen(false);
       }}
-      onOpenMemory={() => setMemoryOpen(true)}
+      onOpenMemory={openMemory}
     />
   );
 
@@ -199,7 +210,7 @@ export function OcWorldApp() {
     },
     onOpenCreate: () => setView("create"),
     onOpenRewind: () => setView("rewind"),
-    onOpenMemory: () => setMemoryOpen(true),
+    onOpenMemory: openMemory,
     onCloseMemory: closeMemory,
     memoryOpen,
     onNewChat: startBlankChat,
@@ -244,7 +255,7 @@ function renderView({
   onOpenChat: () => void;
   onOpenCreate: () => void;
   onOpenRewind: () => void;
-  onOpenMemory: () => void;
+  onOpenMemory: (trigger?: HTMLElement | null) => void;
   onCloseMemory: () => void;
   memoryOpen: boolean;
   onNewChat: () => void;
@@ -323,7 +334,7 @@ function renderView({
       growthInsights={chat.growthInsights}
       revealHint={chat.activeReveal}
       revealBusy={chat.revealBusy}
-      open={true}
+      open={memoryOpen}
       onClose={onCloseMemory}
       onConfirmReveal={chat.confirmReveal}
       onDismissReveal={chat.dismissReveal}
@@ -335,13 +346,14 @@ function renderView({
 function WorkspaceLoading() {
   return (
     <div className="oc-page oc-loading-page">
-      <section className="oc-hero-card">
+      <div className="oc-loading-card">
+        <div className="oc-loading-card__pulse" aria-hidden />
         <div>
-          <p className="oc-kicker mono">RESTORING</p>
-          <h2 className="oc-page-title serif">正在恢复你的 OC 世界</h2>
-          <p className="oc-page-copy">角色、关系和最近上下文正在接回当前会话。</p>
+          <p className="oc-kicker mono">workspace</p>
+          <h2 className="serif">先把 OC 叫醒。</h2>
+          <p>正在同步角色、关系和最近的线索。</p>
         </div>
-      </section>
+      </div>
     </div>
   );
 }

@@ -52,7 +52,7 @@ export function ChatView({
   onDismissReveal: (candidateId: string) => Promise<void> | void;
   onRejectReveal: (insightId: string) => Promise<void> | void;
   onDismissRecallHint: () => void;
-  onOpenMemory: () => void;
+  onOpenMemory: (trigger?: HTMLElement | null) => void;
   onNewChat?: () => void;
 }) {
   const [draft, setDraft] = useState("");
@@ -133,7 +133,7 @@ export function ChatView({
                     type="button"
                     className="oc-pill-button is-primary"
                     disabled={revealBusy}
-                    onClick={onOpenMemory}
+                    onClick={(event) => onOpenMemory(event.currentTarget)}
                   >
                     查看纸条
                   </button>
@@ -265,7 +265,7 @@ function TurnReceipt({
   pendingCount: number;
   isSending: boolean;
   hasReveal: boolean;
-  onOpenMemory: () => void;
+  onOpenMemory: (trigger?: HTMLElement | null) => void;
 }) {
   const state = pendingCount > 0 && !isSending
     ? {
@@ -307,7 +307,7 @@ function TurnReceipt({
           ))}
         </div>
         {hasReveal && !isSending && pendingCount === 0 && (
-          <button type="button" className="oc-turn-receipt__action" onClick={onOpenMemory} aria-label="查看纸条">
+          <button type="button" className="oc-turn-receipt__action" onClick={(event) => onOpenMemory(event.currentTarget)} aria-label="查看纸条">
             查看纸条
           </button>
         )}

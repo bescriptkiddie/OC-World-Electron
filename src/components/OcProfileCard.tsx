@@ -57,7 +57,7 @@ export function OcProfileCard({
   revealHint: RevealHint;
   onTtsToggle: () => void;
   onOpenChat: () => void;
-  onOpenMemory: () => void;
+  onOpenMemory: (trigger?: HTMLElement | null) => void;
 }) {
   const title = character?.name?.trim() || "Luma";
   const signalCount = countActiveSignals(growthInsights);
@@ -94,7 +94,7 @@ export function OcProfileCard({
       <button
         type="button"
         className="oc-presence-dock__soft-button"
-        onClick={onOpenMemory}
+        onClick={(event) => onOpenMemory(event.currentTarget)}
         title={signalCount ? `${signalCount} 条线索` : "打开纸条"}
         aria-label={signalCount ? `打开 ${signalCount} 条线索` : "打开纸条"}
       >

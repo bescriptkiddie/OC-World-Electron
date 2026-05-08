@@ -152,7 +152,7 @@ describe("ChatView interactions", () => {
 
   it("submits on Enter and keeps Shift+Enter as newline", () => {
     const { onSend } = renderChat();
-    const input = screen.getByPlaceholderText("说一件刚发生的小事");
+    const input = screen.getByPlaceholderText("说一件刚发生的小事") as HTMLTextAreaElement;
 
     fireEvent.change(input, { target: { value: "第一句" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -161,5 +161,17 @@ describe("ChatView interactions", () => {
     fireEvent.change(input, { target: { value: "第二句" } });
     fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
     expect(onSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps composer draft while opening memory from reveal CTA", () => {
+    const onOpenMemory = vi.fn();
+    renderChat({ revealHint, onOpenMemory });
+    const input = screen.getByPlaceholderText("说一件刚发生的小事") as HTMLTextAreaElement;
+
+    fireEvent.change(input, { target: { value: "这句草稿不能丢" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "查看纸条" })[0]);
+
+    expect(onOpenMemory).toHaveBeenCalledTimes(1);
+    expect((screen.getByPlaceholderText("说一件刚发生的小事") as HTMLTextAreaElement).value).toBe("这句草稿不能丢");
   });
 });

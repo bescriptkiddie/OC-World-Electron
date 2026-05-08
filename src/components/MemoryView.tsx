@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { GrowthInsight, GrowthProfile, Relationship, RevealCandidate, TimelineItem } from "../types";
 
 type RevealHint = (RevealCandidate & { text?: string; title?: string }) | null;
@@ -39,12 +39,22 @@ export function MemoryView({
 }) {
   const [calibration, setCalibration] = useState<Record<string, "confirmed" | "rejected">>({});
   const [feedback, setFeedback] = useState("");
+  const drawerRef = useRef<HTMLElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const target = firstLatent(growthInsights, "goal");
   const strengthInsight = firstLatent(growthInsights, "strength");
   const strength = strengthInsight ?? growthProfile.strengths[0];
   const plan = firstLatent(growthInsights, "plan");
   const evidence = latestWorries(timeline);
   const revealInsight = revealHint ? growthInsights.find((item) => item.id === revealHint.insightId) : null;
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    closeButtonRef.current?.focus();
+  }, [open]);
 
   if (!open) {
     return null;
@@ -117,13 +127,26 @@ export function MemoryView({
   };
 
   return (
-    <aside className="oc-memory-drawer is-open" aria-label="背后的小纸条">
+    <aside
+      ref={drawerRef}
+      className="oc-memory-drawer is-open"
+      aria-label="背后的小纸条"
+      aria-modal="true"
+      role="dialog"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          onClose();
+        }
+      }}
+      tabIndex={-1}
+    >
       <div className="oc-memory-drawer__head">
         <div>
           <h2 className="serif">背后的小纸条</h2>
           <p>只保留需要你判断的线索。</p>
         </div>
-        <button type="button" className="oc-pill-button oc-pill-button--quiet" onClick={onClose}>
+        <button ref={closeButtonRef} type="button" className="oc-pill-button oc-pill-button--quiet" onClick={onClose}>
           关闭
         </button>
       </div>

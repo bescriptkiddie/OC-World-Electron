@@ -19,7 +19,7 @@ export function MyOcView({
   onOpenChat: () => void;
   onOpenCreate: () => void;
   onOpenRewind: () => void;
-  onOpenMemory: () => void;
+  onOpenMemory: (trigger?: HTMLElement | null) => void;
 }) {
   const moment = resolveOcInteractionMoment({
     relationship,
@@ -38,7 +38,7 @@ export function MyOcView({
               <IconChat size={15} />
               继续说
             </button>
-            <button type="button" className="oc-pill-button oc-pill-button--quiet" onClick={onOpenMemory}>
+            <button type="button" className="oc-pill-button oc-pill-button--quiet" onClick={(event) => onOpenMemory(event.currentTarget)}>
               <IconTasks size={15} />
               线索
             </button>
