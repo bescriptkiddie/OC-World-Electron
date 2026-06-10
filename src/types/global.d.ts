@@ -15,10 +15,7 @@ import type {
   ChatSendPayload,
   GrowthInsight,
   GrowthProfile,
-  HermesBridgeStatus,
   HermesRuntimeStatus,
-  HermesSessionEvent,
-  HermesSessionEventQuery,
   ImageGenPayload,
   ImageGenResult,
   LongTermMemory,
@@ -38,14 +35,14 @@ import type {
   WorkItem,
 } from "./index";
 
-type FloatingOcDragPoint = {
-  screenX: number;
-  screenY: number;
-};
-
 declare global {
   interface Window {
+    /** Phaser game engine (loaded dynamically for WorldView) */
+    Phaser?: typeof import("phaser");
+    /** Internal state reference for the WorldView Phaser scene */
+    __worldState?: Record<string, unknown>;
     ocWorld?: {
+      getAppPath: () => string;
       chat: {
         sendMessage: (payload: ChatSendPayload) => Promise<ChatResult>;
         cancelActive: (payload: ChatCancelPayload) => Promise<boolean>;
@@ -86,15 +83,6 @@ declare global {
       awareness: {
         list: (payload: { userId: string; limit?: number }) => Promise<AwarenessEpisode[]>;
       };
-      writeback: {
-        list: (payload: { userId: string }) => Promise<import("./index").WritebackProposal[]>;
-        approve: (payload: { userId: string; proposalId: string }) => Promise<import("./index").WritebackProposal>;
-        reject: (payload: { userId: string; proposalId: string; feedback?: string }) => Promise<import("./index").WritebackProposal>;
-        revert: (payload: { userId: string; proposalId: string }) => Promise<import("./index").WritebackProposal>;
-      };
-      drift: {
-        listSignals: (payload: { userId: string; limit?: number }) => Promise<import("./index").DriftSignal[]>;
-      };
       workItems: {
         list: (userId: string) => Promise<WorkItem[]>;
       };
@@ -121,23 +109,10 @@ declare global {
       };
       hermes: {
         getStatus: () => Promise<HermesRuntimeStatus>;
-        getBridgeStatus: () => Promise<HermesBridgeStatus>;
-        listSessionEvents: (payload: HermesSessionEventQuery) => Promise<HermesSessionEvent[]>;
         onStatusChanged: (callback: (status: HermesRuntimeStatus) => void) => () => void;
-        onSessionEvent: (callback: (event: HermesSessionEvent) => void) => () => void;
       };
       imageGen: {
         generate: (payload: ImageGenPayload) => Promise<ImageGenResult>;
-      };
-      floatingOc: {
-        show: () => Promise<{ open: boolean }>;
-        close: () => Promise<{ open: boolean }>;
-        toggle: () => Promise<{ open: boolean }>;
-        getState: () => Promise<{ open: boolean }>;
-        focusMain: () => Promise<boolean>;
-        startDrag: (point: FloatingOcDragPoint) => void;
-        dragMove: (point: FloatingOcDragPoint) => void;
-        endDrag: () => void;
       };
     };
   }

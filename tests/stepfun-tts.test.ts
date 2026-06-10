@@ -14,6 +14,12 @@ const touchedKeys = [
   "STEPFUN_TTS_SPEED",
   "STEPFUN_TTS_VOLUME",
   "STEPFUN_TTS_INSTRUCTION",
+  "MIMO_API_KEY",
+  "ANTHROPIC_AUTH_TOKEN",
+  "OPENAI_API_KEY",
+  "MIMO_TTS_ENDPOINT",
+  "MIMO_TTS_MODEL",
+  "MIMO_TTS_VOICE",
 ] as const;
 const originalEnv = Object.fromEntries(touchedKeys.map((key) => [key, process.env[key]]));
 
@@ -37,6 +43,9 @@ describe("StepFun TTS service", () => {
     delete process.env.TTS_PROVIDER;
     delete process.env.STEPFUN_API_KEY;
     delete process.env.STEP_API_KEY;
+    delete process.env.MIMO_API_KEY;
+    delete process.env.ANTHROPIC_AUTH_TOKEN;
+    delete process.env.OPENAI_API_KEY;
 
     expect(getTtsStatus()).toEqual({
       provider: "browser",

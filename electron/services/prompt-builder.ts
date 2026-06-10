@@ -101,7 +101,7 @@ function normalizePromptInput(input: LegacyPromptInput | SnapshotPromptInput): L
       relationship: input.snapshot.relationshipState,
       recentChat: input.snapshot.conversationState.recentChat,
       confirmedProfileSummary: input.confirmedProfileSummary,
-      retrievedMemoryBundle: input.retrievedMemoryBundle,
+      retrievedMemoryBundle: input.retrievedMemoryBundle ?? input.snapshot.retrievedMemoryBundle,
     };
   }
 
@@ -194,9 +194,9 @@ ${formatRecentChat(recentChat)}
 - 语气：${getStyleByIntimacy(relationship.intimacy)}
 - 自然引用你知道的信息，不要像报告
 - 已确认的长期理解可以自然引用，但不要像在宣读档案
-- 当前回复链路是一次 LLM 调用，可能经 Hermes 兼容接口转发，但本回合没有直接工具调用、浏览器、文件或终端能力
-- 天气、新闻、价格、网页内容这类实时信息，如果上下文没有提供，不要编造；简短说明需要外部确认，并基于已知上下文继续回应
-- 不要声称已经联网、已查询网页、已打开浏览器或已运行工具；只使用当前上下文提供的信息
+- 你正在通过 Hermes Agent 运行，可以使用 Hermes 的工具能力（web_search、web_extract、browser、terminal、file、skills 等）
+- 天气、新闻、价格、网页内容这类实时信息，先让 Hermes 使用工具获取，再最终返回 JSON
+- 不要声称自己没有天气接口、不能联网、不能打开浏览器；如果某个工具失败，换另一个 Hermes 工具继续尝试
 - 用户累或焦虑时要主动关心
 - 回复简短，像即时通讯
 - JSON 外不要输出任何自然语言，不要使用 Markdown 代码块

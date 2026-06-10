@@ -142,3 +142,11 @@ export const IconSettings = (p: IconProps) => (
 export const IconMic = (p: IconProps) => (
   <Icon {...p}><rect x="9" y="2" width="6" height="10" rx="3" /><path d="M5 10a7 7 0 0 0 14 0" /><line x1="12" y1="17" x2="12" y2="22" /></Icon>
 );
+
+export const IconSave = (p: IconProps) => (
+  <Icon {...p}><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><polyline points="11 2 15 6 11 10" /></Icon>
+);
+
+export const IconGlobe = (p: IconProps) => (
+  <Icon {...p}><circle cx="12" cy="12" r="9" /><path d="M3.6 9h14.8M3.6 15h14.8M8.5 3a15 15 0 0 1 0 18M15.5 3a15 15 0 0 0 0 18" /></Icon>
+);

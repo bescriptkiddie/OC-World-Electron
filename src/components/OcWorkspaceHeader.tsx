@@ -1,100 +1,33 @@
-import { IconAgent, IconSettings } from "./OcWorldIcons";
+import { IconSettings } from "./OcWorldIcons";
 import { type ViewId } from "./shared";
 
-export function OcWorkspaceHeader({
-  current,
-  floatingOpen,
-  floatingAvailable,
-  onChange,
-  onOpenSettings,
-  onToggleFloating,
-}: {
-  current: ViewId;
-  floatingOpen: boolean;
-  floatingAvailable: boolean;
-  onChange: (view: ViewId) => void;
-  onOpenSettings: () => void;
-  onToggleFloating: () => void | Promise<void>;
-}) {
+export function OcWorkspaceHeader({ current, onChange, onOpenSettings }: { current: ViewId; onChange: (view: ViewId) => void; onOpenSettings: () => void }) {
   const title =
+    current === "chat" ? "先对话，系统在背后长出来" :
+    current === "memory" ? "Luma 正在学会你" :
+    current === "world" ? "OC 的像素世界" : "OC World";
+  const subtitle =
     current === "chat"
-      ? "小橘"
-      : current === "create"
-        ? "捏 TA"
-        : current === "memory"
-          ? "小纸条"
-          : current === "settings"
-            ? "设置"
-            : current === "rewind"
-              ? "回看"
-              : "TA";
-  const state =
-    current === "chat"
-      ? "把刚发生的事告诉 TA"
-      : current === "create"
-        ? "先把陪你的角色捏出来"
-        : current === "memory"
-          ? "只在需要时浮现"
-          : current === "settings"
-            ? "基础信息"
-            : current === "rewind"
-              ? "共同经历"
-              : "安静在旁边";
-  const navItems = [
-    { id: "chat" as const, label: "对话" },
-    { id: "oc" as const, label: "TA" },
-    { id: "rewind" as const, label: "回看" },
-  ];
+      ? "一开始不展示人生系统。OC 先陪伴、记住、理解，再等待你探索。"
+      : current === "memory"
+        ? "这些不是第一屏功能，是慢慢被发现的成长系统。"
+        : current === "world"
+          ? "像素办公室 · OC 在这里生活、工作、等待你。"
+          : "让隐藏成长系统在关系里自然浮现。";
 
   return (
-    <header className="oc-demo-header oc-open-header">
-      <div className="oc-open-header__identity">
-        <span className="oc-open-header__dot" aria-hidden />
-        <div>
-          <h1 className="serif">{title}</h1>
-          <span className="oc-open-header__state">{state}</span>
-        </div>
+    <header className="oc-demo-header">
+      <div>
+        <h1 className="serif">{title}</h1>
+        <p>{subtitle}</p>
       </div>
-      <nav className="oc-open-nav" aria-label="主要区域">
-        {navItems.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={current === item.id ? "oc-open-nav__item is-active" : "oc-open-nav__item"}
-            onClick={() => onChange(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </nav>
       <div className="oc-demo-header__actions">
-        <button
-          type="button"
-          className={current === "memory" ? "oc-pill-button is-soft-active" : "oc-pill-button oc-pill-button--quiet"}
-          onClick={() => onChange("memory")}
-          aria-label="打开纸条"
-        >
-          纸条
+        <button type="button" className="oc-pill-button" onClick={() => onChange(current === "world" ? "memory" : "world")}>
+          {current === "world" ? "记忆" : "世界"}
         </button>
-        {floatingAvailable && (
-          <button
-            type="button"
-            className={floatingOpen ? "oc-pill-button is-soft-active" : "oc-pill-button oc-pill-button--quiet"}
-            onClick={onToggleFloating}
-            title="打开桌面悬浮 OC"
-          >
-            <IconAgent size={15} />
-            {floatingOpen ? "旁边" : "浮窗"}
-          </button>
-        )}
-        <button
-          type="button"
-          className={current === "settings" ? "oc-pill-button is-soft-active" : "oc-pill-button oc-pill-button--quiet"}
-          onClick={onOpenSettings}
-          title="设置"
-          aria-label="设置"
-        >
+        <button type="button" className="oc-pill-button oc-pill-button--quiet" onClick={onOpenSettings} title="设置" aria-label="设置">
           <IconSettings size={15} />
+          设置
         </button>
       </div>
     </header>

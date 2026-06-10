@@ -120,42 +120,51 @@ describe("hermes manager", () => {
   });
 
   it("uses the bundled hermes-agent gateway when no executable is configured", async () => {
-    const child = new FakeChildProcess(101);
-    const spawn = vi.fn().mockReturnValue(child);
-    const fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
-    const manager = createManager({
-      spawn,
-      fetch,
-      env: {
-        HERMES_EXECUTABLE_PATH: undefined,
-        HERMES_EXECUTABLE_ARGS_JSON: undefined,
-      },
-    });
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "oc-hermes-manager-"));
+    const hermesRoot = path.join(tempRoot, "hermes-agent");
+    const venvBin = path.join(hermesRoot, "venv", "bin");
+    fs.mkdirSync(path.join(hermesRoot, "hermes_cli"), { recursive: true });
+    fs.mkdirSync(venvBin, { recursive: true });
+    fs.writeFileSync(path.join(hermesRoot, "pyproject.toml"), "[project]\nname = \"hermes-agent\"\n", "utf8");
+    fs.writeFileSync(path.join(hermesRoot, "hermes_cli", "main.py"), "print('hermes')\n", "utf8");
+    fs.writeFileSync(path.join(venvBin, "python"), "#!/bin/sh\n", "utf8");
 
-    await manager.start();
-    await flush();
+    try {
+      const child = new FakeChildProcess(101);
+      const spawn = vi.fn().mockReturnValue(child);
+      const fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+      const manager = createManager({
+        spawn,
+        fetch,
+        env: {
+          HERMES_EXECUTABLE_PATH: undefined,
+          HERMES_EXECUTABLE_ARGS_JSON: undefined,
+          HERMES_BUNDLED_ROOT: hermesRoot,
+          HERMES_HOME: path.join(tempRoot, "hermes-home"),
+        },
+      });
 
-    const [executable, args, options] = spawn.mock.calls[0];
-    const hermesRoot = String(options.cwd);
-    const hermesCliPath = path.join(hermesRoot, "hermes_cli", "main.py");
+      await manager.start();
+      await flush();
 
-    expect(executable).toEqual(expect.stringMatching(/(?:python3?|hermes)$/));
-    const defaultGatewayArgs = ["gateway", "run", "--replace"];
-    if (String(executable).endsWith("hermes")) {
-      expect(args).toEqual(defaultGatewayArgs);
-    } else {
-      expect(args).toEqual([hermesCliPath, ...defaultGatewayArgs]);
-    }
-    expect(options).toEqual(
-      expect.objectContaining({
-        cwd: hermesRoot,
-        env: expect.objectContaining({
-          API_SERVER_ENABLED: "true",
-          API_SERVER_HOST: "127.0.0.1",
-          API_SERVER_PORT: "8642",
+      const [executable, args, options] = spawn.mock.calls[0];
+      const hermesCliPath = path.join(hermesRoot, "hermes_cli", "main.py");
+
+      expect(executable).toBe(path.join(venvBin, "python"));
+      expect(args).toEqual([hermesCliPath, "gateway", "run", "--replace"]);
+      expect(options).toEqual(
+        expect.objectContaining({
+          cwd: hermesRoot,
+          env: expect.objectContaining({
+            API_SERVER_ENABLED: "true",
+            API_SERVER_HOST: "127.0.0.1",
+            API_SERVER_PORT: "8642",
+          }),
         }),
-      }),
-    );
+      );
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 
   it("prefers the installed runtime root and exposes bundled browser tools on PATH", async () => {

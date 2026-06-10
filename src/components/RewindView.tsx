@@ -9,8 +9,8 @@ export function RewindView({ timeline, relationship }: { timeline: TimelineItem[
     <div className="oc-page oc-rewind-page">
       <section className="oc-hero-card">
         <div>
-          <p className="oc-kicker mono">共同经历</p>
-          <h2 className="oc-page-title serif">回看</h2>
+          <p className="oc-kicker mono">REWIND</p>
+          <h2 className="oc-page-title serif">回溯</h2>
           <p className="oc-page-copy">把你和 TA 之间长出来的小事，按时间慢慢排开。</p>
         </div>
       </section>

@@ -6,7 +6,6 @@ import type {
   RecallEvent,
   WorkItem,
 } from "../../src/types";
-import { appendDriftSignals, evaluateTaskSignalDriftSignals } from "./drift-guardrails";
 import { buildContextSnapshot } from "./context-snapshot";
 import { distillGrowthTurn } from "./distillation";
 import { getMemoryFeatureFlags } from "./feature-flags";
@@ -16,8 +15,8 @@ import { mergeAwarenessCandidates } from "./memory-merge";
 import { aggregateProjects } from "./projects";
 import { evaluateRecallCandidates } from "./recall";
 import { evaluateRevealCandidate } from "./reveal-policy";
-import { appendAwarenessEpisode, loadProjectsState, listWorkItems, saveWorkItem } from "./unified-memory";
-import { mergeWorkItems, rankTaskWorthySignals, syncWorkItemsFromInsights } from "./work-items";
+import { appendAwarenessEpisode, loadProjectsState } from "./unified-memory";
+import { syncWorkItemsFromInsights } from "./work-items";
 
 interface RunGrowthPipelineInput {
   userId: string;
@@ -73,77 +72,6 @@ function createManualAwarenessEpisode(input: {
       ? ["这些洞察仍需用户确认后再进入长期记忆。"]
       : ["当前没有足够稳定的候选洞察。"],
     relatedInsightIds: candidateInsights.map((item) => item.id),
-  };
-}
-
-async function mergeTaskSignalsIntoWorkItems(input: {
-  userId: string;
-  turnId: string;
-  userMessage: string;
-  growthEvent: string | null;
-  snapshot: ContextSnapshot;
-  now: number;
-  dataRoot: string;
-}) {
-  const rankedSignals = rankTaskWorthySignals({
-    userId: input.userId,
-    userMessage: input.userMessage,
-    growthEvent: input.growthEvent,
-    snapshot: input.snapshot,
-    now: input.now,
-  });
-  const driftSignals = rankedSignals.flatMap((signal) =>
-    evaluateTaskSignalDriftSignals({
-      userId: input.userId,
-      turnId: input.turnId,
-      userMessage: input.userMessage,
-      worthy: signal.worthy,
-      relatedSignals: signal.relatedSignals,
-      createdAt: input.now,
-    }),
-  );
-  const worthySignals = rankedSignals.filter((signal) => signal.worthy);
-
-  if (!worthySignals.length) {
-    await appendDriftSignals(driftSignals, input.dataRoot);
-    return [];
-  }
-
-  const existing = await listWorkItems(input.userId, input.dataRoot);
-  const merged = mergeWorkItems({
-    existing,
-    signals: rankedSignals,
-    now: input.now,
-  });
-  const writeOperations = [
-    ...merged.map((item) => saveWorkItem(item, input.dataRoot)),
-    ...(driftSignals.length ? [appendDriftSignals(driftSignals, input.dataRoot)] : []),
-  ];
-
-  await Promise.all(writeOperations);
-  return merged.sort((left, right) => right.updatedAt - left.updatedAt);
-}
-
-function createAwarenessEpisodeFromDistillation(input: {
-  userId: string;
-  now: number;
-  distilled: ReturnType<typeof distillGrowthTurn>;
-  insightIds: string[];
-}): AwarenessEpisode {
-  const goalInsight = input.distilled.insights.find((item) => item.type === "goal");
-  const fallbackTitle = input.distilled.awareness.candidateMemoryUpdates[0]?.replace(/^长期目标：/, "").trim();
-
-  return {
-    id: `awareness-${input.now}`,
-    userId: input.userId,
-    source: "chat",
-    createdAt: input.now,
-    title: goalInsight?.title ? `目标线索：${goalInsight.title}` : fallbackTitle || "对话轮次候选观察",
-    keyMoments: [...input.distilled.awareness.keyMoments],
-    behaviorSignals: [...input.distilled.awareness.behaviorSignals],
-    candidateMemoryUpdates: [...input.distilled.awareness.candidateMemoryUpdates],
-    openThreads: [...input.distilled.awareness.openThreads],
-    relatedInsightIds: [...input.insightIds],
   };
 }
 
@@ -228,25 +156,18 @@ export async function runGrowthPipeline(input: RunGrowthPipelineInput): Promise<
     queue,
     now,
   });
-  const episode = createAwarenessEpisodeFromDistillation({
-    userId: input.userId,
-    now,
-    distilled,
-    insightIds: reveal.insights.map((item) => item.id),
-  });
-  const { decisions: memoryMergeDecisions, driftSignals } = await mergeAwarenessCandidates({
-    episode,
+  const memoryMergeDecisions = await mergeAwarenessCandidates({
+    episode: distilled.awareness,
     insights: reveal.insights,
     now,
     dataRoot: input.dataRoot,
   });
 
   await Promise.all([
-    appendAwarenessEpisode(episode, input.dataRoot),
+    appendAwarenessEpisode(distilled.awareness, input.dataRoot),
     saveGrowthEvidence(input.userId, merged.evidence, input.dataRoot),
     saveGrowthInsights(input.userId, reveal.insights, input.dataRoot),
     saveRevealQueue(input.userId, reveal.queue, input.dataRoot),
-    appendDriftSignals(driftSignals, input.dataRoot),
     appendGrowthLog(
       input.userId,
       {
@@ -261,30 +182,12 @@ export async function runGrowthPipeline(input: RunGrowthPipelineInput): Promise<
     ),
   ]);
 
-  const [insightWorkItems, taskSignalWorkItems] = await Promise.all([
-    syncWorkItemsFromInsights({
-      userId: input.userId,
-      insights: reveal.insights,
-      now,
-      dataRoot: input.dataRoot,
-    }),
-    mergeTaskSignalsIntoWorkItems({
-      userId: input.userId,
-      turnId: episode.id,
-      userMessage: input.userMessage,
-      growthEvent: input.growthEvent,
-      snapshot: input.snapshot,
-      now,
-      dataRoot: input.dataRoot,
-    }),
-  ]);
-
-  const workItemsById = new Map<string, WorkItem>();
-  for (const item of [...insightWorkItems, ...taskSignalWorkItems]) {
-    workItemsById.set(item.id, item);
-  }
-  const workItems = Array.from(workItemsById.values()).sort((left, right) => right.updatedAt - left.updatedAt);
-
+  const workItems = await syncWorkItemsFromInsights({
+    userId: input.userId,
+    insights: reveal.insights,
+    now,
+    dataRoot: input.dataRoot,
+  });
   const projects = await aggregateProjects({
     userId: input.userId,
     now,
@@ -300,7 +203,7 @@ export async function runGrowthPipeline(input: RunGrowthPipelineInput): Promise<
     : [];
 
   return {
-    episode,
+    episode: distilled.awareness,
     memoryMergeDecisions,
     workItems,
     projects,
@@ -348,7 +251,7 @@ export async function runManualDistillationPipeline(input: {
     };
   }
 
-  const { decisions: memoryMergeDecisions, driftSignals } = await mergeAwarenessCandidates({
+  const memoryMergeDecisions = await mergeAwarenessCandidates({
     episode,
     insights,
     now,
@@ -356,7 +259,6 @@ export async function runManualDistillationPipeline(input: {
   });
 
   await appendAwarenessEpisode(episode, dataRoot);
-  await appendDriftSignals(driftSignals, dataRoot);
   const workItems = await syncWorkItemsFromInsights({
     userId: input.userId,
     insights,

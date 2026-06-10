@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { ChatHistoryEntry, PendingChatMessage } from "../types";
 
-export type ViewId = "create" | "oc" | "chat" | "rewind" | "memory" | "settings" | "home" | "files";
+export type ViewId = "create" | "oc" | "chat" | "rewind" | "memory" | "world" | "settings" | "home" | "files";
 export type SessionId = "live" | "new" | `entry:${number}`;
 export type MessageItem = { key: string; role: "user" | "oc"; text: string };
 
@@ -64,6 +64,33 @@ export function historyToMessages(entries: ChatHistoryEntry[]): MessageItem[] {
   ]);
 }
 
+/**
+ * Detects and collapses cumulative history entries caused by the
+ * pending-messages interrupt mechanism. When a user sends "hello", then quickly
+ * appends "what are you doing" before the LLM responds, the interrupt cancels
+ * the in-flight request but the earlier combined message may already be persisted.
+ * This leaves entries like:
+ *   [{ userMessage: "hello" }, { userMessage: "hello\nwhat are you doing" }]
+ * We keep only the last (most complete) entry from each cumulative chain.
+ */
+function collapseCumulativeHistory(entries: ChatHistoryEntry[]): ChatHistoryEntry[] {
+  if (entries.length === 0) {
+    return entries;
+  }
+
+  const collapsed: ChatHistoryEntry[] = [];
+  for (const entry of entries) {
+    const prev = collapsed[collapsed.length - 1];
+    if (prev && entry.userMessage.startsWith(prev.userMessage) && entry.userMessage !== prev.userMessage) {
+      // Current entry is a cumulative superset of the previous one — replace
+      collapsed[collapsed.length - 1] = entry;
+    } else {
+      collapsed.push(entry);
+    }
+  }
+  return collapsed;
+}
+
 export function visibleMessages(
   history: ChatHistoryEntry[],
   pending: PendingChatMessage[],
@@ -73,8 +100,11 @@ export function visibleMessages(
   const selectedEntry = selectedSession.startsWith("entry:")
     ? history.find((entry) => selectedSession === `entry:${entry.timestamp}`)
     : null;
-  const baseMessages =
-    selectedSession === "new" ? [] : selectedEntry ? historyToMessages([selectedEntry]) : historyToMessages(history);
+  // Apply deduplication to base history before rendering
+  const rawBase =
+    selectedSession === "new" ? [] : selectedEntry ? [selectedEntry] : history;
+  const dedupedBase = selectedEntry ? rawBase : collapseCumulativeHistory(rawBase);
+  const baseMessages = historyToMessages(dedupedBase);
   const pendingItems = pending.map((message) => ({
     key: message.id,
     role: "user" as const,
@@ -128,7 +158,10 @@ export const iconBtnQuiet: React.CSSProperties = {
 };
 
 export const navItems = [
-  { id: "chat" as const, label: "对话", icon: () => null },
-  { id: "oc" as const, label: "TA", icon: () => null },
-  { id: "rewind" as const, label: "回看", icon: () => null },
+  { id: "create" as const, label: "生成我的OC", icon: () => null },
+  { id: "oc" as const, label: "我的OC", icon: () => null },
+  { id: "chat" as const, label: "聊天", icon: () => null },
+  { id: "world" as const, label: "世界", icon: () => null },
+  { id: "rewind" as const, label: "回溯", icon: () => null },
+  { id: "memory" as const, label: "记忆", icon: () => null },
 ];

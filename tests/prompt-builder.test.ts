@@ -24,7 +24,7 @@ describe("prompt builder", () => {
     expect(prompt).toContain(DEFAULT_AIRJELLY_CONTEXT.events[0].title);
   });
 
-  it("states the Hermes boundary without pretending tool access", () => {
+  it("keeps Hermes agent tool use available before the final JSON reply", () => {
     const prompt = buildSystemPrompt({
       character: DEFAULT_CHARACTER,
       airjellyCtx: DEFAULT_AIRJELLY_CONTEXT,
@@ -33,11 +33,10 @@ describe("prompt builder", () => {
       recentChat: DEFAULT_HISTORY,
     });
 
-    expect(prompt).toContain("Hermes 兼容接口");
-    expect(prompt).toContain("没有直接工具调用、浏览器、文件或终端能力");
-    expect(prompt).toContain("如果上下文没有提供，不要编造");
-    expect(prompt).toContain("不要声称已经联网");
-    expect(prompt).not.toContain("web_search");
+    expect(prompt).toContain("Hermes Agent");
+    expect(prompt).toContain("web_search");
+    expect(prompt).toContain("先让 Hermes 使用工具获取，再最终返回 JSON");
+    expect(prompt).toContain("不要声称自己没有天气接口");
   });
 
   it("includes confirmed profile summary without changing the JSON reply contract", () => {
@@ -55,3 +54,4 @@ describe("prompt builder", () => {
     expect(prompt).toContain('"growthEvent":"有成长意义就写字符串，否则 null"');
   });
 });
+

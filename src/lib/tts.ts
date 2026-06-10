@@ -199,10 +199,8 @@ function createAudioElement(audioBase64: string, mimeType: string) {
   return new Audio(`data:${mimeType};base64,${audioBase64}`);
 }
 
-export function createAppTTS(
-  win: Window | undefined = typeof window === "undefined" ? undefined : window,
-  remoteTTS = win?.ocWorld?.tts,
-) {
+export function
+createAppTTS(win: Window | undefined = typeof window === "undefined" ? undefined : window, characterId?: string) {
   const browserTTS = createBrowserTTS(win);
   let currentAudio: HTMLAudioElement | null = null;
   let runId = 0;
@@ -248,6 +246,8 @@ export function createAppTTS(
     });
 
   const speakWithRemoteTTS = async (text: string, currentRunId: number) => {
+    const remoteTTS = win?.ocWorld?.tts;
+
     if (!remoteTTS) {
       browserTTS.speak(text);
       return;
@@ -266,6 +266,7 @@ export function createAppTTS(
         const result = await remoteTTS.synthesize({
           text: chunk,
           requestId: `${Date.now()}-${currentRunId}-${index}`,
+          characterId,
           interrupt: true,
         });
 
@@ -286,7 +287,7 @@ export function createAppTTS(
 
   const controller: TtsController = {
     isSupported() {
-      return Boolean(remoteTTS) || browserTTS.isSupported();
+      return Boolean(win?.ocWorld?.tts) || browserTTS.isSupported();
     },
 
     speak(text: string) {
@@ -308,7 +309,7 @@ export function createAppTTS(
       runId += 1;
       cancelAudio();
       browserTTS.cancel();
-      void remoteTTS?.cancelActive();
+      void win?.ocWorld?.tts?.cancelActive();
     },
   };
 

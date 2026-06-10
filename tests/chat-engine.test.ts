@@ -33,11 +33,11 @@ async function waitForFile(filePath: string, retries = 20) {
   throw new Error(`Timed out waiting for ${filePath}`);
 }
 
-async function waitForProjectsFile(projectsPath: string, retries = 20) {
+async function waitForProject(projectsPath: string, retries = 20) {
   for (let index = 0; index < retries; index += 1) {
     try {
       const projects = await readJson<{ projects: Array<{ title: string }> }>(projectsPath);
-      if (Array.isArray(projects.projects)) {
+      if (projects.projects[0]?.title) {
         return projects;
       }
     } catch {
@@ -154,9 +154,9 @@ describe("chat engine", () => {
 
     const insightsPath = path.join(tempDir, "oc-data", "growth", "user-001", "insights.json");
     const evidencePath = path.join(tempDir, "oc-data", "growth", "user-001", "evidence.json");
-    const awarenessDir = path.join(tempDir, "oc-data", "awareness", "users", "user-001", "episodes");
+    const awarenessDir = path.join(tempDir, "oc-data", "awareness", "episodes");
     const workItemsDir = path.join(tempDir, "oc-data", "work-items");
-    const projectsPath = path.join(tempDir, "oc-data", "projects", "users", "user-001", "projects.json");
+    const projectsPath = path.join(tempDir, "oc-data", "projects", "projects.json");
     await waitForFile(insightsPath);
     await waitForFile(evidencePath);
     await waitForFile(projectsPath);
@@ -165,15 +165,14 @@ describe("chat engine", () => {
     const evidence = await readJson<Array<{ text: string }>>(evidencePath);
     const awarenessFiles = await import("node:fs/promises").then((fs) => fs.readdir(awarenessDir));
     const workItemFiles = await import("node:fs/promises").then((fs) => fs.readdir(workItemsDir));
-    const projects = await waitForProjectsFile(projectsPath);
+    const projects = await waitForProject(projectsPath);
 
     expect(insights[0]?.title).toBe("做一个会慢慢理解人的成长伙伴");
     expect(evidence.length).toBeGreaterThan(0);
     expect(awarenessFiles.length).toBeGreaterThan(0);
     expect(workItemFiles.length).toBeGreaterThan(0);
-    expect(projects.projects).toEqual([]);
+    expect(projects.projects[0]?.title).toContain("成长方向");
   });
-
 
   it("keeps chat working when growth distillation fails", async () => {
     vi.spyOn(distillationModule, "distillGrowthTurn").mockImplementation(() => {
@@ -190,216 +189,6 @@ describe("chat engine", () => {
     expect(result.source).toBe("mock");
   });
 
-  it("records relationship overfit drift signals for large intimacy jumps", async () => {
-    vi.resetModules();
-
-    const clearContextSnapshotCache = vi.fn();
-    const buildContextSnapshot = vi.fn().mockResolvedValue({
-      realtimeContext: { source: "mock", events: [], tasks: [], appUsage: [] },
-      growthProfile: { userId: "user-001", updatedAt: 0, goals: [], strengths: [], preferences: [], openQuestions: [] },
-      conversationState: { recentChat: [] },
-      relationshipState: {
-        userId: "user-001",
-        userName: "Pika",
-        intimacy: 10,
-        stage: "stranger",
-        preferences: { topics: [], avoid: [], communicationStyle: "direct" },
-        keyMoments: [],
-        lastInteraction: 0,
-        moodBaseline: "steady",
-      },
-      socialMemory: [],
-      recentChat: [],
-      relationship: {
-        userId: "user-001",
-        userName: "Pika",
-        intimacy: 10,
-        stage: "stranger",
-        preferences: { topics: [], avoid: [], communicationStyle: "direct" },
-        keyMoments: [],
-        lastInteraction: 0,
-        moodBaseline: "steady",
-      },
-      character: {
-        id: "char-001",
-        name: "小橘",
-        personality: "敏锐直接",
-        catchphrase: "哼。",
-        relationshipSetup: "陪你一起推进项目",
-        avatarLabel: "橘发少女",
-      },
-      wxMemories: [],
-      airjellyCtx: { source: "mock", events: [], tasks: [], appUsage: [] },
-      builtAt: 1,
-      latentInsights: [],
-      characterState: {
-        id: "char-001",
-        name: "小橘",
-        personality: "敏锐直接",
-        catchphrase: "哼。",
-        relationshipSetup: "陪你一起推进项目",
-        avatarLabel: "橘发少女",
-      },
-    });
-    const updateRelationshipState = vi.fn().mockReturnValue({
-      userId: "user-001",
-      userName: "Pika",
-      intimacy: 19,
-      stage: "friend",
-      preferences: { topics: [], avoid: [], communicationStyle: "direct" },
-      keyMoments: [
-        {
-          date: new Date().toISOString(),
-          event: "她第一次公开夸你做出来了",
-          impact: 9,
-        },
-      ],
-      lastInteraction: Date.now(),
-      moodBaseline: "steady",
-    });
-
-    vi.doMock("../electron/services/context-snapshot", async () => {
-      const actual = await vi.importActual<typeof import("../electron/services/context-snapshot")>("../electron/services/context-snapshot");
-      return {
-        ...actual,
-        buildContextSnapshot,
-        clearContextSnapshotCache,
-      };
-    });
-    vi.doMock("../electron/services/relationship", async () => {
-      const actual = await vi.importActual<typeof import("../electron/services/relationship")>("../electron/services/relationship");
-      return {
-        ...actual,
-        updateRelationshipState,
-      };
-    });
-
-    const { chat: reloadedChat } = await import("../electron/services/chat-engine");
-
-    await reloadedChat({
-      characterId: "char-001",
-      userId: "user-001",
-      userMessage: "谢谢你一直盯着我，我今天真的特别开心，终于做出来了，而且我也想把更多真实的事告诉你。",
-    });
-
-    const signalsPath = path.join(tempDir, "oc-data", "drift", "signals.jsonl");
-    await waitForFile(signalsPath);
-    const signals = await readFile(signalsPath, "utf8");
-
-    expect(signals).toContain("relationship_overfit");
-    expect(signals).toContain("observe");
-  });
-
-  it("clears cached snapshots after relationship and history writes", async () => {
-    vi.resetModules();
-
-    const clearContextSnapshotCache = vi.fn();
-    const buildContextSnapshot = vi.fn().mockResolvedValue({
-      realtimeContext: { source: "mock", events: [], tasks: [], appUsage: [] },
-      growthProfile: { userId: "user-001", updatedAt: 0, goals: [], strengths: [], preferences: [], openQuestions: [] },
-      conversationState: { recentChat: [] },
-      relationshipState: {
-        userId: "user-001",
-        userName: "Pika",
-        intimacy: 10,
-        stage: "friend",
-        preferences: { topics: [], avoid: [], communicationStyle: "direct" },
-        keyMoments: [],
-        lastInteraction: 0,
-        moodBaseline: "steady",
-      },
-      socialMemory: [],
-      recentChat: [],
-      relationship: {
-        userId: "user-001",
-        userName: "Pika",
-        intimacy: 10,
-        stage: "friend",
-        preferences: { topics: [], avoid: [], communicationStyle: "direct" },
-        keyMoments: [],
-        lastInteraction: 0,
-        moodBaseline: "steady",
-      },
-      character: {
-        id: "char-001",
-        name: "小橘",
-        personality: "敏锐直接",
-        catchphrase: "哼。",
-        relationshipSetup: "陪你一起推进项目",
-        avatarLabel: "橘发少女",
-      },
-      wxMemories: [],
-      airjellyCtx: { source: "mock", events: [], tasks: [], appUsage: [] },
-      builtAt: 1,
-      latentInsights: [],
-      characterState: {
-        id: "char-001",
-        name: "小橘",
-        personality: "敏锐直接",
-        catchphrase: "哼。",
-        relationshipSetup: "陪你一起推进项目",
-        avatarLabel: "橘发少女",
-      },
-    });
-    const runGrowthPipeline = vi.fn().mockResolvedValue(undefined);
-    const appendOCHistory = vi.fn().mockResolvedValue(undefined);
-    const saveRelationship = vi.fn().mockImplementation(async (_userId, relationship) => relationship);
-    const updateRelationshipState = vi.fn().mockReturnValue({
-      userId: "user-001",
-      userName: "Pika",
-      intimacy: 11,
-      stage: "friend",
-      preferences: { topics: [], avoid: [], communicationStyle: "direct" },
-      keyMoments: [],
-      lastInteraction: Date.now(),
-      moodBaseline: "steady",
-    });
-
-    vi.doMock("../electron/services/context-snapshot", async () => {
-      const actual = await vi.importActual<typeof import("../electron/services/context-snapshot")>("../electron/services/context-snapshot");
-      return {
-        ...actual,
-        buildContextSnapshot,
-        clearContextSnapshotCache,
-      };
-    });
-    vi.doMock("../electron/services/growth-pipeline", async () => {
-      const actual = await vi.importActual<typeof import("../electron/services/growth-pipeline")>("../electron/services/growth-pipeline");
-      return {
-        ...actual,
-        runGrowthPipeline,
-      };
-    });
-    vi.doMock("../electron/services/memory", async () => {
-      const actual = await vi.importActual<typeof import("../electron/services/memory")>("../electron/services/memory");
-      return {
-        ...actual,
-        appendOCHistory,
-        saveRelationship,
-      };
-    });
-    vi.doMock("../electron/services/relationship", async () => {
-      const actual = await vi.importActual<typeof import("../electron/services/relationship")>("../electron/services/relationship");
-      return {
-        ...actual,
-        updateRelationshipState,
-      };
-    });
-
-    const { chat: reloadedChat } = await import("../electron/services/chat-engine");
-
-    await reloadedChat({
-      characterId: "char-001",
-      userId: "user-001",
-      userMessage: "你好",
-    });
-
-    expect(buildContextSnapshot).toHaveBeenCalled();
-    expect(saveRelationship).toHaveBeenCalled();
-    expect(appendOCHistory).toHaveBeenCalled();
-    expect(clearContextSnapshotCache).toHaveBeenCalledTimes(1);
-  });
-
   it("can disable the new memory pipeline with feature flags", async () => {
     process.env.OC_ENABLE_UNIFIED_MEMORY = "0";
     process.env.OC_ENABLE_DISTILLATION = "0";
@@ -411,7 +200,7 @@ describe("chat engine", () => {
       userMessage: "我想做一个会慢慢理解人的成长伙伴。",
     });
 
-    const awarenessDir = path.join(tempDir, "oc-data", "awareness", "users", "user-001", "episodes");
+    const awarenessDir = path.join(tempDir, "oc-data", "awareness", "episodes");
     const workItemsDir = path.join(tempDir, "oc-data", "work-items");
 
     expect(result.text.length).toBeGreaterThan(0);

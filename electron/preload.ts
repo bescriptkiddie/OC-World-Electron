@@ -1,14 +1,9 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 const hermesStatusChangedChannel = "hermes:status-changed";
-const hermesSessionEventChannel = "hermes:session-event";
-const floatingOcDragChannels = {
-  start: "floating-oc:drag-start",
-  move: "floating-oc:drag-move",
-  end: "floating-oc:drag-end",
-} as const;
 
 contextBridge.exposeInMainWorld("ocWorld", {
+  getAppPath: () => process.cwd(),
   chat: {
     sendMessage: (payload: import("../src/types").ChatSendPayload) => ipcRenderer.invoke("chat:send-message", payload),
     cancelActive: (payload: import("../src/types").ChatCancelPayload) =>
@@ -74,15 +69,6 @@ contextBridge.exposeInMainWorld("ocWorld", {
   awareness: {
     list: (payload: { userId: string; limit?: number }) => ipcRenderer.invoke("awareness:list", payload),
   },
-  writeback: {
-    list: (payload: { userId: string }) => ipcRenderer.invoke("writeback:list", payload),
-    approve: (payload: { userId: string; proposalId: string }) => ipcRenderer.invoke("writeback:approve", payload),
-    reject: (payload: { userId: string; proposalId: string; feedback?: string }) => ipcRenderer.invoke("writeback:reject", payload),
-    revert: (payload: { userId: string; proposalId: string }) => ipcRenderer.invoke("writeback:revert", payload),
-  },
-  drift: {
-    listSignals: (payload: { userId: string; limit?: number }) => ipcRenderer.invoke("drift:list-signals", payload),
-  },
   workItems: {
     list: (userId: string) => ipcRenderer.invoke("work-items:list", userId),
   },
@@ -119,8 +105,6 @@ contextBridge.exposeInMainWorld("ocWorld", {
   },
   hermes: {
     getStatus: () => ipcRenderer.invoke("hermes:get-status"),
-    getBridgeStatus: () => ipcRenderer.invoke("hermes:get-bridge-status"),
-    listSessionEvents: (payload: import("../src/types").HermesSessionEventQuery) => ipcRenderer.invoke("hermes:list-session-events", payload),
     onStatusChanged: (callback: (status: import("../src/types").HermesRuntimeStatus) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, status: import("../src/types").HermesRuntimeStatus) => {
         callback(status);
@@ -132,30 +116,9 @@ contextBridge.exposeInMainWorld("ocWorld", {
         ipcRenderer.removeListener(hermesStatusChangedChannel, listener);
       };
     },
-    onSessionEvent: (callback: (event: import("../src/types").HermesSessionEvent) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, sessionEvent: import("../src/types").HermesSessionEvent) => {
-        callback(sessionEvent);
-      };
-
-      ipcRenderer.on(hermesSessionEventChannel, listener);
-
-      return () => {
-        ipcRenderer.removeListener(hermesSessionEventChannel, listener);
-      };
-    },
   },
   imageGen: {
     generate: (payload: import("../src/types").ImageGenPayload) =>
       ipcRenderer.invoke("image-gen:generate", payload),
-  },
-  floatingOc: {
-    show: () => ipcRenderer.invoke("floating-oc:show"),
-    close: () => ipcRenderer.invoke("floating-oc:close"),
-    toggle: () => ipcRenderer.invoke("floating-oc:toggle"),
-    getState: () => ipcRenderer.invoke("floating-oc:get-state"),
-    focusMain: () => ipcRenderer.invoke("floating-oc:focus-main"),
-    startDrag: (point: { screenX: number; screenY: number }) => ipcRenderer.send(floatingOcDragChannels.start, point),
-    dragMove: (point: { screenX: number; screenY: number }) => ipcRenderer.send(floatingOcDragChannels.move, point),
-    endDrag: () => ipcRenderer.send(floatingOcDragChannels.end),
   },
 });

@@ -31,7 +31,7 @@ function getImageCacheKey(payload: ImageGenPayload, imageConfig: { aspectRatio: 
   return createHash("sha256")
     .update(JSON.stringify({
       provider: payload.provider || "openai",
-      model: payload.model || "gpt-image-2",
+      model: payload.model || getEnvValue("IMAGE_GEN_MODEL") || "gpt-image-2",
       prompt: payload.prompt,
       imageConfig,
     }))
@@ -57,6 +57,29 @@ async function readCachedImage(dir: string, characterId: string, cacheKey: strin
   return null;
 }
 
+function getImageGenApiKey(): string {
+  return getEnvValue("IMAGE_GEN_API_KEY") || getEnvValue("OPENAI_API_KEY") || getEnvValue("MARSWAVE_API_KEY");
+}
+
+function getImageGenBaseUrl(): string {
+  return (getEnvValue("IMAGE_GEN_BASE_URL") || "https://api.marswave.ai/openapi/v1").replace(/\/$/, "");
+}
+
+function getImageGenModel(payload: ImageGenPayload): string {
+  return payload.model || getEnvValue("IMAGE_GEN_MODEL") || "gpt-image-2";
+}
+
+function shouldUseOpenAIEndpoint(): boolean {
+  const baseUrl = getImageGenBaseUrl();
+  return (
+    baseUrl.includes("openai-next.com") ||
+    baseUrl.includes("api.openai.com") ||
+    baseUrl.includes("moocoo.ai") ||
+    getEnvValue("IMAGE_GEN_PROVIDER") === "openai" ||
+    (Boolean(getEnvValue("IMAGE_GEN_API_KEY") || getEnvValue("OPENAI_API_KEY")) && !getEnvValue("MARSWAVE_API_KEY"))
+  );
+}
+
 export async function generateImage(
   payload: ImageGenPayload,
   characterId = "char-001",
@@ -74,11 +97,82 @@ export async function generateImage(
     }
   }
 
-  const apiKey = getEnvValue("MARSWAVE_API_KEY");
+  const apiKey = getImageGenApiKey();
   if (!apiKey) {
-    throw new Error("MARSWAVE_API_KEY not configured");
+    throw new Error("No image generation API key configured (set IMAGE_GEN_API_KEY, OPENAI_API_KEY, or MARSWAVE_API_KEY)");
   }
 
+  if (shouldUseOpenAIEndpoint()) {
+    return generateImageOpenAI(payload, characterId, apiKey, dir, cacheKey, imageConfig);
+  }
+
+  return generateImageMarswave(payload, characterId, apiKey, dir, cacheKey, imageConfig);
+}
+
+async function generateImageOpenAI(
+  payload: ImageGenPayload,
+  characterId: string,
+  apiKey: string,
+  dir: string,
+  cacheKey: string,
+  _imageConfig: { aspectRatio: string; imageSize: string },
+): Promise<ImageGenResult> {
+  const baseUrl = getImageGenBaseUrl();
+  const model = getImageGenModel(payload);
+
+  const response = await fetch(`${baseUrl}/images/generations`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      prompt: payload.prompt,
+      n: 1,
+      size: "1024x1024",
+      response_format: "b64_json",
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Image gen failed (${response.status}): ${text}`);
+  }
+
+  const data = await response.json();
+  const imageItem = data?.data?.[0];
+
+  if (!imageItem?.b64_json) {
+    throw new Error("Unexpected image gen response format: missing b64_json");
+  }
+
+  const imageBase64 = imageItem.b64_json;
+  const mimeType = "image/png";
+  const ext = "png";
+  const cachedFilePath = path.join(dir, `${characterId}-${cacheKey}.${ext}`);
+  const latestFilePath = path.join(dir, `${characterId}.${ext}`);
+
+  const buffer = Buffer.from(imageBase64, "base64");
+  await writeFile(cachedFilePath, buffer);
+  await writeFile(latestFilePath, buffer);
+
+  return {
+    imageBase64,
+    mimeType,
+    savedPath: cachedFilePath,
+    cached: false,
+  };
+}
+
+async function generateImageMarswave(
+  payload: ImageGenPayload,
+  characterId: string,
+  apiKey: string,
+  dir: string,
+  cacheKey: string,
+  imageConfig: { aspectRatio: string; imageSize: string },
+): Promise<ImageGenResult> {
   const response = await fetch(
     "https://api.marswave.ai/openapi/v1/images/generation",
     {

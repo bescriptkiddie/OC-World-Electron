@@ -1,6 +1,6 @@
 import type { AsrProviderStatus, AsrStartPayload, AsrTranscriptEvent } from "../../src/types";
 
-const DEFAULT_ASR_ENDPOINT = "https://api.stepfun.com/v1/audio/asr/sse";
+const DEFAULT_ASR_ENDPOINT = "https://api.stepfun.com/step_plan/v1/audio/asr/sse";
 const DEFAULT_ASR_MODEL = "stepaudio-2.5-asr";
 const DEFAULT_ASR_LANGUAGE = "zh";
 const DEFAULT_ASR_TIMEOUT_MS = 60_000;

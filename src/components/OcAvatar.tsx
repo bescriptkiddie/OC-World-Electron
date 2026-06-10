@@ -11,8 +11,24 @@ function getInitial(name?: string) {
 
 function resolveSrc(src?: string, avatarPath?: string): string | undefined {
   if (src) return src;
-  if (avatarPath) return `file://${avatarPath}`;
-  return undefined;
+  if (!avatarPath) return undefined;
+  // Absolute path (from image-gen or explicit full path)
+  if (avatarPath.startsWith("/") || /^[A-Za-z]:\\/.test(avatarPath)) {
+    return `file://${avatarPath}`;
+  }
+  // data: URL or http(s) URL — pass through
+  if (avatarPath.startsWith("data:") || avatarPath.startsWith("http")) {
+    return avatarPath;
+  }
+  // Relative path — resolve against the Electron app cwd via IPC
+  const appRoot = typeof window !== "undefined" && "ocWorld" in window
+    ? (window.ocWorld as { getAppPath: () => string }).getAppPath()
+    : "";
+  if (appRoot) {
+    return `file://${appRoot}/${avatarPath}`;
+  }
+  // Fallback for non-Electron environments (testing etc.)
+  return avatarPath;
 }
 
 export function OcAvatar({

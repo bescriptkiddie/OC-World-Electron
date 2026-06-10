@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { useRuntime } from "../runtime/use-runtime";
 import { useChat } from "../hooks/useChat";
 import { ChatView } from "./ChatView";
 import { CreateView } from "./CreateView";
@@ -10,21 +9,18 @@ import { OcProfileCard } from "./OcProfileCard";
 import { OcWorkspaceHeader } from "./OcWorkspaceHeader";
 import { RewindView } from "./RewindView";
 import { SettingsView } from "./SettingsView";
-import { type SessionId, type ViewId, resolveInitialView, visibleMessages } from "./shared";
-import type { OcVisualProfile } from "../types";
+import { WorldView } from "./WorldView";
+import { SplashScreen } from "./SplashScreen";
+import { type SessionId, bootRows, type ViewId, resolveInitialView, visibleMessages } from "./shared";
 
 export function OcWorldApp() {
-  const { client, capabilities } = useRuntime();
   const chat = useChat();
   const [view, setView] = useState<ViewId>("oc");
   const [selectedSession, setSelectedSession] = useState<SessionId>("live");
+  const [splash, setSplash] = useState<"visible" | "leaving" | "hidden">("visible");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [initialViewResolved, setInitialViewResolved] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
-  const [floatingOcOpen, setFloatingOcOpen] = useState(false);
-  const floatingOcAvailable = Boolean(capabilities.floatingOc);
-  const workspaceView = view === "memory" ? "chat" : view;
-  const headerView = settingsOpen ? "settings" : memoryOpen ? "memory" : workspaceView;
 
   const messages = useMemo(
     () => visibleMessages(chat.history, chat.pendingMessages, chat.isSending, selectedSession),
@@ -41,43 +37,19 @@ export function OcWorldApp() {
   }, [chat.character, chat.relationship, initialViewResolved]);
 
   useEffect(() => {
-    if (!capabilities.floatingOc) {
-      return;
+    if (memoryOpen) {
+      setView("memory");
     }
-
-    let cancelled = false;
-    capabilities.floatingOc.getState().then((state) => {
-      if (!cancelled) {
-        setFloatingOcOpen(state.open);
-      }
-    }).catch(() => {
-      if (!cancelled) {
-        setFloatingOcOpen(false);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [capabilities.floatingOc]);
+  }, [memoryOpen]);
 
   const handleViewChange = (nextView: ViewId) => {
     setSettingsOpen(false);
     if (nextView === "memory") {
       setMemoryOpen(true);
-      if (view === "memory") {
-        setView("chat");
-      }
       return;
     }
     setMemoryOpen(false);
     setView(nextView);
-  };
-
-  const closeMemory = () => {
-    setMemoryOpen(false);
-    if (view === "memory") {
-      setView("chat");
-    }
   };
 
   const sendPrompt = async (text: string) => {
@@ -92,45 +64,41 @@ export function OcWorldApp() {
     setView("chat");
   };
 
-  const toggleFloatingOc = async () => {
-    if (!capabilities.floatingOc) {
-      return;
-    }
-
-    const state = await capabilities.floatingOc.toggle();
-    setFloatingOcOpen(state.open);
+  const dismissSplash = () => {
+    setSplash("leaving");
+    window.setTimeout(() => setSplash("hidden"), 500);
   };
 
-  const handleCreateSave = async (data: { name: string; personality: string; catchphrase: string; relationshipSetup: string; avatarPath?: string; visualProfile?: OcVisualProfile }) => {
-    const nextCharacter = {
-      id: "char-001",
-      name: data.name,
-      personality: data.personality,
-      catchphrase: data.catchphrase,
-      relationshipSetup: data.relationshipSetup,
-      avatarLabel: data.name,
-      avatarPath: data.avatarPath,
-      visualProfile: data.visualProfile,
-    };
+  const handleCreateSave = async (data: { name: string; personality: string; catchphrase: string; relationshipSetup: string; avatarPath?: string }) => {
+    if (!window.ocWorld) {
+      throw new Error("IPC not available");
+    }
 
-    await client.character.saveCurrent({
+    await window.ocWorld.character.saveCurrent({
       characterId: "char-001",
-      character: nextCharacter,
+      character: {
+        id: "char-001",
+        name: data.name,
+        personality: data.personality,
+        catchphrase: data.catchphrase,
+        relationshipSetup: data.relationshipSetup,
+        avatarLabel: data.name,
+        avatarPath: data.avatarPath,
+      },
     });
 
     await chat.refreshState();
     setInitialViewResolved(true);
     setSelectedSession("live");
-    setMemoryOpen(false);
-    setView("chat");
+    setView("oc");
   };
 
   const handleUserNameChange = async (name: string) => {
-    if (!chat.relationship) {
+    if (!window.ocWorld || !chat.relationship) {
       throw new Error("Relationship not available");
     }
 
-    await client.relationship.save({
+    await window.ocWorld.relationship.save({
       userId: chat.relationship.userId,
       relationship: { ...chat.relationship, userName: name },
     });
@@ -156,19 +124,7 @@ export function OcWorldApp() {
     />
   );
 
-  const header = (
-    <OcWorkspaceHeader
-      current={headerView}
-      floatingOpen={floatingOcOpen}
-      floatingAvailable={floatingOcAvailable}
-      onChange={handleViewChange}
-      onOpenSettings={() => {
-        setMemoryOpen(false);
-        setSettingsOpen(true);
-      }}
-      onToggleFloating={toggleFloatingOc}
-    />
-  );
+  const header = <OcWorkspaceHeader current={memoryOpen ? "memory" : view} onChange={handleViewChange} onOpenSettings={() => setSettingsOpen(true)} />;
 
   const content = !initialViewResolved ? (
     <WorkspaceLoading />
@@ -184,14 +140,13 @@ export function OcWorldApp() {
       onBack={() => setSettingsOpen(false)}
     />
   ) : renderView({
-    view: memoryOpen ? "chat" : workspaceView,
+    view: memoryOpen ? "chat" : view,
     messages,
     selectedSession,
     chat,
-    pendingCount: chat.pendingMessages.length,
     onSend: sendPrompt,
     onCreateSave: handleCreateSave,
-    onCancelCreate: () => setView("chat"),
+    onCancelCreate: () => setView("oc"),
     canCancelCreate: Boolean(chat.character?.name?.trim()),
     onOpenChat: () => {
       setView("chat");
@@ -199,14 +154,23 @@ export function OcWorldApp() {
     },
     onOpenCreate: () => setView("create"),
     onOpenRewind: () => setView("rewind"),
+    onOpenWorld: () => setView("world"),
     onOpenMemory: () => setMemoryOpen(true),
-    onCloseMemory: closeMemory,
+    onCloseMemory: () => setMemoryOpen(false),
     memoryOpen,
     onNewChat: startBlankChat,
   });
 
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", position: "relative", background: "var(--bg-page)" }}>
+      {splash !== "hidden" && (
+        <SplashScreen
+          rows={bootRows(chat.character, chat.relationship, chat.hermesStatus.state)}
+          leaving={splash === "leaving"}
+          onEnter={dismissSplash}
+        />
+      )}
+
       <OcDesktopShell left={leftPanel} header={header}>
         {content}
       </OcDesktopShell>
@@ -219,7 +183,6 @@ function renderView({
   messages,
   selectedSession,
   chat,
-  pendingCount,
   onSend,
   onCreateSave,
   onCancelCreate,
@@ -227,6 +190,7 @@ function renderView({
   onOpenChat,
   onOpenCreate,
   onOpenRewind,
+  onOpenWorld,
   onOpenMemory,
   onCloseMemory,
   memoryOpen,
@@ -236,14 +200,14 @@ function renderView({
   messages: ReturnType<typeof visibleMessages>;
   selectedSession: SessionId;
   chat: ReturnType<typeof useChat>;
-  pendingCount: number;
   onSend: (text: string) => Promise<void>;
-  onCreateSave: (data: { name: string; personality: string; catchphrase: string; relationshipSetup: string; avatarPath?: string; visualProfile?: OcVisualProfile }) => Promise<void>;
+  onCreateSave: (data: { name: string; personality: string; catchphrase: string; relationshipSetup: string; avatarPath?: string }) => Promise<void>;
   onCancelCreate: () => void;
   canCancelCreate: boolean;
   onOpenChat: () => void;
   onOpenCreate: () => void;
   onOpenRewind: () => void;
+  onOpenWorld: () => void;
   onOpenMemory: () => void;
   onCloseMemory: () => void;
   memoryOpen: boolean;
@@ -274,7 +238,6 @@ function renderView({
           character={chat.character}
           messages={messages}
           isSending={chat.isSending}
-          pendingCount={pendingCount}
           selectedSession={selectedSession}
           ttsEnabled={chat.ttsEnabled}
           voiceInputState={chat.voiceInputState}
@@ -288,6 +251,7 @@ function renderView({
           onInterrupt={chat.interruptActiveTurn}
           onTtsToggle={() => chat.setTtsEnabled(!chat.ttsEnabled)}
           onVoiceToggle={chat.toggleVoiceInput}
+          onConfirmReveal={chat.confirmReveal}
           onDismissReveal={chat.dismissReveal}
           onRejectReveal={chat.rejectReveal}
           onDismissRecallHint={chat.dismissRecallHint}
@@ -299,15 +263,19 @@ function renderView({
           timeline={chat.timeline}
           growthProfile={chat.growthProfile}
           growthInsights={chat.growthInsights}
-          revealHint={chat.activeReveal}
-          revealBusy={chat.revealBusy}
           open={memoryOpen}
           onClose={onCloseMemory}
-          onConfirmReveal={chat.confirmReveal}
-          onDismissReveal={chat.dismissReveal}
-          onRejectReveal={chat.rejectReveal}
         />
       </>
+    );
+  }
+
+  if (view === "world") {
+    return (
+      <WorldView
+        character={chat.character}
+        relationship={chat.relationship}
+      />
     );
   }
 
@@ -321,13 +289,8 @@ function renderView({
       timeline={chat.timeline}
       growthProfile={chat.growthProfile}
       growthInsights={chat.growthInsights}
-      revealHint={chat.activeReveal}
-      revealBusy={chat.revealBusy}
       open={true}
       onClose={onCloseMemory}
-      onConfirmReveal={chat.confirmReveal}
-      onDismissReveal={chat.dismissReveal}
-      onRejectReveal={chat.rejectReveal}
     />
   );
 }

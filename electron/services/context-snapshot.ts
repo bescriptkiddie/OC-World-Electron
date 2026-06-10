@@ -9,49 +9,32 @@ import {
 } from "./memory";
 import { getAirJellyContext } from "./airjelly";
 import { getMemoryFeatureFlags } from "./feature-flags";
-import { ensureUnifiedMemoryRepository } from "./unified-memory";
+import { ensureUnifiedMemoryRepository, loadRetrievedMemoryBundle } from "./unified-memory";
 
-const SNAPSHOT_TTL_MS = 5 * 60_000;
+function createEmptyRetrievedMemoryBundle() {
+  return {
+    longTermFacts: "",
+    voiceHints: "",
+    systemReminders: "",
+    activeProjects: [],
+    relevantWorkItems: [],
+    recentAwarenessHighlights: [],
+  };
+}
 
-type SnapshotInput = {
+export async function buildContextSnapshot(input: {
   userId: string;
   characterId: string;
   recentChatLimit?: number;
   summariesLimit?: number;
   dataRoot?: string;
-  bypassCache?: boolean;
-};
-
-const snapshotCache = new Map<string, { snapshot: ContextSnapshot; cachedAt: number }>();
-
-function createSnapshotCacheKey(input: SnapshotInput) {
-  return [
-    input.userId,
-    input.characterId,
-    input.recentChatLimit ?? 10,
-    input.summariesLimit ?? 3,
-    input.dataRoot ?? "",
-  ].join(":");
-}
-
-export function clearContextSnapshotCache() {
-  snapshotCache.clear();
-}
-
-export async function buildContextSnapshot(input: SnapshotInput): Promise<ContextSnapshot> {
-  const cacheKey = createSnapshotCacheKey(input);
-  const cached = snapshotCache.get(cacheKey);
-
-  if (!input.bypassCache && cached && Date.now() - cached.cachedAt < SNAPSHOT_TTL_MS) {
-    return cached.snapshot;
-  }
-
+}): Promise<ContextSnapshot> {
   const flags = getMemoryFeatureFlags();
   if (flags.unifiedMemory) {
     await ensureUnifiedMemoryRepository(input.userId, input.dataRoot);
   }
 
-  const [airjellyCtx, wxMemories, recentChat, relationship, character, growthProfile, insights] = await Promise.all([
+  const [airjellyCtx, wxMemories, recentChat, relationship, character, growthProfile, insights, retrievedMemoryBundle] = await Promise.all([
     getAirJellyContext(input.dataRoot),
     loadRecentSummaries(input.userId, input.summariesLimit ?? 3, input.dataRoot),
     loadOCHistory(input.userId, input.recentChatLimit ?? 10, input.dataRoot),
@@ -59,9 +42,10 @@ export async function buildContextSnapshot(input: SnapshotInput): Promise<Contex
     loadCharacter(input.characterId, input.dataRoot),
     loadGrowthProfile(input.userId, input.dataRoot),
     loadGrowthInsights(input.userId, input.dataRoot),
+    flags.unifiedMemory ? loadRetrievedMemoryBundle(input.userId, input.dataRoot) : Promise.resolve(createEmptyRetrievedMemoryBundle()),
   ]);
 
-  const snapshot: ContextSnapshot = {
+  return {
     builtAt: Date.now(),
     airjellyCtx,
     wxMemories,
@@ -70,12 +54,8 @@ export async function buildContextSnapshot(input: SnapshotInput): Promise<Contex
     character,
     growthProfile,
     latentInsights: insights.filter((item) => item.status === "latent" || item.status === "suggested"),
-    realtimeContext: {
-      events: airjellyCtx.events,
-      tasks: airjellyCtx.tasks,
-      appUsage: airjellyCtx.appUsage,
-      source: airjellyCtx.source,
-    },
+    retrievedMemoryBundle,
+    realtimeContext: airjellyCtx,
     socialMemory: wxMemories,
     conversationState: {
       recentChat,
@@ -83,7 +63,4 @@ export async function buildContextSnapshot(input: SnapshotInput): Promise<Contex
     relationshipState: relationship,
     characterState: character,
   };
-
-  snapshotCache.set(cacheKey, { snapshot, cachedAt: Date.now() });
-  return snapshot;
 }

@@ -71,6 +71,8 @@ export interface Relationship {
   moodBaseline: string;
 }
 
+export type CharacterGender = "female" | "male" | "other";
+
 export interface CharacterConfig {
   id: string;
   name: string;
@@ -79,45 +81,7 @@ export interface CharacterConfig {
   relationshipSetup: string;
   avatarLabel: string;
   avatarPath?: string;
-  visualProfile?: OcVisualProfile;
-}
-
-export type OcVisualStateId =
-  | "idle"
-  | "running-right"
-  | "running-left"
-  | "waving"
-  | "jumping"
-  | "failed"
-  | "waiting"
-  | "running"
-  | "review";
-
-export interface OcVisualState {
-  id: OcVisualStateId;
-  label: string;
-  row: number;
-  frames: number;
-  fps: number;
-  prompt: string;
-}
-
-export interface OcVisualProfile {
-  packageName: string;
-  displayName: string;
-  direction: "editorial-monocle" | "modern-minimal" | "warm-soft" | "tech-utility" | "brutalist-experimental";
-  concept: string;
-  styleNotes: string;
-  atlasSpec: {
-    cellWidth: number;
-    cellHeight: number;
-    columns: number;
-    rows: number;
-    width: number;
-    height: number;
-  };
-  states: OcVisualState[];
-  spritesheetPath?: string;
+  gender?: CharacterGender;
 }
 
 export interface ChatHistoryEntry {
@@ -238,12 +202,6 @@ export interface LongTermMemory {
   updatedAt: number;
 }
 
-export interface VoiceMemory {
-  userId: string;
-  voiceMarkdown: string;
-  updatedAt: number;
-}
-
 export type AwarenessSource = "chat" | "airjelly" | "manual";
 
 export interface AwarenessEpisode {
@@ -337,53 +295,6 @@ export interface MemoryMergeDecision {
   text: string;
 }
 
-export type WritebackProposalTarget = "memory" | "voice" | "none";
-export type WritebackProposalOperation = "append";
-export type WritebackProposalStatus = "proposed" | "merged" | "deferred" | "discarded" | "reverted";
-
-export interface WritebackProposal {
-  id: string;
-  userId: string;
-  episodeId: string;
-  insightId: string | null;
-  target: WritebackProposalTarget;
-  operation: WritebackProposalOperation;
-  text: string;
-  evidenceEventIds: string[];
-  evidenceSummary: string;
-  confidence: number;
-  status: WritebackProposalStatus;
-  reason: string;
-  requiresUserConfirmation: boolean;
-  createdAt: number;
-  updatedAt?: number;
-  feedback?: string;
-}
-
-export type DriftSignalType =
-  | "goal_drift"
-  | "memory_pollution"
-  | "stale_context"
-  | "writeback_conflict"
-  | "relationship_overfit"
-  | "recall_noise"
-  | "evaluator_mismatch";
-
-export type DriftSignalSeverity = "info" | "warning" | "critical";
-export type DriftSignalRecommendedAction = "observe" | "defer_writeback" | "pause_distillation" | "ask_user" | "revert";
-
-export interface DriftSignal {
-  id: string;
-  userId: string;
-  turnId: string;
-  type: DriftSignalType;
-  severity: DriftSignalSeverity;
-  summary: string;
-  evidenceEventIds: string[];
-  recommendedAction: DriftSignalRecommendedAction;
-  createdAt: number;
-}
-
 export interface ManualDistillationResult {
   episode: AwarenessEpisode;
   memoryMergeDecisions: MemoryMergeDecision[];
@@ -391,7 +302,6 @@ export interface ManualDistillationResult {
   projects: ProjectsState;
   recallEvents: RecallEvent[];
 }
-
 
 export interface RetrievedMemoryBundle {
   longTermFacts: string;
@@ -411,6 +321,7 @@ export interface ContextSnapshot {
   character: CharacterConfig;
   growthProfile: GrowthProfile;
   latentInsights: GrowthInsight[];
+  retrievedMemoryBundle: RetrievedMemoryBundle;
   realtimeContext: AirJellyContext;
   socialMemory: MemorySummary[];
   conversationState: {
@@ -424,6 +335,7 @@ export interface TtsSynthesizePayload {
   text: string;
   requestId?: string;
   userId?: string;
+  characterId?: string;
   interrupt?: boolean;
 }
 
@@ -489,41 +401,6 @@ export interface HermesRuntimeStatus {
   lastError: string | null;
   lastStartedAt: number | null;
   lastHealthCheckAt: number | null;
-}
-
-export type HermesBridgeTransport = "none" | "plugin" | "sidecar";
-
-export interface HermesBridgeStatus {
-  connected: boolean;
-  transport: HermesBridgeTransport;
-  lastEventAt: number | null;
-}
-
-export type HermesSessionEventKind =
-  | "turn_start"
-  | "text_delta"
-  | "tool_call_start"
-  | "tool_call_end"
-  | "turn_end"
-  | "error";
-
-export interface HermesSessionEvent {
-  id: string;
-  sessionId: string;
-  turnId: string;
-  kind: HermesSessionEventKind;
-  emittedAt: number;
-  text?: string;
-  toolName?: string;
-  payload?: Record<string, unknown>;
-}
-
-export interface HermesSessionEventQuery {
-  sessionId?: string;
-  turnId?: string;
-  userId?: string;
-  characterId?: string;
-  limit?: number;
 }
 
 export interface TimelineItem extends GrowthMoment {

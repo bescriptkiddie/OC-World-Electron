@@ -1,13 +1,35 @@
 import { randomUUID } from "node:crypto";
 import type { TtsProviderStatus, TtsSynthesizePayload, TtsSynthesizeResult } from "../../src/types";
 
-const DEFAULT_STEPFUN_TTS_ENDPOINT = "https://api.stepfun.com/v1/audio/speech";
+// StepFun TTS defaults
+const DEFAULT_STEPFUN_TTS_ENDPOINT = "https://api.stepfun.com/step_plan/v1/audio/speech";
 const DEFAULT_STEPFUN_TTS_MODEL = "stepaudio-2.5-tts";
 const DEFAULT_STEPFUN_TTS_VOICE = "cixingnansheng";
-const DEFAULT_STEPFUN_TTS_FORMAT = "mp3";
-const DEFAULT_STEPFUN_TTS_SAMPLE_RATE = 24_000;
-const DEFAULT_STEPFUN_TTS_SPEED = 1;
-const DEFAULT_STEPFUN_TTS_VOLUME = 1;
+
+// StepFun voice mapping by gender — auto-select based on character gender
+const STEPFUN_VOICES: Record<string, string> = {
+  female: "cixingnvsheng",
+  male: "cixingnansheng",
+  other: "cixingnansheng",
+};
+
+// Fallback env-based override per gender
+function getStepFunVoiceForGender(gender?: string): string {
+  if (gender && STEPFUN_VOICES[gender]) {
+    return getEnvValue(`STEPFUN_TTS_VOICE_${gender.toUpperCase()}`) || STEPFUN_VOICES[gender];
+  }
+  return getTtsVoice();
+}
+
+// MiMo TTS defaults (via openai-next API)
+const DEFAULT_MIMO_TTS_ENDPOINT = "https://api.openai-next.com/v1/audio/speech";
+const DEFAULT_MIMO_TTS_MODEL = "MiMo-V2.5-TTS";
+const DEFAULT_MIMO_TTS_VOICE = "zh_female_xiaohe_uranus_bigtts";
+
+const DEFAULT_TTS_FORMAT = "mp3";
+const DEFAULT_TTS_SAMPLE_RATE = 24_000;
+const DEFAULT_TTS_SPEED = 1;
+const DEFAULT_TTS_VOLUME = 1;
 
 interface TtsOptions {
   signal?: AbortSignal;
@@ -40,28 +62,50 @@ function getStepFunApiKey() {
   return getEnvValue("STEPFUN_API_KEY") || getEnvValue("STEP_API_KEY");
 }
 
+function getMiMoApiKey() {
+  return getEnvValue("MIMO_API_KEY") || getEnvValue("ANTHROPIC_AUTH_TOKEN") || getEnvValue("OPENAI_API_KEY");
+}
+
 function getTtsProvider() {
-  return getEnvValue("OC_TTS_PROVIDER") || getEnvValue("TTS_PROVIDER") || (getStepFunApiKey() ? "stepfun" : "browser");
+  const envProvider = getEnvValue("OC_TTS_PROVIDER") || getEnvValue("TTS_PROVIDER");
+  if (envProvider) return envProvider;
+  if (getStepFunApiKey()) return "stepfun";
+  if (getMiMoApiKey()) return "mimo";
+  return "browser";
 }
 
 function shouldUseStepFun() {
   return ["stepfun", "stepfun-tts", "stepaudio", "stepaudio-tts"].includes(getTtsProvider());
 }
 
-function getStepFunEndpoint() {
+function shouldUseMiMo() {
+  return ["mimo", "mimo-tts", "openai-next", "openai"].includes(getTtsProvider());
+}
+
+function getTtsEndpoint() {
+  if (shouldUseMiMo()) {
+    return getEnvValue("MIMO_TTS_ENDPOINT") || DEFAULT_MIMO_TTS_ENDPOINT;
+  }
   return getEnvValue("STEPFUN_TTS_ENDPOINT") || DEFAULT_STEPFUN_TTS_ENDPOINT;
 }
 
-function getStepFunModel() {
+function getTtsModel() {
+  if (shouldUseMiMo()) {
+    return getEnvValue("MIMO_TTS_MODEL") || DEFAULT_MIMO_TTS_MODEL;
+  }
   return getEnvValue("STEPFUN_TTS_MODEL") || DEFAULT_STEPFUN_TTS_MODEL;
 }
 
-function getStepFunVoice() {
+function getTtsVoice(overrideVoice?: string) {
+  if (overrideVoice) return overrideVoice;
+  if (shouldUseMiMo()) {
+    return getEnvValue("MIMO_TTS_VOICE") || DEFAULT_MIMO_TTS_VOICE;
+  }
   return getEnvValue("STEPFUN_TTS_VOICE") || DEFAULT_STEPFUN_TTS_VOICE;
 }
 
-function getStepFunFormat() {
-  return getEnvValue("STEPFUN_TTS_FORMAT") || getEnvValue("STEPFUN_TTS_RESPONSE_FORMAT") || DEFAULT_STEPFUN_TTS_FORMAT;
+function getTtsFormat() {
+  return getEnvValue("TTS_FORMAT") || getEnvValue("STEPFUN_TTS_FORMAT") || DEFAULT_TTS_FORMAT;
 }
 
 function getMimeType(encoding: string) {
@@ -88,23 +132,47 @@ function getMimeType(encoding: string) {
   return "application/octet-stream";
 }
 
-function buildStepFunTtsBody(text: string) {
-  const instruction = getEnvValue("STEPFUN_TTS_INSTRUCTION");
+function buildTtsBody(text: string, overrideVoice?: string) {
+  const model = getTtsModel();
+  const voice = getTtsVoice(overrideVoice);
+  const response_format = getTtsFormat();
 
+  // MiMo/OpenAI compatible format
+  if (shouldUseMiMo()) {
+    return {
+      model,
+      input: text,
+      voice,
+      response_format,
+      speed: getNumberEnv("TTS_SPEED", DEFAULT_TTS_SPEED),
+    };
+  }
+
+  // StepFun format with additional options
+  const instruction = getEnvValue("STEPFUN_TTS_INSTRUCTION");
   return {
-    model: getStepFunModel(),
+    model,
     input: text,
-    voice: getStepFunVoice(),
-    response_format: getStepFunFormat(),
-    sample_rate: getNumberEnv("STEPFUN_TTS_SAMPLE_RATE", DEFAULT_STEPFUN_TTS_SAMPLE_RATE),
-    speed: getNumberEnv("STEPFUN_TTS_SPEED", DEFAULT_STEPFUN_TTS_SPEED),
-    volume: getNumberEnv("STEPFUN_TTS_VOLUME", DEFAULT_STEPFUN_TTS_VOLUME),
+    voice,
+    response_format,
+    sample_rate: getNumberEnv("STEPFUN_TTS_SAMPLE_RATE", DEFAULT_TTS_SAMPLE_RATE),
+    speed: getNumberEnv("STEPFUN_TTS_SPEED", DEFAULT_TTS_SPEED),
+    volume: getNumberEnv("STEPFUN_TTS_VOLUME", DEFAULT_TTS_VOLUME),
     ...(instruction ? { instruction } : {}),
   };
 }
 
+function getApiKey() {
+  if (shouldUseMiMo()) {
+    return getMiMoApiKey();
+  }
+  return getStepFunApiKey();
+}
+
 export function getTtsStatus(): TtsProviderStatus {
-  if (!shouldUseStepFun()) {
+  const provider = getTtsProvider();
+
+  if (provider === "browser") {
     return {
       provider: "browser",
       configured: true,
@@ -114,50 +182,55 @@ export function getTtsStatus(): TtsProviderStatus {
   }
 
   return {
-    provider: "stepfun",
-    configured: Boolean(getStepFunApiKey()),
-    voiceType: getStepFunVoice(),
+    provider: shouldUseMiMo() ? "stepfun" : "stepfun", // Use stepfun as provider name for compatibility
+    configured: Boolean(getApiKey()),
+    voiceType: getTtsVoice(),
     lastError,
   };
 }
 
 export async function synthesizeSpeech(
   payload: TtsSynthesizePayload,
-  options: TtsOptions = {},
+  options: TtsOptions & { characterGender?: string } = {},
 ): Promise<TtsSynthesizeResult> {
   const text = payload.text.trim();
-  const apiKey = getStepFunApiKey();
+  const apiKey = getApiKey();
   const requestId = payload.requestId || randomUUID();
+
+ // Auto-resolve voice from character gender when using StepFun
+  const resolvedVoice = shouldUseStepFun() && options.characterGender
+    ? getStepFunVoiceForGender(options.characterGender)
+    : undefined;
 
   if (!text) {
     throw new Error("TTS text is empty");
   }
 
-  if (!shouldUseStepFun() || !apiKey) {
-    throw new Error("StepFun TTS is not configured");
+  if (!apiKey) {
+    throw new Error("TTS is not configured. Please set MIMO_API_KEY or STEPFUN_API_KEY");
   }
 
-  const encoding = getStepFunFormat();
-  const response = await fetch(getStepFunEndpoint(), {
+  const encoding = getTtsFormat();
+  const response = await fetch(getTtsEndpoint(), {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     signal: options.signal,
-    body: JSON.stringify(buildStepFunTtsBody(text)),
+    body: JSON.stringify(buildTtsBody(text, resolvedVoice)),
   });
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
-    lastError = `StepFun TTS HTTP ${response.status}${errorText ? `: ${errorText}` : ""}`;
+    lastError = `TTS HTTP ${response.status}${errorText ? `: ${errorText}` : ""}`;
     throw new Error(lastError);
   }
 
   const audio = Buffer.from(await response.arrayBuffer());
 
   if (!audio.byteLength) {
-    lastError = "StepFun TTS response did not include audio data";
+    lastError = "TTS response did not include audio data";
     throw new Error(lastError);
   }
 

@@ -1,6 +1,7 @@
 import type { ChatMessage, ChatResponse, Emotion, MemorySummary } from "../../src/types";
 
 const LEGACY_ANTHROPIC_MESSAGES_PATH = "/v1/messages";
+const LEGACY_OPENAI_CHAT_PATH = "/v1/chat/completions";
 const DEFAULT_ANTHROPIC_BASE_URL = "https://token-plan-cn.xiaomimimo.com/anthropic";
 const DEFAULT_ANTHROPIC_MODEL = "mimo-v2.5-pro";
 const HERMES_CHAT_COMPLETIONS_PATH = "/v1/chat/completions";
@@ -81,6 +82,17 @@ function getProvider(): LLMProvider {
 
 function getLegacyBaseUrl() {
   return (getEnvValue("ANTHROPIC_BASE_URL") || DEFAULT_ANTHROPIC_BASE_URL).replace(/\/$/, "");
+}
+
+function isLegacyOpenAICompatible() {
+  const baseUrl = getLegacyBaseUrl();
+  return (
+    baseUrl.includes("openai-next.com") ||
+    baseUrl.includes("xiaomimimo.com/v1") ||
+    baseUrl.includes("moocoo.ai") ||
+    baseUrl.includes("stepfun.com") ||
+    getEnvValue("LEGACY_API_FORMAT") === "openai"
+  );
 }
 
 function getLegacyModel() {
@@ -286,7 +298,39 @@ async function callLegacyLLM(
     return buildMockResponse(userMessage);
   }
 
-  const response = await fetch(`${getLegacyBaseUrl()}${LEGACY_ANTHROPIC_MESSAGES_PATH}`, {
+  const baseUrl = getLegacyBaseUrl();
+  const useOpenAI = isLegacyOpenAICompatible();
+
+  if (useOpenAI) {
+    const response = await fetch(`${baseUrl}${LEGACY_OPENAI_CHAT_PATH}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authToken}`,
+      },
+      signal,
+      body: JSON.stringify({
+        model: getLegacyModel(),
+        messages: [{ role: "system", content: systemPrompt }, ...messages],
+        max_tokens: 1024,
+      }),
+    });
+
+    if (!response.ok) {
+      return buildMockResponse(userMessage);
+    }
+
+    const data = await response.json();
+    const content = getHermesResponseText(data);
+
+    if (!content?.trim()) {
+      return buildMockResponse(userMessage);
+    }
+
+    return parseResponseContent(content);
+  }
+
+  const response = await fetch(`${baseUrl}${LEGACY_ANTHROPIC_MESSAGES_PATH}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

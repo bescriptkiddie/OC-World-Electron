@@ -1,12 +1,14 @@
 import { BrowserWindow, ipcMain } from "electron";
-import { getAirJellyContext } from "./services/airjelly";
 import { chat, generateGreeting } from "./services/chat-engine";
-import { appendDriftSignals, listDriftSignals } from "./services/drift-guardrails";
+import { getAirJellyContext } from "./services/airjelly";
 import { runManualDistillationPipeline } from "./services/growth-pipeline";
-import { rejectInsight } from "./services/growth-insights";
 import { confirmInsightToProfile } from "./services/growth-profile";
+import { rejectInsight } from "./services/growth-insights";
 import { hermesManager } from "./services/hermes-manager";
+import { getTtsStatus, synthesizeSpeech } from "./services/tts";
+import { getAsrStatus, StepFunAsrSession } from "./services/stepfun-asr";
 import { generateImage } from "./services/image-gen";
+import { evaluateContextRecall, startRecallPolling, stopAllRecallPolling, stopRecallPolling } from "./services/recall-service";
 import {
   listTimeline,
   loadCharacter,
@@ -22,11 +24,6 @@ import {
   saveRelationship,
   saveRevealQueue,
 } from "./services/memory";
-import { evaluateContextRecall, startRecallPolling, stopAllRecallPolling, stopRecallPolling } from "./services/recall-service";
-import { getStage } from "./services/relationship";
-import { getSessionEventBridgeStatus, listSessionEvents, recordSessionEvent } from "./services/session-events";
-import { getAsrStatus, StepFunAsrSession } from "./services/stepfun-asr";
-import { getTtsStatus, synthesizeSpeech } from "./services/tts";
 import {
   appendConfirmedMemoryNote,
   listAwarenessEpisodes,
@@ -35,24 +32,17 @@ import {
   loadLongTermMemory,
   loadProjectsState,
 } from "./services/unified-memory";
-import {
-  approveWritebackProposal,
-  listWritebackProposals,
-  rejectWritebackProposal,
-  revertWritebackProposal,
-} from "./services/writeback-ledger";
+import { getStage } from "./services/relationship";
 import type {
+  CharacterConfig,
   AsrAudioPayload,
   AsrStartPayload,
   AsrStopPayload,
-  CharacterConfig,
   ChatCancelPayload,
   ChatSendPayload,
-  HermesSessionEvent,
-  HermesSessionEventQuery,
   ImageGenPayload,
-  RecallEvaluatePayload,
   RecallEvent,
+  RecallEvaluatePayload,
   TtsCancelPayload,
   TtsSynthesizePayload,
 } from "../src/types";
@@ -82,11 +72,6 @@ const ipcChannels = {
   memoryGetVoice: "memory:get-voice",
   memoryRunDistill: "memory:run-distill",
   awarenessList: "awareness:list",
-  writebackList: "writeback:list",
-  writebackApprove: "writeback:approve",
-  writebackReject: "writeback:reject",
-  writebackRevert: "writeback:revert",
-  driftListSignals: "drift:list-signals",
   workItemsList: "work-items:list",
   projectsList: "projects:list",
   recallListRecent: "recall:list-recent",
@@ -102,10 +87,6 @@ const ipcChannels = {
   growthRejectInsight: "growth:reject-insight",
   airjellyGetContext: "airjelly:get-context",
   hermesGetStatus: "hermes:get-status",
-  hermesStatusChanged: "hermes:status-changed",
-  hermesGetBridgeStatus: "hermes:get-bridge-status",
-  hermesListSessionEvents: "hermes:list-session-events",
-  hermesSessionEvent: "hermes:session-event",
   imageGenGenerate: "image-gen:generate",
 } as const;
 
@@ -171,14 +152,6 @@ async function stopAsrSession(payload: AsrStopPayload) {
   return true;
 }
 
-function broadcastHermesSessionEvent(event: HermesSessionEvent) {
-  recordSessionEvent(event);
-
-  for (const window of BrowserWindow.getAllWindows()) {
-    window.webContents.send(ipcChannels.hermesSessionEvent, event);
-  }
-}
-
 async function getLatestReveal(userId: string) {
   const [queue, insights] = await Promise.all([loadRevealQueue(userId), loadGrowthInsights(userId)]);
   const shownCandidate = queue.find((item) => item.status === "shown");
@@ -223,13 +196,12 @@ export function registerIpcHandlers() {
   registered = true;
   detachHermesListener = hermesManager.onStatusChanged((status) => {
     for (const window of BrowserWindow.getAllWindows()) {
-      window.webContents.send(ipcChannels.hermesStatusChanged, status);
+      window.webContents.send("hermes:status-changed", status);
     }
   });
 
   ipcMain.handle(ipcChannels.chatSendMessage, async (_event, payload: ChatSendPayload) => {
     const sessionKey = getChatSessionKey(payload);
-    const turnId = `${sessionKey}:${Date.now()}`;
 
     if (payload.interrupt !== false) {
       abortActiveChat(payload);
@@ -238,43 +210,8 @@ export function registerIpcHandlers() {
     const controller = new AbortController();
     activeChatControllers.set(sessionKey, controller);
 
-    broadcastHermesSessionEvent({
-      id: `${turnId}:start`,
-      sessionId: sessionKey,
-      turnId,
-      kind: "turn_start",
-      emittedAt: Date.now(),
-      payload: { userId: payload.userId, characterId: payload.characterId },
-    });
-
     try {
-      const result = await chat(payload, { signal: controller.signal });
-      broadcastHermesSessionEvent({
-        id: `${turnId}:end`,
-        sessionId: sessionKey,
-        turnId,
-        kind: "turn_end",
-        emittedAt: Date.now(),
-      });
-      return result;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      broadcastHermesSessionEvent({
-        id: `${turnId}:error`,
-        sessionId: sessionKey,
-        turnId,
-        kind: "error",
-        emittedAt: Date.now(),
-        text: message,
-      });
-      broadcastHermesSessionEvent({
-        id: `${turnId}:end`,
-        sessionId: sessionKey,
-        turnId,
-        kind: "turn_end",
-        emittedAt: Date.now(),
-      });
-      throw error;
+      return await chat(payload, { signal: controller.signal });
     } finally {
       if (activeChatControllers.get(sessionKey) === controller) {
         activeChatControllers.delete(sessionKey);
@@ -292,8 +229,19 @@ export function registerIpcHandlers() {
     const controller = new AbortController();
     activeTtsControllers.set(requestId, controller);
 
+    // Auto-resolve character gender for voice selection
+    let characterGender: string | undefined;
+    if (payload.characterId) {
+      try {
+        const character = await loadCharacter(payload.characterId);
+        characterGender = character?.gender;
+      } catch {
+        // If character load fails, fall back to default voice
+      }
+    }
+
     try {
-      return await synthesizeSpeech({ ...payload, requestId }, { signal: controller.signal });
+      return await synthesizeSpeech({ ...payload, requestId }, { signal: controller.signal, characterGender });
     } finally {
       if (activeTtsControllers.get(requestId) === controller) {
         activeTtsControllers.delete(requestId);
@@ -371,23 +319,6 @@ export function registerIpcHandlers() {
   ipcMain.handle(ipcChannels.awarenessList, async (_event, payload: { userId: string; limit?: number }) =>
     listAwarenessEpisodes(payload.userId, payload.limit ?? 20),
   );
-  ipcMain.handle(ipcChannels.writebackList, async (_event, payload: { userId: string }) => listWritebackProposals(payload.userId));
-  ipcMain.handle(
-    ipcChannels.writebackApprove,
-    async (_event, payload: { userId: string; proposalId: string }) => approveWritebackProposal(payload),
-  );
-  ipcMain.handle(
-    ipcChannels.writebackReject,
-    async (_event, payload: { userId: string; proposalId: string; feedback?: string }) => rejectWritebackProposal(payload),
-  );
-  ipcMain.handle(
-    ipcChannels.writebackRevert,
-    async (_event, payload: { userId: string; proposalId: string }) => revertWritebackProposal(payload),
-  );
-  ipcMain.handle(
-    ipcChannels.driftListSignals,
-    async (_event, payload: { userId: string; limit?: number }) => listDriftSignals(payload),
-  );
   ipcMain.handle(ipcChannels.workItemsList, async (_event, userId: string) => listWorkItems(userId));
   ipcMain.handle(ipcChannels.projectsList, async (_event, userId: string) => loadProjectsState(userId));
   ipcMain.handle(ipcChannels.recallListRecent, async (_event, payload: { userId: string; limit?: number }) =>
@@ -440,7 +371,6 @@ export function registerIpcHandlers() {
       ),
       saveGrowthProfile(payload.userId, confirmInsightToProfile({ profile, insight, now })),
       appendConfirmedMemoryNote({
-        userId: payload.userId,
         insightId: insight.id,
         title: insight.title,
         text: insight.text,
@@ -490,10 +420,6 @@ export function registerIpcHandlers() {
   });
   ipcMain.handle(ipcChannels.airjellyGetContext, async () => getAirJellyContext());
   ipcMain.handle(ipcChannels.hermesGetStatus, async () => hermesManager.getStatus());
-  ipcMain.handle(ipcChannels.hermesGetBridgeStatus, async () => getSessionEventBridgeStatus());
-  ipcMain.handle(ipcChannels.hermesListSessionEvents, async (_event, payload: HermesSessionEventQuery) =>
-    listSessionEvents(payload),
-  );
   ipcMain.handle(ipcChannels.imageGenGenerate, async (_event, payload: ImageGenPayload) => generateImage(payload));
 }
 
@@ -538,11 +464,6 @@ export function unregisterIpcHandlers() {
   ipcMain.removeHandler(ipcChannels.memoryGetVoice);
   ipcMain.removeHandler(ipcChannels.memoryRunDistill);
   ipcMain.removeHandler(ipcChannels.awarenessList);
-  ipcMain.removeHandler(ipcChannels.writebackList);
-  ipcMain.removeHandler(ipcChannels.writebackApprove);
-  ipcMain.removeHandler(ipcChannels.writebackReject);
-  ipcMain.removeHandler(ipcChannels.writebackRevert);
-  ipcMain.removeHandler(ipcChannels.driftListSignals);
   ipcMain.removeHandler(ipcChannels.workItemsList);
   ipcMain.removeHandler(ipcChannels.projectsList);
   ipcMain.removeHandler(ipcChannels.recallListRecent);
@@ -557,7 +478,5 @@ export function unregisterIpcHandlers() {
   ipcMain.removeHandler(ipcChannels.growthRejectInsight);
   ipcMain.removeHandler(ipcChannels.airjellyGetContext);
   ipcMain.removeHandler(ipcChannels.hermesGetStatus);
-  ipcMain.removeHandler(ipcChannels.hermesGetBridgeStatus);
-  ipcMain.removeHandler(ipcChannels.hermesListSessionEvents);
   ipcMain.removeHandler(ipcChannels.imageGenGenerate);
 }

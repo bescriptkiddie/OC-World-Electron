@@ -54,9 +54,9 @@ describe("local env loading", () => {
 });
 
 describe("workspace shell model", () => {
-  it("defines three frontstage navigation items in the new order", () => {
-    expect(navItems.map((item) => item.id)).toEqual(["chat", "oc", "rewind"]);
-    expect(navItems.map((item) => item.label)).toEqual(["对话", "TA", "回看"]);
+  it("defines the primary navigation items in the previous OC World order", () => {
+    expect(navItems.map((item) => item.id)).toEqual(["create", "oc", "chat", "world", "rewind", "memory"]);
+    expect(navItems.map((item) => item.label)).toEqual(["生成我的OC", "我的OC", "聊天", "世界", "回溯", "记忆"]);
   });
 
   it("defaults first-time entry to create when no OC is configured", async () => {

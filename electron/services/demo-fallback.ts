@@ -8,11 +8,13 @@ import type {
 
 export const DEFAULT_CHARACTER: CharacterConfig = {
   id: "char-001",
-  name: "小橘",
+  name: "小智",
   personality: "傲娇、敏锐、嘴硬但会主动关心人",
   catchphrase: "哼，我只是顺手提醒你一下。",
   relationshipSetup: "陪你一起熬过项目和情绪波动的 OC",
   avatarLabel: "橘发少女",
+  avatarPath: "oc-data/avatars/OC-XZ-transparent.png",
+  gender: "female",
 };
 
 export const DEFAULT_SUMMARIES: MemorySummary[] = [
@@ -50,7 +52,7 @@ export const DEFAULT_SUMMARIES: MemorySummary[] = [
 
 export const DEFAULT_RELATIONSHIP: Relationship = {
   userId: "user-001",
-  userName: "小智",
+  userName: "主人",
   intimacy: 65,
   stage: "friend",
   preferences: {
