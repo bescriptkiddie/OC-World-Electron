@@ -1,8 +1,8 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
+  "buildCommand": "cd ocworld-web && npm run build",
+  "outputDirectory": "ocworld-web/dist",
   "framework": "vite",
-  "installCommand": "npm ci",
+  "installCommand": "cd ocworld-web && npm ci",
   "rewrites": [
     {
       "source": "/(.*)",
