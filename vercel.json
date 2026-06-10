@@ -5,6 +5,10 @@
   "installCommand": "cd ocworld-web && npm ci",
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
