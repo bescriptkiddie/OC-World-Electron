@@ -12,12 +12,4 @@ release/
 .claude/worktrees/
 .worktrees/
 hermes-agent/
-oc-data/awareness/
-oc-data/avatars/
-oc-data/growth/
-oc-data/memory/
-oc-data/projects/
-oc-data/recall/
-oc-data/work-items/
-oc-data/memories/oc_conversations/debug-user*_history.json
-oc-data/relationships/debug-user*.json
+oc-data/

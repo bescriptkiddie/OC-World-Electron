@@ -1,0 +1,6 @@
+{
+  "id": "home-kitten",
+  "displayName": "Home Kitten",
+  "description": "A compact pixel-style desktop pet based on the user's silver tabby kitten photo.",
+  "spritesheetPath": "spritesheet.webp"
+}
