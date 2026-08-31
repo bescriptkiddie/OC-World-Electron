@@ -9,6 +9,8 @@ interface EvaluateRevealCandidateInput {
   now: number;
 }
 
+const REVEAL_PENDING_EXPIRY_MS = 60 * 60 * 1000;
+
 function isHighPressureMessage(message: string) {
   return /(压力|焦虑|崩|别打断|先别)/.test(message);
 }
@@ -21,17 +23,22 @@ function hasCooldown(insight: GrowthInsight, now: number) {
   return now - insight.lastSuggestedAt < 30 * 60 * 1000;
 }
 
+function isExpiredPendingCandidate(candidate: RevealCandidate, now: number) {
+  return candidate.status === "pending" && now - candidate.createdAt >= REVEAL_PENDING_EXPIRY_MS;
+}
+
 export function evaluateRevealCandidate(input: EvaluateRevealCandidateInput): {
   candidate: RevealCandidate | null;
   insights: GrowthInsight[];
   queue: RevealCandidate[];
 } {
-  const hasActiveCandidate = input.queue.some((item) => item.status === "pending" || item.status === "shown");
+  const nextQueue = input.queue.filter((item) => !isExpiredPendingCandidate(item, input.now));
+  const hasActiveCandidate = nextQueue.some((item) => item.status === "pending" || item.status === "shown");
   if (hasActiveCandidate || isHighPressureMessage(input.userMessage)) {
     return {
       candidate: null,
       insights: input.insights,
-      queue: input.queue,
+      queue: nextQueue,
     };
   }
 
@@ -47,7 +54,7 @@ export function evaluateRevealCandidate(input: EvaluateRevealCandidateInput): {
     return {
       candidate: null,
       insights: input.insights,
-      queue: input.queue,
+      queue: nextQueue,
     };
   }
 
@@ -74,6 +81,6 @@ export function evaluateRevealCandidate(input: EvaluateRevealCandidateInput): {
   return {
     candidate,
     insights: updatedInsights,
-    queue: [...input.queue, candidate],
+    queue: [...nextQueue, candidate],
   };
 }

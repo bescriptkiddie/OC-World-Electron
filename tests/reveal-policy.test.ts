@@ -80,4 +80,51 @@ describe("reveal policy", () => {
     expect(result.queue).toHaveLength(1);
     expect(result.insights[0].status).toBe("latent");
   });
+
+  it("drops stale pending reveal candidates before checking for active queue entries", () => {
+    const result = evaluateRevealCandidate({
+      userId: "user-001",
+      userMessage: "今天继续往前推。",
+      relationship: DEFAULT_RELATIONSHIP,
+      insights: [
+        {
+          id: "i-2",
+          userId: "user-001",
+          type: "goal",
+          title: "把统一记忆仓收干净",
+          text: "你反复在朝这个目标靠近：把统一记忆仓收干净。",
+          evidenceIds: ["e-3", "e-4"],
+          confidence: 0.72,
+          status: "latent",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      queue: [
+        {
+          id: "r-stale",
+          userId: "user-001",
+          insightId: "i-0",
+          reason: "stable insight",
+          priority: 1,
+          status: "pending",
+          createdAt: 1,
+        },
+      ],
+      now: 2 * 60 * 60 * 1000,
+    });
+
+    expect(result.candidate).toEqual(
+      expect.objectContaining({
+        insightId: "i-2",
+        status: "pending",
+      }),
+    );
+    expect(result.queue).toEqual([
+      expect.objectContaining({
+        insightId: "i-2",
+        status: "pending",
+      }),
+    ]);
+  });
 });
