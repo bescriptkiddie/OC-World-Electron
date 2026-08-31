@@ -18,5 +18,6 @@
     "types": ["vite/client", "node", "vitest/globals"],
     "baseUrl": "."
   },
-  "include": ["src", "electron", "scripts", "tests", "vite.config.ts"]
+  "include": ["src", "electron", "scripts", "tests", "apps/oc-gateway", "packages", "vite.config.ts"],
+  "exclude": ["apps/oc-ios"]
 }

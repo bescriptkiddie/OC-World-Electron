@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "OC World",
+    "slug": "oc-ios",
+    "scheme": "ocios",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-dev-client",
+      "expo-secure-store"
+    ],
+    "extra": {
+      "gatewayBaseUrl": "https://staging.ocworld.app",
+      "appName": "OC World",
+      "eas": {
+        "projectId": "df151ddb-f036-4e61-a57a-2d18de77368c"
+      }
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "ai.pika.ocios",
+      "buildNumber": "1"
+    },
+    "android": {
+      "package": "ai.pika.ocios",
+      "versionCode": 1
+    },
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

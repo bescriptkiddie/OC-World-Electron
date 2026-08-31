@@ -15,6 +15,7 @@ import { calculateIntimacyDelta, updateRelationshipState } from "./relationship"
 
 interface ChatOptions {
   signal?: AbortSignal;
+  dataRoot?: string;
 }
 
 function getTurnMessages(payload: ChatSendPayload) {
@@ -45,7 +46,7 @@ function buildQuerySignals(snapshot: Awaited<ReturnType<typeof buildContextSnaps
 }
 
 export async function chat(payload: ChatSendPayload, options: ChatOptions = {}): Promise<ChatResult> {
-  const dataRoot = process.cwd();
+  const dataRoot = options.dataRoot ?? process.cwd();
   const turnMessages = getTurnMessages(payload);
   const combinedUserMessage = turnMessages.join("\n");
   const flags = getMemoryFeatureFlags();
@@ -137,11 +138,14 @@ export async function chat(payload: ChatSendPayload, options: ChatOptions = {}):
   };
 }
 
-export async function generateGreeting(payload: {
-  characterId: string;
-  userId: string;
-}): Promise<ChatResponse> {
-  const dataRoot = process.cwd();
+export async function generateGreeting(
+  payload: {
+    characterId: string;
+    userId: string;
+  },
+  options: Pick<ChatOptions, "dataRoot"> = {},
+): Promise<ChatResponse> {
+  const dataRoot = options.dataRoot ?? process.cwd();
   const flags = getMemoryFeatureFlags();
   const snapshot = await buildContextSnapshot({
     userId: payload.userId,

@@ -1,0 +1,31 @@
+{
+  "name": "oc-ios",
+  "private": true,
+  "version": "0.1.0",
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "start:dev-client": "expo start --dev-client --host localhost",
+    "ios": "expo run:ios",
+    "ios:build": "expo run:ios",
+    "ios:dev": "expo start --dev-client --host localhost --ios",
+    "android": "expo run:android",
+    "web": "expo start --web",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "testflight:build": "eas build -p ios --profile testflight",
+    "testflight:submit": "eas submit -p ios --profile testflight"
+  },
+  "dependencies": {
+    "expo": "~55.0.23",
+    "expo-constants": "~55.0.16",
+    "expo-dev-client": "~55.0.32",
+    "expo-file-system": "~55.0.19",
+    "expo-secure-store": "~55.0.13",
+    "react": "19.2.0",
+    "react-native": "0.83.6"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "typescript": "^5.8.3"
+  }
+}

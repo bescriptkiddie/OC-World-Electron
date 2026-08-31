@@ -246,6 +246,8 @@ const recallSignalStateSchema = z.object({
 
 export const airJellyContextListSchema = airJellyContextSchema;
 export const memorySummaryListSchema = z.array(summarySchema);
+export const relationshipStageSchema = z.enum(["stranger", "acquaintance", "friend", "close_friend", "soulmate"]);
+export const emotionSchema = z.enum(["idle", "happy", "shy", "thinking", "sad", "angry"]);
 export const relationshipStateSchema = relationshipSchema;
 export const characterConfigSchema = characterSchema;
 export const chatHistoryListSchema = z.array(historySchema);
