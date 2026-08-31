@@ -3,21 +3,19 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("progress dashboard contract", () => {
-  it("keeps the append-only product architecture code timeline format", async () => {
+  it("shows completion status, done slices, pending gaps, and preserved timeline", async () => {
     const html = await readFile(path.join(process.cwd(), "demos", "mainline-closure-dashboard.html"), "utf8");
 
-    expect(html).toContain("产品 → 架构 → 代码");
-    expect(html).toContain("本轮迭代时间");
-    expect(html).toContain("时间线只追加，不改写旧条目");
-    expect(html).toContain("2026-05-04 01:20:01 CST");
-    expect(html).toContain("2026-05-07 15:31:00 CST");
-    expect(html).toContain("2026-05-07 16:06:00 CST");
-    expect(html).toContain("2026-05-07 16:15:00 CST");
-    expect(html).toContain("2026-05-07 16:42:00 CST");
-    expect(html).toContain("2026-05-07 17:37:10 CST");
-    expect(html).toContain("2026-05-07 18:17:59 CST");
-    expect(html).toContain("2026-05-07 18:42:05 CST");
-    expect(html).toContain("2026-05-07 19:04:44 CST");
-    expect(html).toContain("2026-05-08 00:51:07 CST");
+    expect(html).toContain("这一轮到底做到了哪一步");
+    expect(html).toContain("主线完成度");
+    expect(html).toContain("已经做完的内容");
+    expect(html).toContain("还没有做完的内容");
+    expect(html).toContain("Hermes session event store");
+    expect(html).toContain("unified-memory direct bundle gate");
+    expect(html).toContain("Renderer 消费治理信号");
+    expect(html).toContain("治理控制台");
+    expect(html).toContain("2026-05-07 16:42:00 · relationship_overfit");
+    expect(html).toContain("2026-05-07 19:04:44 · recall context gate");
+    expect(html).toContain("2026-05-08 00:51:07 · unified-memory direct bundle gate");
   });
 });
