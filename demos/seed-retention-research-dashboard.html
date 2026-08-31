@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OC World · Seed Retention Review</title>
+    <style>
+      :root {
+        --bg: #f3ede4;
+        --paper: rgba(255, 250, 243, 0.86);
+        --paper-strong: #fffaf3;
+        --line: rgba(39, 28, 21, 0.12);
+        --line-strong: rgba(39, 28, 21, 0.2);
+        --ink: #231913;
+        --muted: #6f645b;
+        --faint: #9f9387;
+        --moss: #245f57;
+        --moss-soft: #dcebe6;
+        --ember: #9f5a3f;
+        --ember-soft: #f2ddd3;
+        --gold: #9a7331;
+        --gold-soft: #f3e5c8;
+        --plum: #6a527c;
+        --plum-soft: #e9e0ef;
+        --shadow: 0 36px 90px -58px rgba(24, 18, 12, 0.48);
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
+      body {
+        background:
+          radial-gradient(circle at top left, rgba(255,255,255,.82), transparent 26%),
+          linear-gradient(rgba(39,28,21,.04) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(39,28,21,.04) 1px, transparent 1px),
+          var(--bg);
+        background-size: auto, 28px 28px, 28px 28px;
+        color: var(--ink);
+        font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+
+      .page {
+        min-height: 100vh;
+        padding: 24px;
+      }
+
+      .shell {
+        width: min(1420px, calc(100vw - 48px));
+        margin: 0 auto;
+        border: 1px solid var(--line);
+        border-radius: 34px;
+        background: var(--paper);
+        backdrop-filter: blur(18px);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .hero {
+        padding: 28px 32px 24px;
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) 340px;
+        gap: 22px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .hero-main,
+      .hero-side,
+      .section,
+      .footer {
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: rgba(255,255,255,.62);
+      }
+
+      .hero-main,
+      .hero-side,
+      .section,
+      .footer {
+        padding: 22px;
+      }
+
+      .eyebrow,
+      .badge,
+      .score-tag,
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 32px;
+        padding: 0 12px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        font-size: 12px;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        background: rgba(255,255,255,.74);
+      }
+
+      .eyebrow::before,
+      .badge::before,
+      .chip::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+      }
+
+      .eyebrow::before { background: var(--moss); }
+      .badge::before { background: var(--gold); }
+      .chip::before { background: var(--ember); }
+
+      h1, h2, h3 {
+        font-family: "Iowan Old Style", "Palatino Linotype", "Songti SC", serif;
+        margin: 0;
+      }
+
+      h1 {
+        margin-top: 14px;
+        font-size: 48px;
+        line-height: 1.04;
+      }
+
+      h2 {
+        font-size: 30px;
+        line-height: 1.14;
+      }
+
+      h3 {
+        font-size: 22px;
+      }
+
+      p, li {
+        color: var(--muted);
+        line-height: 1.78;
+      }
+
+      .lead {
+        margin: 14px 0 0;
+        max-width: 820px;
+        font-size: 16px;
+      }
+
+      .hero-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 20px;
+      }
+
+      .meta-card {
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        padding: 16px;
+        background: rgba(255,255,255,.72);
+      }
+
+      .meta-label {
+        color: var(--faint);
+        font-size: 12px;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+      }
+
+      .meta-value {
+        margin-top: 8px;
+        font-size: 26px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+
+      .stop-card {
+        display: grid;
+        gap: 14px;
+      }
+
+      .stop-state {
+        padding: 16px;
+        border-radius: 22px;
+        border: 1px solid rgba(36,95,87,.18);
+        background: var(--moss-soft);
+      }
+
+      .stop-state strong {
+        display: block;
+        margin-top: 10px;
+        font-size: 22px;
+        color: var(--moss);
+      }
+
+      .workspace {
+        padding: 0 32px 32px;
+        display: grid;
+        gap: 18px;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 1.1fr .9fr;
+        gap: 18px;
+      }
+
+      .section-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+
+      .path-grid,
+      .risk-grid,
+      .exp-grid,
+      .discard-grid,
+      .score-grid {
+        display: grid;
+        gap: 14px;
+      }
+
+      .path-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .risk-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .exp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .discard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .score-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        padding: 16px;
+        background: rgba(255,255,255,.72);
+      }
+
+      .card.moss { background: linear-gradient(180deg, rgba(220,235,230,.96), rgba(255,255,255,.72)); }
+      .card.gold { background: linear-gradient(180deg, rgba(243,229,200,.96), rgba(255,255,255,.72)); }
+      .card.plum { background: linear-gradient(180deg, rgba(233,224,239,.96), rgba(255,255,255,.72)); }
+      .card.ember { background: linear-gradient(180deg, rgba(242,221,211,.96), rgba(255,255,255,.72)); }
+
+      .step-no,
+      .round-no {
+        color: var(--faint);
+        font-size: 12px;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+      }
+
+      .round-score {
+        margin-top: 10px;
+        font-size: 28px;
+        font-weight: 700;
+      }
+
+      .bar {
+        height: 10px;
+        margin-top: 12px;
+        border-radius: 999px;
+        background: rgba(39,28,21,.08);
+        overflow: hidden;
+      }
+
+      .fill {
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--moss), var(--gold));
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      li + li { margin-top: 8px; }
+
+      .footer {
+        margin-top: 18px;
+        background: var(--paper-strong);
+      }
+
+      .footer-grid {
+        display: grid;
+        grid-template-columns: 1.1fr .9fr;
+        gap: 18px;
+      }
+
+      @media (max-width: 1180px) {
+        .hero,
+        .row,
+        .footer-grid {
+          grid-template-columns: 1fr;
+        }
+        .path-grid,
+        .risk-grid,
+        .exp-grid,
+        .score-grid,
+        .discard-grid,
+        .hero-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="shell">
+        <section class="hero">
+          <div class="hero-main">
+            <span class="eyebrow">OC World · Seed Retention Review</span>
+            <h1>先让用户感到被理解，<br />再让他愿意回来。</h1>
+            <p class="lead">
+              这轮纸面研究已经收束。当前最强主路径只有一条：Day 1 先被理解，Day 3 再被陪着行动，Day 7 再共同看见变化。
+              关系是底盘，行动是增益，成长可见是后段放大器。
+            </p>
+            <div class="hero-grid">
+              <div class="meta-card">
+                <div class="meta-label">Final score</div>
+                <div class="meta-value">92</div>
+              </div>
+              <div class="meta-card">
+                <div class="meta-label">Best path</div>
+                <div class="meta-value">Day 1 → Day 3 → Day 7</div>
+              </div>
+              <div class="meta-card">
+                <div class="meta-label">Core risk</div>
+                <div class="meta-value">定义感 / 任务感 / 系统感</div>
+              </div>
+            </div>
+          </div>
+          <aside class="hero-side stop-card">
+            <span class="badge">Paper research status</span>
+            <div class="stop-state">
+              <div class="meta-label">Stop condition</div>
+              <strong>Reached</strong>
+              <p>没有出现更强路径，剩余问题都落在真实验证层，不再属于纸面研究缺口。</p>
+            </div>
+            <div class="card">
+              <div class="meta-label">Next move</div>
+              <p>转入人工审阅或真实验证实验，不再继续扩写纸面方案。</p>
+            </div>
+          </aside>
+        </section>
+
+        <div class="workspace">
+          <section class="section">
+            <div class="section-head">
+              <div>
+                <span class="chip">Strongest kept path</span>
+                <h2>Day 1 / Day 3 / Day 7</h2>
+              </div>
+              <span class="score-tag">关系 &gt; 行动 &gt; 成长可见</span>
+            </div>
+            <div class="path-grid">
+              <article class="card moss">
+                <div class="step-no">Day 1</div>
+                <h3>先被理解</h3>
+                <p>首聊前三轮只做一件事：让用户确认 OC 不是模板回复，而是真的接住了他的处境、情绪和卡点。</p>
+                <ul>
+                  <li>留存理由：它把混乱说清了一点。</li>
+                  <li>禁区：不要急着建议，不要急着定义用户是谁。</li>
+                </ul>
+              </article>
+              <article class="card gold">
+                <div class="step-no">Day 3</div>
+                <h3>再被陪着行动</h3>
+                <p>当关系已经站稳，动作建议才开始长出来，而且只能是现实里很小、很轻、当天可做的一步。</p>
+                <ul>
+                  <li>留存理由：聊完不只舒服一点，也更容易动起来。</li>
+                  <li>禁区：不要把互动变成待办清单或复盘作业。</li>
+                </ul>
+              </article>
+              <article class="card plum">
+                <div class="step-no">Day 7</div>
+                <h3>最后共同看见变化</h3>
+                <p>成长可见只作为关系深化后的结果出现，沿着当前对话轻轻递出一条可校准的真实线索。</p>
+                <ul>
+                  <li>留存理由：它越来越懂我，我也越来越看见自己。</li>
+                  <li>禁区：不要把成长显露做成系统评判。</li>
+                </ul>
+              </article>
+            </div>
+          </section>
+
+          <div class="row">
+            <section class="section">
+              <div class="section-head">
+                <div>
+                  <span class="chip">Score progression</span>
+                  <h2>6 轮收束过程</h2>
+                </div>
+              </div>
+              <div class="score-grid">
+                <article class="card">
+                  <div class="round-no">Round 1</div>
+                  <h3>首聊关系优先</h3>
+                  <div class="round-score">72</div>
+                  <div class="bar"><div class="fill" style="width:72%"></div></div>
+                </article>
+                <article class="card">
+                  <div class="round-no">Round 2</div>
+                  <h3>轻动作建议</h3>
+                  <div class="round-score">77</div>
+                  <div class="bar"><div class="fill" style="width:77%"></div></div>
+                </article>
+                <article class="card">
+                  <div class="round-no">Round 3</div>
+                  <h3>小纸条显露</h3>
+                  <div class="round-score">86</div>
+                  <div class="bar"><div class="fill" style="width:86%"></div></div>
+                </article>
+                <article class="card">
+                  <div class="round-no">Round 4</div>
+                  <h3>避开三类劝退感</h3>
+                  <div class="round-score">86</div>
+                  <div class="bar"><div class="fill" style="width:86%"></div></div>
+                </article>
+                <article class="card">
+                  <div class="round-no">Round 5</div>
+                  <h3>渐进留存主链</h3>
+                  <div class="round-score">91</div>
+                  <div class="bar"><div class="fill" style="width:91%"></div></div>
+                </article>
+                <article class="card ember">
+                  <div class="round-no">Round 6</div>
+                  <h3>最终收束</h3>
+                  <div class="round-score">92</div>
+                  <div class="bar"><div class="fill" style="width:92%"></div></div>
+                </article>
+              </div>
+            </section>
+
+            <section class="section">
+              <div class="section-head">
+                <div>
+                  <span class="chip">Discarded paths</span>
+                  <h2>明确放弃的方向</h2>
+                </div>
+              </div>
+              <div class="discard-grid">
+                <article class="card">
+                  <h3>首聊像能力展示</h3>
+                  <p>一上来证明自己聪明、会规划、会分析，只会把关系拉回普通工具感。</p>
+                </article>
+                <article class="card">
+                  <h3>动作像任务管理</h3>
+                  <p>清单、计划表、推进压力，会让用户感觉自己在被安排，而不是被陪着往前走。</p>
+                </article>
+                <article class="card">
+                  <h3>成长像系统判定</h3>
+                  <p>打分、标签、强提示、弹窗，都会让可见变化滑向被定义感。</p>
+                </article>
+                <article class="card">
+                  <h3>未确认线索直接落盘</h3>
+                  <p>系统替用户下结论，会直接破坏信任，并让下一次回访变得危险。</p>
+                </article>
+              </div>
+            </section>
+          </div>
+
+          <div class="row">
+            <section class="section">
+              <div class="section-head">
+                <div>
+                  <span class="chip">Churn risks</span>
+                  <h2>最该盯住的 3 类流失信号</h2>
+                </div>
+              </div>
+              <div class="risk-grid">
+                <article class="card moss">
+                  <h3>定义感</h3>
+                  <p>用户会觉得自己被产品提前归类、解释、贴标签。</p>
+                </article>
+                <article class="card gold">
+                  <h3>任务感</h3>
+                  <p>用户会觉得自己在被布置动作、交作业、汇报进度。</p>
+                </article>
+                <article class="card plum">
+                  <h3>系统感</h3>
+                  <p>用户会感觉面对的不是 OC 的理解，而是后台机制在说话。</p>
+                </article>
+              </div>
+            </section>
+
+            <section class="section">
+              <div class="section-head">
+                <div>
+                  <span class="chip">Experiment order</span>
+                  <h2>下一步验证顺序</h2>
+                </div>
+              </div>
+              <div class="exp-grid">
+                <article class="card">
+                  <div class="step-no">E1</div>
+                  <h3>首聊被理解感</h3>
+                  <p>先确认 Day 1 的留存底盘是否真实成立。</p>
+                </article>
+                <article class="card">
+                  <div class="step-no">E2</div>
+                  <h3>轻动作建议</h3>
+                  <p>再确认 Day 3 的动作不会冲掉 Day 1 建起的关系。</p>
+                </article>
+                <article class="card">
+                  <div class="step-no">E3</div>
+                  <h3>成长线索显露</h3>
+                  <p>最后再验证 Day 7 的成长可见能否成立。</p>
+                </article>
+              </div>
+            </section>
+          </div>
+
+          <section class="footer">
+            <div class="footer-grid">
+              <div>
+                <span class="chip">Review note</span>
+                <h2>纸面研究可以停在这里。</h2>
+                <p>
+                  现有 strongest kept path 已经稳定，剩余不确定性都属于真实验证问题，不再属于继续写文档就能解决的问题。
+                  后面该做的是审阅、挑文案、做真实对话验证，而不是继续扩写研究结论。
+                </p>
+              </div>
+              <div>
+                <span class="chip">Stop rule</span>
+                <h2>没有更强路径出现</h2>
+                <p>
+                  这一页没有新增新的产品方向，只是把已经成立的路线压缩成一页可看完的总览。到这里，研究目标已经达到。
+                </p>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
